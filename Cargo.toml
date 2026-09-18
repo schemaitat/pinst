@@ -1,0 +1,17 @@
+[package]
+name = "pinst"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.5"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+ratatui = "0.30.2"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-stream = "0.1.19"
+toml = "1.1.6"
+which = "8.0.6"

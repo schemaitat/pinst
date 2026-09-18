@@ -1,0 +1,207 @@
+# Tool registry for pinst.
+#
+# Seeded from ~/dotfiles/scripts/bootstrap.sh's step list (GUD-001): each
+# entry mirrors a `has <bin>`-style check from that script so pinst's
+# inventory never drifts from what bootstrap.sh actually installs.
+#
+# check_cmd / version_cmd are arbitrary `sh -c` command strings (exit status
+# 0 = installed; combined stdout+stderr of version_cmd is matched against
+# version_regex, or the crate's generic \d+\.\d+(\.\d+)? default if omitted).
+#
+# install_method drives Phase 5's upgrade-detection strategy:
+#   apt          -> `apt-cache policy <apt_package>`
+#   cargo        -> `cargo search <cargo_crate>`
+#   nvm          -> nodejs.org LTS index
+#   curl_script  -> GitHub releases API if github_repo is set, else unsupported
+#
+# bin_name (when set) is used by the Health tab for an independent PATH
+# lookup via the `which` crate; tools without a plain PATH binary (e.g.
+# oh-my-zsh, its plugin, nvm itself) omit it and fall back to reusing the
+# Overview tab's probe result instead.
+
+[[tool]]
+name = "zsh"
+package = "zsh"
+bin_name = "zsh"
+check_cmd = "command -v zsh"
+version_cmd = "zsh --version"
+install_method = "apt"
+apt_package = "zsh"
+
+[[tool]]
+name = "oh-my-zsh"
+package = "zsh"
+check_cmd = "[ -d \"$HOME/.oh-my-zsh\" ]"
+install_method = "curl_script"
+
+[[tool]]
+name = "zsh-autosuggestions"
+package = "zsh"
+check_cmd = "[ -d \"$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions\" ]"
+install_method = "curl_script"
+github_repo = "zsh-users/zsh-autosuggestions"
+
+[[tool]]
+name = "direnv"
+package = "zsh"
+bin_name = "direnv"
+check_cmd = "command -v direnv"
+version_cmd = "direnv --version"
+install_method = "apt"
+apt_package = "direnv"
+
+[[tool]]
+name = "oh-my-posh"
+package = "zsh"
+bin_name = "oh-my-posh"
+check_cmd = "command -v oh-my-posh"
+version_cmd = "oh-my-posh --version"
+install_method = "curl_script"
+github_repo = "JanDeDobbeleer/oh-my-posh"
+
+[[tool]]
+name = "ripgrep"
+package = "nvim"
+bin_name = "rg"
+check_cmd = "command -v rg"
+version_cmd = "rg --version"
+install_method = "apt"
+apt_package = "ripgrep"
+
+[[tool]]
+name = "fd"
+package = "nvim"
+check_cmd = "command -v fd || command -v fdfind"
+version_cmd = "fd --version || fdfind --version"
+install_method = "apt"
+apt_package = "fd-find"
+
+[[tool]]
+name = "build-essential"
+package = "nvim"
+check_cmd = "command -v gcc && command -v make"
+version_cmd = "gcc --version"
+install_method = "apt"
+# Compares against gcc's own apt package, not the build-essential meta-package:
+# build-essential's version numbering tracks the meta-package, not gcc, so
+# comparing it against `gcc --version`'s output would never line up.
+apt_package = "gcc"
+
+[[tool]]
+name = "neovim"
+package = "nvim"
+check_cmd = "command -v nvim || [ -x /opt/nvim-linux-x86_64/bin/nvim ]"
+version_cmd = "nvim --version || /opt/nvim-linux-x86_64/bin/nvim --version"
+install_method = "curl_script"
+github_repo = "neovim/neovim"
+
+[[tool]]
+name = "rust"
+package = "nvim"
+bin_name = "cargo"
+check_cmd = "command -v cargo"
+version_cmd = "rustc --version"
+install_method = "curl_script"
+
+[[tool]]
+name = "tree-sitter-cli"
+package = "nvim"
+bin_name = "tree-sitter"
+check_cmd = "command -v tree-sitter"
+version_cmd = "tree-sitter --version"
+install_method = "cargo"
+cargo_crate = "tree-sitter-cli"
+
+[[tool]]
+name = "uv"
+package = "zsh"
+bin_name = "uv"
+check_cmd = "command -v uv"
+version_cmd = "uv --version"
+install_method = "curl_script"
+github_repo = "astral-sh/uv"
+
+[[tool]]
+name = "nvm"
+package = "zsh"
+check_cmd = "[ -s \"$HOME/.nvm/nvm.sh\" ]"
+install_method = "curl_script"
+github_repo = "nvm-sh/nvm"
+
+[[tool]]
+name = "node"
+package = "zsh"
+bin_name = "node"
+check_cmd = "command -v node"
+version_cmd = "node --version"
+install_method = "nvm"
+
+[[tool]]
+name = "herdr"
+package = "herdr"
+bin_name = "herdr"
+check_cmd = "command -v herdr"
+version_cmd = "herdr --version"
+install_method = "curl_script"
+
+[[tool]]
+name = "aven"
+package = "zsh"
+bin_name = "aven"
+check_cmd = "command -v aven"
+version_cmd = "aven --version"
+install_method = "curl_script"
+github_repo = "raine/aven"
+
+[[tool]]
+name = "opencode"
+package = "zsh"
+bin_name = "opencode"
+check_cmd = "command -v opencode"
+version_cmd = "opencode --version"
+install_method = "curl_script"
+github_repo = "sst/opencode"
+
+[[tool]]
+name = "claude"
+package = "zsh"
+bin_name = "claude"
+check_cmd = "command -v claude"
+version_cmd = "claude --version"
+install_method = "curl_script"
+
+[[tool]]
+name = "gh"
+package = "git"
+bin_name = "gh"
+check_cmd = "command -v gh"
+version_cmd = "gh --version"
+install_method = "apt"
+apt_package = "gh"
+
+[[tool]]
+name = "delta"
+package = "git"
+bin_name = "delta"
+check_cmd = "command -v delta"
+version_cmd = "delta --version"
+install_method = "apt"
+apt_package = "git-delta"
+github_repo = "dandavison/delta"
+
+[[tool]]
+name = "git-credential-manager"
+package = "git"
+check_cmd = "command -v git-credential-manager || command -v git-credential-manager-core"
+version_cmd = "git-credential-manager --version || git-credential-manager-core --version"
+install_method = "curl_script"
+github_repo = "git-ecosystem/git-credential-manager"
+
+[[tool]]
+name = "just"
+package = "zsh"
+bin_name = "just"
+check_cmd = "command -v just"
+version_cmd = "just --version"
+install_method = "cargo"
+cargo_crate = "just"
