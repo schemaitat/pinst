@@ -55,21 +55,21 @@ pub fn resolve_source() -> Source {
         } else {
             path.join("configs")
         };
-        if candidate.is_dir() {
-            return Source::Tree(candidate);
+        // An explicit override is trusted as a location, but still has to be
+        // absolute before we point symlinks at it.
+        if let Some(tree) = absolute_tree(&candidate) {
+            return Source::Tree(tree);
         }
     }
 
-    let cwd = PathBuf::from("configs");
-    if cwd.is_dir() {
-        return Source::Tree(cwd);
+    if let Some(tree) = checkout_tree(Path::new("configs")) {
+        return Source::Tree(tree);
     }
 
     if let Ok(exe) = std::env::current_exe() {
         for ancestor in exe.ancestors().skip(1).take(4) {
-            let candidate = ancestor.join("configs");
-            if candidate.is_dir() {
-                return Source::Tree(candidate);
+            if let Some(tree) = checkout_tree(&ancestor.join("configs")) {
+                return Source::Tree(tree);
             }
         }
     }
@@ -77,10 +77,39 @@ pub fn resolve_source() -> Source {
     Source::Embedded
 }
 
+/// Canonicalizes a candidate tree.
+///
+/// Absolute is not optional: `source_path` becomes the target of the symlinks
+/// written into `$HOME`, and a relative path like `configs/zsh/.zshrc` would
+/// be resolved by the kernel against `$HOME`, producing a dangling link.
+fn absolute_tree(candidate: &Path) -> Option<PathBuf> {
+    candidate.is_dir().then(|| candidate.canonicalize().ok())?
+}
+
+/// Accepts a candidate only if it really is this project's checkout — a
+/// `configs/` directory sitting beside a `manifest.toml`.
+///
+/// Without that check, an unrelated `~/configs` directory would be picked up
+/// when pinst runs from `~/.local/bin` and every config command would fail
+/// against it instead of falling back to the embedded copy.
+fn checkout_tree(candidate: &Path) -> Option<PathBuf> {
+    let beside_manifest = candidate
+        .parent()
+        .map(|parent| parent.join("manifest.toml").is_file())
+        .unwrap_or(false);
+    if !beside_manifest {
+        return None;
+    }
+    absolute_tree(candidate)
+}
+
 /// One file pinst manages, and where it belongs in `$HOME`.
 #[derive(Debug, Clone)]
 pub struct ConfigFile {
     pub package: String,
+    /// The package's directory name under `configs/`, which is not
+    /// necessarily its manifest `name`.
+    pub source_dir: String,
     /// Path relative to `$HOME` (the package tree mirrors `$HOME`).
     pub relative: PathBuf,
     pub target: PathBuf,
@@ -147,11 +176,11 @@ impl ConfigSet {
     pub fn content(&self, file: &ConfigFile) -> Result<Vec<u8>> {
         let raw = match &self.source {
             Source::Tree(root) => {
-                let path = root.join(&file.package).join(&file.relative);
+                let path = root.join(&file.source_dir).join(&file.relative);
                 std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?
             }
             Source::Embedded => {
-                let key = embedded_key(&file.package, &file.relative);
+                let key = embedded_key(&file.source_dir, &file.relative);
                 let entry = EMBEDDED
                     .get_file(&key)
                     .ok_or_else(|| color_eyre::eyre::eyre!("embedded config missing: {key}"))?;
@@ -178,9 +207,10 @@ impl ConfigSet {
         };
 
         if meta.file_type().is_symlink() {
-            let resolved = std::fs::read_link(&file.target).unwrap_or_default();
-            let expected = file.source_path.as_ref();
-            let matches = match (expected, resolved.canonicalize().ok()) {
+            // Canonicalizing the target follows the link from where the link
+            // lives; a dangling link fails here and is reported rather than
+            // passing as healthy.
+            let matches = match (&file.source_path, file.target.canonicalize().ok()) {
                 (Some(expected), Some(actual)) => {
                     expected.canonicalize().map(|e| e == actual).unwrap_or(false)
                 }
@@ -320,7 +350,7 @@ impl ConfigSet {
 
     /// Copies on-disk edits back into the source tree. Only possible when the
     /// source is a tree — there is nowhere to write an embedded copy.
-    pub fn adopt(&self, dry_run: bool) -> Result<Vec<FileStatus>> {
+    pub fn adopt(&self, dry_run: bool) -> Result<(Vec<FileStatus>, Vec<String>)> {
         let Source::Tree(root) = &self.source else {
             bail!(
                 "nothing to adopt into: this binary is running from its embedded configs. \
@@ -329,19 +359,22 @@ impl ConfigSet {
         };
 
         let mut adopted = Vec::new();
+        let mut skipped: Vec<String> = Vec::new();
         for file in &self.files {
             if self.classify(file)? != FileState::Drifted {
                 continue;
             }
-            let dest = root.join(&file.package).join(&file.relative);
+            let dest = root.join(&file.source_dir).join(&file.relative);
             if file.templated {
-                // Adopting a rendered file would write the machine's own
-                // values back over the placeholders.
-                bail!(
-                    "cannot adopt templated config {} — edit {} in the source tree instead",
+                // Adopting a rendered file would write this machine's own
+                // values back over the placeholders. Skip it and say so
+                // rather than aborting a run that has already copied files.
+                skipped.push(format!(
+                    "{} is templated — edit {} in the source tree instead",
                     file.relative.display(),
                     dest.display()
-                );
+                ));
+                continue;
             }
             if !dry_run {
                 std::fs::copy(&file.target, &dest).with_context(|| {
@@ -356,7 +389,7 @@ impl ConfigSet {
                 templated: file.templated,
             });
         }
-        Ok(adopted)
+        Ok((adopted, skipped))
     }
 }
 
@@ -393,6 +426,7 @@ fn collect_package(
             .any(|t| Path::new(t) == relative.as_path());
         out.push(ConfigFile {
             package: package.name.clone(),
+            source_dir: package.source.clone(),
             target: home.join(&relative),
             source_path: match source {
                 Source::Tree(root) => Some(root.join(&package.source).join(&relative)),
@@ -438,8 +472,8 @@ fn collect_embedded(dir: &Dir<'_>, package_root: &str, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn embedded_key(package: &str, relative: &Path) -> String {
-    format!("{package}/{}", relative.display())
+fn embedded_key(source_dir: &str, relative: &Path) -> String {
+    format!("{source_dir}/{}", relative.display())
 }
 
 fn backup_path(target: &Path, stamp: &str) -> PathBuf {
@@ -490,6 +524,22 @@ mod tests {
         for sub in dir.dirs() {
             collect_all(sub, out);
         }
+    }
+
+    /// Builds a throwaway copy of the real config tree with a manifest.toml
+    /// beside it, so `resolve_source` accepts it as a checkout.
+    fn fake_checkout() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        copy_tree(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("configs"),
+            &root.path().join("configs"),
+        );
+        std::fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("manifest.toml"),
+            root.path().join("manifest.toml"),
+        )
+        .unwrap();
+        root
     }
 
     fn set_for(home: &Path, source: Source) -> ConfigSet {
@@ -584,12 +634,8 @@ mod tests {
     fn drift_is_detected_and_adopted_back_into_the_source_tree() {
         let home = tempfile::tempdir().unwrap();
         // A throwaway copy of the tree, so adopting cannot touch the repo.
-        let tree = tempfile::tempdir().unwrap();
+        let tree = fake_checkout();
         let configs = tree.path().join("configs");
-        copy_tree(
-            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("configs"),
-            &configs,
-        );
 
         let set = set_for(home.path(), Source::Tree(configs.clone()));
         apply(&set);
@@ -608,7 +654,8 @@ mod tests {
             .count();
         assert_eq!(drifted, 1);
 
-        set.adopt(false).unwrap();
+        let (adopted, _) = set.adopt(false).unwrap();
+        assert!(!adopted.is_empty());
         assert_eq!(
             std::fs::read_to_string(configs.join("zsh/.zshrc")).unwrap(),
             "# edited in place\n"
@@ -664,6 +711,122 @@ mod tests {
             .find(|s| s.path == ".gitconfig")
             .unwrap();
         assert_eq!(gitconfig.state, FileState::Unrenderable);
+    }
+
+    #[test]
+    fn a_resolved_source_tree_is_always_absolute() {
+        // A relative source path would be written into $HOME as a relative
+        // symlink target and resolve against $HOME, producing a dangling
+        // link that `classify` would then happily call "Linked".
+        let checkout = fake_checkout();
+        let previous = std::env::var_os("PINST_SOURCE");
+        // SAFETY: single-threaded test; restored below.
+        unsafe { std::env::set_var("PINST_SOURCE", checkout.path()) };
+        let source = resolve_source();
+        match previous {
+            Some(value) => unsafe { std::env::set_var("PINST_SOURCE", value) },
+            None => unsafe { std::env::remove_var("PINST_SOURCE") },
+        }
+
+        match source {
+            Source::Tree(path) => assert!(
+                path.is_absolute(),
+                "resolved source tree must be absolute, got {}",
+                path.display()
+            ),
+            Source::Embedded => panic!("an explicit PINST_SOURCE checkout should resolve to a tree"),
+        }
+    }
+
+    #[test]
+    fn linked_files_actually_resolve_and_a_dangling_link_is_not_called_healthy() {
+        let home = tempfile::tempdir().unwrap();
+        let checkout = fake_checkout();
+        let set = set_for(home.path(), Source::Tree(checkout.path().join("configs")));
+
+        apply(&set);
+
+        let zshrc = home.path().join(".zshrc");
+        assert!(
+            zshrc.exists(),
+            "the link must resolve — `exists()` follows it, so a dangling link fails here"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&zshrc).unwrap(),
+            std::fs::read_to_string(checkout.path().join("configs/zsh/.zshrc")).unwrap()
+        );
+
+        // Break the link's destination and confirm it stops reporting healthy.
+        std::fs::remove_file(checkout.path().join("configs/zsh/.zshrc")).unwrap();
+        let file = set.files.iter().find(|f| f.relative == Path::new(".zshrc")).unwrap();
+        assert_ne!(
+            set.classify(file).unwrap(),
+            FileState::Linked,
+            "a dangling symlink must not be reported as Linked"
+        );
+    }
+
+    #[test]
+    fn an_unrelated_configs_directory_is_not_mistaken_for_the_checkout() {
+        // `~/configs` next to a `~/.local/bin/pinst` install must not hijack
+        // the config source; without a manifest.toml beside it, it is not
+        // this project's tree.
+        let stray = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(stray.path().join("configs/unrelated")).unwrap();
+        assert!(checkout_tree(&stray.path().join("configs")).is_none());
+
+        let real = fake_checkout();
+        assert!(checkout_tree(&real.path().join("configs")).is_some());
+    }
+
+    #[test]
+    fn a_package_whose_name_differs_from_its_directory_still_resolves() {
+        // `content()` keys off the source directory, not the manifest name;
+        // today they happen to match everywhere, which hid this.
+        let home = tempfile::tempdir().unwrap();
+        let package = ConfigPackage {
+            name: "shell-config".to_string(),
+            source: "zsh".to_string(),
+            summary: String::new(),
+            templates: Vec::new(),
+            requires_tool: None,
+        };
+        let mut files = Vec::new();
+        collect_package(&Source::Embedded, &package, home.path(), &mut files).unwrap();
+
+        let set = ConfigSet {
+            source: Source::Embedded,
+            files,
+            values: Values::new(std::collections::BTreeMap::new()),
+        };
+        for file in &set.files {
+            set.content(file)
+                .unwrap_or_else(|e| panic!("{} should resolve: {e}", file.relative.display()));
+        }
+    }
+
+    #[test]
+    fn adopt_reports_templated_files_instead_of_aborting_the_run() {
+        let home = tempfile::tempdir().unwrap();
+        let checkout = fake_checkout();
+        let configs = checkout.path().join("configs");
+        let set = set_for(home.path(), Source::Tree(configs.clone()));
+        apply(&set);
+
+        // Drift both a plain file and the templated one.
+        let zshrc = home.path().join(".zshrc");
+        std::fs::remove_file(&zshrc).unwrap();
+        std::fs::write(&zshrc, "# edited\n").unwrap();
+        std::fs::write(home.path().join(".gitconfig"), "# hand-edited\n").unwrap();
+
+        let (adopted, skipped) = set.adopt(false).expect("adopt must not abort");
+        assert!(adopted.iter().any(|a| a.path == ".zshrc"), "the plain file is adopted");
+        assert_eq!(skipped.len(), 1, "the templated file is reported, not adopted");
+        assert!(skipped[0].contains("templated"), "{:?}", skipped);
+        assert_eq!(
+            std::fs::read_to_string(configs.join("zsh/.zshrc")).unwrap(),
+            "# edited\n"
+        );
     }
 
     #[test]

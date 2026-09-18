@@ -57,19 +57,29 @@ fn status(ctx: &Ctx, set: &ConfigSet, only_differing: bool) -> Result<ExitCode> 
 }
 
 fn adopt(ctx: &Ctx, set: &ConfigSet) -> Result<ExitCode> {
-    let adopted = set.adopt(ctx.dry_run)?;
+    let (adopted, skipped) = set.adopt(ctx.dry_run)?;
     if !ctx.json {
         for item in &adopted {
             println!("adopted {}", item.path);
         }
-        if adopted.is_empty() {
+        for reason in &skipped {
+            println!("skipped {reason}");
+        }
+        if adopted.is_empty() && skipped.is_empty() {
             ctx.note("no drifted files to adopt");
         }
     }
     let count = adopted.len();
+    // Anything skipped still needs a human, so it is an issue, not success.
+    let status = if skipped.is_empty() {
+        Status::Ok
+    } else {
+        Status::Issues
+    };
     ctx.finish(
-        Envelope::new("config adopt", Status::Ok, adopted)
+        Envelope::new("config adopt", status, adopted)
             .dry_run(ctx.dry_run)
-            .summary(serde_json::json!({ "adopted": count })),
+            .errors(skipped.clone())
+            .summary(serde_json::json!({ "adopted": count, "skipped": skipped.len() })),
     )
 }

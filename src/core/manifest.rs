@@ -323,7 +323,10 @@ pub fn load(explicit: Option<&PathBuf>) -> Result<LoadedManifest> {
     let source = match explicit {
         Some(path) => {
             if !path.is_file() {
-                bail!("manifest not found: {}", path.display());
+                return Err(crate::core::usage(format!(
+                    "manifest not found: {}",
+                    path.display()
+                )));
             }
             ManifestSource::Path(path.clone())
         }
@@ -336,11 +339,13 @@ pub fn load(explicit: Option<&PathBuf>) -> Result<LoadedManifest> {
             .with_context(|| format!("reading manifest {}", path.display()))?,
     };
 
-    let manifest: Manifest =
-        toml::from_str(&raw).with_context(|| format!("parsing manifest from {source}"))?;
+    // A manifest that does not parse or validate is a bad request, not a
+    // runtime failure — exit 2 so an agent knows to fix its edit.
+    let manifest: Manifest = toml::from_str(&raw)
+        .map_err(|err| crate::core::usage(format!("parsing manifest from {source}: {err}")))?;
     manifest
         .validate()
-        .with_context(|| format!("validating manifest from {source}"))?;
+        .map_err(|err| crate::core::usage(format!("invalid manifest {source}: {err:#}")))?;
 
     Ok(LoadedManifest { manifest, source })
 }

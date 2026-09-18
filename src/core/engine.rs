@@ -4,7 +4,7 @@
 //! missing apt repo, an installer that 404s) must never abort the other
 //! twenty, which is the behavior `bootstrap.sh` earned the hard way.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use color_eyre::eyre::Result;
 use schemars::JsonSchema;
@@ -200,9 +200,38 @@ pub fn execute(
 ) -> (Vec<StepReport>, ExecSummary) {
     let mut reports = Vec::with_capacity(plan.steps.len());
     let mut summary = ExecSummary::default();
+    let mut unavailable: BTreeSet<&str> = BTreeSet::new();
 
     for step in &plan.steps {
-        let report = execute_step(step, runner, auth, &mut summary);
+        // A tool whose install did not succeed must not have its post-install
+        // steps run: `chsh -s "$(command -v zsh)"` with no zsh on the box
+        // would set an empty login shell, and the fd symlink step would link
+        // from an empty path.
+        let report = match (&step.tool, step.kind) {
+            (Some(tool), StepKind::PostInstall) if unavailable.contains(tool.as_str()) => {
+                summary.skipped += 1;
+                StepReport::from_step(
+                    step,
+                    Outcome::Skipped,
+                    Some(format!("{tool} was not installed")),
+                )
+            }
+            _ => execute_step(step, runner, auth, &mut summary),
+        };
+
+        // `Manual` counts as an install step too — that is the kind a blocked
+        // tool gets, and it is precisely the case where post-install steps
+        // must not fire.
+        if matches!(step.kind, StepKind::Install | StepKind::Manual)
+            && matches!(
+                report.outcome,
+                Outcome::Failed | Outcome::Blocked | Outcome::NeedsConfirmation
+            )
+            && let Some(tool) = &step.tool
+        {
+            unavailable.insert(tool.as_str());
+        }
+
         on_step(&report);
         reports.push(report);
     }
@@ -386,6 +415,56 @@ mod tests {
             StepState::Blocked(note) => assert!(note.contains("git-credential-manager")),
             other => panic!("expected Blocked, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn post_install_steps_do_not_run_when_their_tool_did_not_install() {
+        // The dangerous case: `chsh -s "$(command -v zsh)"` after a failed
+        // zsh install would set an empty login shell.
+        let mut plan = Plan::default();
+        plan.push(
+            Step::new("install:ghost", StepKind::Manual, "install ghost")
+                .tool("ghost")
+                .blocked("install it yourself"),
+        );
+        plan.push(
+            Step::new("post:ghost:0", StepKind::PostInstall, "post step")
+                .tool("ghost")
+                .actions(vec![Action::Shell {
+                    command: "touch /tmp/pinst-post-must-not-run".to_string(),
+                }]),
+        );
+        plan.push(
+            Step::new("install:other", StepKind::Install, "install other")
+                .tool("other")
+                .actions(vec![Action::Shell {
+                    command: "false".to_string(),
+                }]),
+        );
+        plan.push(
+            Step::new("post:other:0", StepKind::PostInstall, "other post step")
+                .tool("other")
+                .actions(vec![Action::Shell {
+                    command: "touch /tmp/pinst-post-must-not-run-2".to_string(),
+                }]),
+        );
+
+        let _ = std::fs::remove_file("/tmp/pinst-post-must-not-run");
+        let _ = std::fs::remove_file("/tmp/pinst-post-must-not-run-2");
+
+        let (reports, _) = execute(
+            &plan,
+            &Runner::new(false),
+            &Authorizer {
+                approve: &approve_all,
+            },
+            &mut |_| {},
+        );
+
+        assert_eq!(reports[1].outcome, Outcome::Skipped, "blocked tool's post step");
+        assert_eq!(reports[3].outcome, Outcome::Skipped, "failed tool's post step");
+        assert!(!std::path::Path::new("/tmp/pinst-post-must-not-run").exists());
+        assert!(!std::path::Path::new("/tmp/pinst-post-must-not-run-2").exists());
     }
 
     #[test]

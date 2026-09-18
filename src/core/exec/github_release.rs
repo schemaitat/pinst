@@ -30,10 +30,14 @@ impl Executor for GithubRelease {
             Action::Shell {
                 command: format!("{sudo}mkdir -p {dest}"),
             },
+            // `;` not `&&`: the staged download is cleaned up even when the
+            // extraction fails, so a retry does not pile up /tmp files.
             Action::Shell {
-                command: format!("{sudo}tar -C {dest} -xzf {}", staged.display()),
+                command: format!(
+                    "{sudo}tar -C {dest} -xzf {staged}; rm -f {staged}",
+                    staged = staged.display()
+                ),
             },
-            Action::Remove { path: staged },
         ])
     }
 }

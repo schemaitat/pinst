@@ -32,7 +32,6 @@ pub enum Action {
     },
     /// Move an existing file aside before writing over its path.
     Backup { path: PathBuf, to: PathBuf },
-    Remove { path: PathBuf },
 }
 
 impl Action {
@@ -49,7 +48,6 @@ impl Action {
             Action::Backup { path, to } => {
                 format!("back up {} -> {}", path.display(), to.display())
             }
-            Action::Remove { path } => format!("remove {}", path.display()),
         }
     }
 

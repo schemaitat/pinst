@@ -49,7 +49,11 @@ async fn main() -> Result<()> {
             } else {
                 eprintln!("error: {report:#}");
             }
-            ExitCode::Failure
+            if report.downcast_ref::<core::UsageError>().is_some() {
+                ExitCode::Usage
+            } else {
+                ExitCode::Failure
+            }
         }
     };
 

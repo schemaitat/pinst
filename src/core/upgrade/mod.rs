@@ -71,14 +71,33 @@ fn now() -> u64 {
         .unwrap_or(0)
 }
 
-fn compare(tool: &Tool, current: Option<String>, latest: Option<String>) -> UpgradeResult {
-    // apt's Candidate version carries a distro revision suffix and sometimes
-    // an epoch prefix (installed "5.9" vs. Candidate "5.9-8ubuntu3", or
-    // "4:15.2.0-5ubuntu1") that a straight inequality would misreport as an
-    // available upgrade on every apt-managed tool. Treat the installed
-    // version appearing anywhere in the candidate as still up to date.
+/// apt candidates look like `4:15.2.0-5ubuntu1`: an optional epoch, the
+/// upstream version, then the distro revision. Only the middle part is
+/// comparable with what `--version` reports.
+fn upstream_of(candidate: &str) -> &str {
+    let without_epoch = candidate
+        .split_once(':')
+        .map(|(_, rest)| rest)
+        .unwrap_or(candidate);
+    without_epoch
+        .split('-')
+        .next()
+        .unwrap_or(without_epoch)
+}
+
+fn compare(
+    tool: &Tool,
+    spec: &UpgradeSpec,
+    current: Option<String>,
+    latest: Option<String>,
+) -> UpgradeResult {
+    // Only apt carries epoch/revision decoration. Stripping it from a GitHub
+    // tag would turn `1.2.0-rc1` into `1.2.0` and invent an upgrade.
     let upgrade_available = match (&current, &latest) {
-        (Some(c), Some(l)) => !l.contains(c.as_str()),
+        (Some(c), Some(l)) => match spec {
+            UpgradeSpec::Apt { .. } => upstream_of(l) != c,
+            _ => l != c,
+        },
         _ => false,
     };
     UpgradeResult {
@@ -94,7 +113,7 @@ fn compare(tool: &Tool, current: Option<String>, latest: Option<String>) -> Upgr
 fn check_one(tool: &Tool, current: Option<String>, cache: &mut Cache, force: bool) -> UpgradeResult {
     let spec = tool.upgrade_spec();
     if matches!(spec, UpgradeSpec::None {}) {
-        return compare(tool, current, None);
+        return compare(tool, &spec, current, None);
     }
 
     let fresh = (!force)
@@ -106,18 +125,23 @@ fn check_one(tool: &Tool, current: Option<String>, cache: &mut Cache, force: boo
         Some(entry) => entry.latest.clone(),
         None => {
             let looked_up = strategies::latest_version(&spec);
-            cache.0.insert(
-                tool.name.clone(),
-                CacheEntry {
-                    latest: looked_up.clone(),
-                    checked_at: now(),
-                },
-            );
+            // Only cache an answer we actually got: caching a network failure
+            // would pin "no version information" for the full TTL after a
+            // single offline run.
+            if looked_up.is_some() {
+                cache.0.insert(
+                    tool.name.clone(),
+                    CacheEntry {
+                        latest: looked_up.clone(),
+                        checked_at: now(),
+                    },
+                );
+            }
             looked_up
         }
     };
 
-    compare(tool, current, latest)
+    compare(tool, &spec, current, latest)
 }
 
 /// Blocking upgrade check over a whole tool set. Callers on an async runtime

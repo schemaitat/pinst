@@ -2,7 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use color_eyre::eyre::{Result, bail};
+use color_eyre::eyre::Result;
+
+use crate::core::usage;
 
 use super::manifest::{Manifest, Tool};
 
@@ -47,7 +49,10 @@ pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
             .filter(|(_, deg)| **deg > 0)
             .map(|(name, _)| *name)
             .collect();
-        bail!("dependency cycle among tools: {}", stuck.join(", "));
+        return Err(usage(format!(
+            "dependency cycle among tools: {}",
+            stuck.join(", ")
+        )));
     }
 
     Ok(ordered)
@@ -76,7 +81,7 @@ pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&
 
     if let Some(profile_name) = &selection.profile {
         let Some(profile) = manifest.profile.get(profile_name) else {
-            bail!(
+            return Err(usage(format!(
                 "unknown profile '{}' (known: {})",
                 profile_name,
                 manifest
@@ -85,7 +90,7 @@ pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&
                     .cloned()
                     .collect::<Vec<_>>()
                     .join(", ")
-            );
+            )));
         };
         for tool in &manifest.tools {
             if tool.tags.iter().any(|t| profile.tags.contains(t)) {
@@ -101,7 +106,7 @@ pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&
             .filter(|t| t.tags.contains(tag))
             .collect();
         if matched.is_empty() {
-            bail!("no tool carries tag '{tag}'");
+            return Err(usage(format!("no tool carries tag '{tag}'")));
         }
         for tool in matched {
             wanted.insert(tool.name.clone());
@@ -110,7 +115,7 @@ pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&
 
     for name in &selection.names {
         if manifest.tool(name).is_none() {
-            bail!("unknown tool '{name}'");
+            return Err(usage(format!("unknown tool '{name}'")));
         }
         wanted.insert(name.clone());
     }

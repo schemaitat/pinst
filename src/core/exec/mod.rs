@@ -95,10 +95,6 @@ impl Runner {
                 })?;
                 Ok(())
             }
-            Action::Remove { path } => {
-                remove_any(path)?;
-                Ok(())
-            }
         }
     }
 }

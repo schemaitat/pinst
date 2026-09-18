@@ -49,7 +49,7 @@ fn draw_tabs(frame: &mut Frame, area: Rect, app: &App) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(theme::muted_style())
-                .title(" pinst - ~/dotfiles manager ")
+                .title(" pinst - toolchain + configs ")
                 .title_style(theme::title_style()),
         )
         .style(theme::muted_style())
