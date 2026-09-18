@@ -7,11 +7,12 @@ use std::path::PathBuf;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::event::AppEvent;
-use crate::health::{self, FileHealth, ToolHealth};
-use crate::probe::{self, ProbeResult};
-use crate::registry::ToolSpec;
-use crate::upgrade::{self, UpgradeResult};
+use crate::core::configs::{ConfigSet, FileStatus};
+use crate::core::doctor::{self, Finding};
+use crate::core::manifest::{Manifest, Tool};
+use crate::core::probe::{self, ProbeResult};
+use crate::core::upgrade::{self, UpgradeResult};
+use crate::event::{self, AppEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -43,16 +44,16 @@ pub struct App {
     pub should_quit: bool,
     tx: UnboundedSender<AppEvent>,
 
-    pub registry: Vec<ToolSpec>,
-    pub dotfiles_dir: PathBuf,
+    pub registry: Vec<Tool>,
+    pub manifest: Manifest,
     pub home_dir: PathBuf,
 
     pub probes: BTreeMap<String, ProbeResult>,
     pub probes_expected: usize,
     pub probes_received: usize,
 
-    pub health_files: Vec<FileHealth>,
-    pub health_tools: Vec<ToolHealth>,
+    pub findings: Vec<Finding>,
+    pub configs: Vec<FileStatus>,
     pub health_ready: bool,
 
     pub upgrades: BTreeMap<String, UpgradeResult>,
@@ -73,25 +74,21 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(
-        tx: UnboundedSender<AppEvent>,
-        registry: Vec<ToolSpec>,
-        dotfiles_dir: PathBuf,
-        home_dir: PathBuf,
-    ) -> Self {
+    pub fn new(tx: UnboundedSender<AppEvent>, manifest: Manifest, home_dir: PathBuf) -> Self {
+        let registry = manifest.tools.clone();
         let probes_expected = registry.len();
         Self {
             tab: Tab::Overview,
             should_quit: false,
             tx,
             registry,
-            dotfiles_dir,
+            manifest,
             home_dir,
             probes: BTreeMap::new(),
             probes_expected,
             probes_received: 0,
-            health_files: Vec::new(),
-            health_tools: Vec::new(),
+            findings: Vec::new(),
+            configs: Vec::new(),
             health_ready: false,
             upgrades: BTreeMap::new(),
             upgrades_loading: false,
@@ -108,7 +105,8 @@ impl App {
     }
 
     pub fn start_probing(&self) {
-        probe::spawn_probe_tasks(&self.registry, self.tx.clone());
+        let sink = event::forward_probes(self.tx.clone());
+        probe::spawn_streaming(self.registry.clone(), sink);
     }
 
     pub fn handle_event(&mut self, event: AppEvent) {
@@ -116,11 +114,11 @@ impl App {
             AppEvent::Term(term_event) => self.handle_term_event(term_event),
             AppEvent::Tick => self.tick_count = self.tick_count.wrapping_add(1),
             AppEvent::Probe(result) => self.on_probe(result),
-            AppEvent::Health { files, tools } => {
-                self.health_files = files;
-                self.health_tools = tools;
+            AppEvent::Health { findings, configs } => {
+                self.findings = findings;
+                self.configs = configs;
                 self.health_ready = true;
-                self.status = "health check complete".to_string();
+                self.status = "diagnosis complete".to_string();
             }
             AppEvent::Upgrade(result) => {
                 self.upgrades.insert(result.tool.clone(), result);
@@ -136,7 +134,7 @@ impl App {
         self.probes.insert(result.tool.clone(), result);
         self.probes_received += 1;
         if self.probes_received == self.probes_expected && !self.health_ready {
-            self.status = "running health check...".to_string();
+            self.status = "diagnosing...".to_string();
             self.spawn_health_check();
         } else if !self.health_ready {
             self.status = format!("probing tools... ({}/{})", self.probes_received, self.probes_expected);
@@ -144,15 +142,20 @@ impl App {
     }
 
     fn spawn_health_check(&self) {
-        let registry = self.registry.clone();
-        let dotfiles_dir = self.dotfiles_dir.clone();
+        let manifest = self.manifest.clone();
         let home_dir = self.home_dir.clone();
         let probes = self.probes.clone();
         let tx = self.tx.clone();
         tokio::task::spawn_blocking(move || {
-            let files = health::check_files(&dotfiles_dir, &home_dir);
-            let tools = health::check_tool_paths(&registry, &probes);
-            let _ = tx.send(AppEvent::Health { files, tools });
+            // Diagnosis reads the filesystem, so it belongs off the async
+            // runtime's worker threads.
+            let Ok(set) = ConfigSet::load(&manifest, &home_dir) else {
+                return;
+            };
+            let refs: Vec<&Tool> = manifest.tools.iter().collect();
+            let findings = doctor::diagnose(&refs, &probes, &set).unwrap_or_default();
+            let configs = set.status().unwrap_or_default();
+            let _ = tx.send(AppEvent::Health { findings, configs });
         });
     }
 
@@ -160,12 +163,8 @@ impl App {
         self.upgrades_loading = true;
         self.upgrades_ever_run = true;
         self.status = "checking for upgrades...".to_string();
-        upgrade::spawn_upgrade_check(
-            self.registry.clone(),
-            self.probes.clone(),
-            self.tx.clone(),
-            force,
-        );
+        let sink = event::forward_upgrades(self.tx.clone());
+        upgrade::spawn_streaming(self.registry.clone(), self.probes.clone(), sink, force);
     }
 
     fn query_lower(&self) -> Option<String> {
@@ -179,51 +178,56 @@ impl App {
     /// Tools matching the active search query (by name or package), or the
     /// full registry when no query is active. Backs both the Overview and
     /// Upgrades tabs so `/` filters consistently across them.
-    pub fn filtered_registry(&self) -> Vec<&ToolSpec> {
+    pub fn filtered_registry(&self) -> Vec<&Tool> {
         match self.query_lower() {
             None => self.registry.iter().collect(),
             Some(q) => self
                 .registry
                 .iter()
-                .filter(|t| t.name.to_lowercase().contains(&q) || t.package.to_lowercase().contains(&q))
-                .collect(),
-        }
-    }
-
-    pub fn filtered_health_files(&self) -> Vec<&FileHealth> {
-        match self.query_lower() {
-            None => self.health_files.iter().collect(),
-            Some(q) => self
-                .health_files
-                .iter()
-                .filter(|f| {
-                    f.relative_path.to_lowercase().contains(&q) || f.package.to_lowercase().contains(&q)
+                .filter(|t| {
+                    t.name.to_lowercase().contains(&q)
+                        || t.tags.iter().any(|tag| tag.to_lowercase().contains(&q))
                 })
                 .collect(),
         }
     }
 
-    pub fn filtered_health_tools(&self) -> Vec<&ToolHealth> {
+    pub fn filtered_findings(&self) -> Vec<&Finding> {
         match self.query_lower() {
-            None => self.health_tools.iter().collect(),
+            None => self.findings.iter().collect(),
             Some(q) => self
-                .health_tools
+                .findings
                 .iter()
-                .filter(|t| t.tool.to_lowercase().contains(&q))
+                .filter(|f| {
+                    f.id.to_lowercase().contains(&q) || f.message.to_lowercase().contains(&q)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn filtered_configs(&self) -> Vec<&FileStatus> {
+        match self.query_lower() {
+            None => self.configs.iter().collect(),
+            Some(q) => self
+                .configs
+                .iter()
+                .filter(|c| {
+                    c.path.to_lowercase().contains(&q) || c.package.to_lowercase().contains(&q)
+                })
                 .collect(),
         }
     }
 
     /// Files pinst can jump straight into an editor for: `~/.zshrc` first
-    /// (the single most-edited file, per README), then every other
-    /// dotfiles-tracked file discovered by the health check (TASK-015).
+    /// (the most-edited file day to day), then every other config pinst
+    /// manages.
     pub fn editor_targets(&self) -> Vec<EditorTarget> {
         let mut targets = vec![EditorTarget {
             label: "~/.zshrc".to_string(),
             path: self.home_dir.join(".zshrc"),
         }];
-        for file in &self.health_files {
-            let label = format!("~/{}", file.relative_path);
+        for file in &self.configs {
+            let label = format!("~/{}", file.path);
             if label == "~/.zshrc" {
                 continue;
             }

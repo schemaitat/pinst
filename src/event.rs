@@ -1,6 +1,6 @@
-//! Unified event stream feeding the main loop: terminal input, a UI tick,
-//! and the background probe/health/upgrade results, all merged onto one
-//! `mpsc` channel (PAT-002) so `main.rs` only ever has to drain one queue.
+//! Unified event stream feeding the TUI loop: terminal input, a UI tick, and
+//! the background probe/health/upgrade results, all merged onto one `mpsc`
+//! channel so the render loop only ever drains one queue.
 
 use std::time::Duration;
 
@@ -8,9 +8,10 @@ use crossterm::event::{Event as CtEvent, EventStream};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio_stream::StreamExt;
 
-use crate::health::{FileHealth, ToolHealth};
-use crate::probe::ProbeResult;
-use crate::upgrade::UpgradeResult;
+use crate::core::configs::FileStatus;
+use crate::core::doctor::Finding;
+use crate::core::probe::ProbeResult;
+use crate::core::upgrade::UpgradeResult;
 
 #[derive(Debug)]
 pub enum AppEvent {
@@ -18,16 +19,16 @@ pub enum AppEvent {
     Tick,
     Probe(ProbeResult),
     Health {
-        files: Vec<FileHealth>,
-        tools: Vec<ToolHealth>,
+        findings: Vec<Finding>,
+        configs: Vec<FileStatus>,
     },
     Upgrade(UpgradeResult),
     UpgradesDone,
 }
 
-/// Spawns the input-reading and tick-generating background tasks and
-/// returns the shared sender (cloned into probe/health/upgrade tasks) and
-/// the receiver the main loop drains.
+/// Spawns the input-reading and tick-generating background tasks and returns
+/// the shared sender (cloned into the background work) and the receiver the
+/// main loop drains.
 pub fn start_event_loop() -> (UnboundedSender<AppEvent>, UnboundedReceiver<AppEvent>) {
     let (tx, rx) = mpsc::unbounded_channel();
 
@@ -55,4 +56,34 @@ pub fn start_event_loop() -> (UnboundedSender<AppEvent>, UnboundedReceiver<AppEv
     });
 
     (tx, rx)
+}
+
+/// Bridges a core result stream onto the TUI's event enum, keeping `core`
+/// free of any knowledge of the UI.
+pub fn forward_probes(tx: UnboundedSender<AppEvent>) -> UnboundedSender<ProbeResult> {
+    let (probe_tx, mut probe_rx) = mpsc::unbounded_channel::<ProbeResult>();
+    tokio::spawn(async move {
+        while let Some(result) = probe_rx.recv().await {
+            if tx.send(AppEvent::Probe(result)).is_err() {
+                break;
+            }
+        }
+    });
+    probe_tx
+}
+
+pub fn forward_upgrades(tx: UnboundedSender<AppEvent>) -> UnboundedSender<Option<UpgradeResult>> {
+    let (up_tx, mut up_rx) = mpsc::unbounded_channel::<Option<UpgradeResult>>();
+    tokio::spawn(async move {
+        while let Some(message) = up_rx.recv().await {
+            let event = match message {
+                Some(result) => AppEvent::Upgrade(result),
+                None => AppEvent::UpgradesDone,
+            };
+            if tx.send(event).is_err() {
+                break;
+            }
+        }
+    });
+    up_tx
 }

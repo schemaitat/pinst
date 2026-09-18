@@ -4,10 +4,10 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table, TableState}
 
 use super::theme;
 use crate::app::App;
-use crate::probe::ProbeResult;
+use crate::core::probe::ProbeResult;
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
-    let header = Row::new(vec!["", "Tool", "Package", "Status", "Version"])
+    let header = Row::new(vec!["", "Tool", "Tags", "Status", "Version"])
         .style(theme::title_style())
         .height(1);
 
@@ -31,7 +31,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
             Row::new(vec![
                 Cell::from(icon).style(style),
                 Cell::from(spec.name.clone()),
-                Cell::from(spec.package.clone()).style(theme::muted_style()),
+                Cell::from(spec.tags.join(",")).style(theme::muted_style()),
                 Cell::from(status_text).style(style),
                 Cell::from(version),
             ])
@@ -41,7 +41,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     let widths = [
         Constraint::Length(5),
         Constraint::Length(22),
-        Constraint::Length(10),
+        Constraint::Length(16),
         Constraint::Length(11),
         Constraint::Min(10),
     ];

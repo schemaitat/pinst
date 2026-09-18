@@ -1,0 +1,274 @@
+# pinst manifest — the single source of truth for this machine's toolchain.
+#
+# Replaces both ~/dotfiles/scripts/bootstrap.sh (what to install) and
+# ~/dotfiles/justfile + GNU Stow (what configs to link). Run
+# `pinst schema manifest` for the authoritative JSON Schema of this file.
+#
+# [[tool]]     one entry per installable tool
+#   requires   dependency edges; pinst topologically orders installs from these
+#   tags       used by [profile.*] to select a subset for a given machine
+#   detect     how to tell whether it is already installed, and at what version
+#   install    method + its fields (apt | cargo | curl_script | shell |
+#              github_release | nvm | git_clone | manual)
+#   post_install  extra steps; confirm = true gates them behind --yes
+#
+# [[config]]   one entry per config package; source is a subdir of configs/,
+#              whose tree mirrors $HOME
+
+[meta]
+schema_version = 1
+
+# --- base ------------------------------------------------------------------
+
+[[tool]]
+name = "curl"
+summary = "HTTP client used by most of the other installers"
+tags = ["base"]
+detect = { command = "command -v curl", bin = "curl", version_cmd = "curl --version" }
+install = { method = "apt", packages = ["curl"] }
+
+[[tool]]
+name = "git"
+summary = "Version control; required to clone oh-my-zsh plugins"
+tags = ["base"]
+detect = { command = "command -v git", bin = "git", version_cmd = "git --version" }
+install = { method = "apt", packages = ["git"] }
+
+[[tool]]
+name = "unzip"
+summary = "Required by the oh-my-posh installer"
+tags = ["base"]
+detect = { command = "command -v unzip", bin = "unzip", version_cmd = "unzip -v" }
+install = { method = "apt", packages = ["unzip"] }
+
+[[tool]]
+name = "build-essential"
+summary = "gcc/make, needed to compile treesitter parsers and native crates"
+tags = ["base", "dev"]
+detect = { command = "command -v gcc && command -v make", bin = "gcc", version_cmd = "gcc --version" }
+install = { method = "apt", packages = ["build-essential"] }
+upgrade = { method = "apt", package = "gcc" }
+
+# --- shell -----------------------------------------------------------------
+
+[[tool]]
+name = "zsh"
+summary = "Z shell, the login shell these configs target"
+tags = ["base", "shell"]
+detect = { command = "command -v zsh", bin = "zsh", version_cmd = "zsh --version" }
+install = { method = "apt", packages = ["zsh"] }
+
+[[tool.post_install]]
+description = "make zsh the default login shell"
+command = "chsh -s \"$(command -v zsh)\""
+skip_if = "[ \"${SHELL##*/}\" = zsh ]"
+confirm = true
+
+[[tool]]
+name = "oh-my-zsh"
+summary = "zsh framework the .zshrc is built on"
+tags = ["shell"]
+requires = ["zsh", "git", "curl"]
+detect = { command = "[ -d \"$HOME/.oh-my-zsh\" ]" }
+# Uses the sh -c form rather than a pipe: the omz installer reads --unattended
+# from $1, which `curl | sh -s --` would not deliver the same way.
+install = { method = "shell", command = "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" \"\" --unattended" }
+
+[[tool]]
+name = "zsh-autosuggestions"
+summary = "oh-my-zsh plugin referenced by .zshrc's plugins array"
+tags = ["shell"]
+requires = ["oh-my-zsh"]
+detect = { command = "[ -d \"${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions\" ]" }
+install = { method = "git_clone", url = "https://github.com/zsh-users/zsh-autosuggestions", dest = "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions", depth = 1 }
+
+[[tool]]
+name = "direnv"
+summary = "Per-directory env loading; backs the omz direnv plugin"
+tags = ["shell"]
+detect = { command = "command -v direnv", bin = "direnv", version_cmd = "direnv --version" }
+install = { method = "apt", packages = ["direnv"] }
+
+[[tool]]
+name = "oh-my-posh"
+summary = "Prompt engine; .zshrc initializes it with the catppuccin theme"
+tags = ["shell"]
+requires = ["curl", "unzip"]
+detect = { command = "command -v oh-my-posh", bin = "oh-my-posh", version_cmd = "oh-my-posh --version" }
+install = { method = "curl_script", url = "https://ohmyposh.dev/install.sh", shell = "bash", github_repo = "JanDeDobbeleer/oh-my-posh" }
+
+# --- editor / dev ----------------------------------------------------------
+
+[[tool]]
+name = "ripgrep"
+summary = "Fast grep; telescope live_grep depends on it"
+tags = ["editor", "dev"]
+detect = { command = "command -v rg", bin = "rg", version_cmd = "rg --version" }
+install = { method = "apt", packages = ["ripgrep"] }
+
+[[tool]]
+name = "fd"
+summary = "Fast find; telescope find_files depends on it"
+tags = ["editor", "dev"]
+detect = { command = "command -v fd || command -v fdfind", bin = "fd", version_cmd = "fd --version || fdfind --version" }
+install = { method = "apt", packages = ["fd-find"] }
+upgrade = { method = "apt", package = "fd-find" }
+
+[[tool.post_install]]
+description = "symlink fdfind to ~/.local/bin/fd (Debian ships it under the other name)"
+command = "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$(command -v fdfind)\" \"$HOME/.local/bin/fd\""
+skip_if = "command -v fd"
+
+[[tool]]
+name = "neovim"
+summary = "Editor; the nvim config package targets it"
+tags = ["editor"]
+requires = ["curl"]
+detect = { command = "command -v nvim || [ -x /opt/nvim-linux-x86_64/bin/nvim ]", bin = "nvim", version_cmd = "nvim --version || /opt/nvim-linux-x86_64/bin/nvim --version" }
+install = { method = "github_release", repo = "neovim/neovim", asset = "nvim-linux-x86_64.tar.gz", dest = "/opt", confirm = true }
+
+[[tool]]
+name = "rust"
+summary = "Rust toolchain via rustup; .zshenv sources ~/.cargo/env"
+tags = ["dev"]
+requires = ["curl"]
+detect = { command = "command -v cargo", bin = "cargo", version_cmd = "rustc --version" }
+install = { method = "shell", command = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y" }
+upgrade = { method = "none" }
+
+[[tool]]
+name = "tree-sitter-cli"
+summary = "nvim-treesitter shells out to this to compile parsers"
+tags = ["editor", "dev"]
+requires = ["rust", "build-essential"]
+detect = { command = "command -v tree-sitter", bin = "tree-sitter", version_cmd = "tree-sitter --version" }
+install = { method = "cargo", crate_name = "tree-sitter-cli" }
+
+[[tool]]
+name = "uv"
+summary = "Python tool runner"
+tags = ["dev"]
+requires = ["curl"]
+detect = { command = "command -v uv", bin = "uv", version_cmd = "uv --version" }
+install = { method = "curl_script", url = "https://astral.sh/uv/install.sh", shell = "sh", github_repo = "astral-sh/uv" }
+
+[[tool]]
+name = "nvm"
+summary = "Node version manager"
+tags = ["dev"]
+requires = ["curl"]
+detect = { command = "[ -s \"$HOME/.nvm/nvm.sh\" ]" }
+install = { method = "curl_script", url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh", shell = "bash", github_repo = "nvm-sh/nvm" }
+
+[[tool]]
+name = "node"
+summary = "Node runtime; copilot.lua and the agent CLIs need it"
+tags = ["dev"]
+requires = ["nvm"]
+detect = { command = "command -v node", bin = "node", version_cmd = "node --version" }
+install = { method = "nvm", version = "--lts" }
+
+[[tool]]
+name = "just"
+summary = "Command runner"
+tags = ["dev"]
+requires = ["rust"]
+detect = { command = "command -v just", bin = "just", version_cmd = "just --version" }
+install = { method = "cargo", crate_name = "just" }
+
+# --- git tooling -----------------------------------------------------------
+
+[[tool]]
+name = "gh"
+summary = "GitHub CLI; .gitconfig uses it as a credential helper"
+tags = ["git"]
+detect = { command = "command -v gh", bin = "gh", version_cmd = "gh --version" }
+install = { method = "apt", packages = ["gh"] }
+
+[[tool]]
+name = "delta"
+summary = "Diff pager; .gitconfig sets it as core.pager"
+tags = ["git"]
+detect = { command = "command -v delta", bin = "delta", version_cmd = "delta --version" }
+install = { method = "apt", packages = ["git-delta"] }
+upgrade = { method = "apt", package = "git-delta" }
+
+[[tool]]
+name = "git-credential-manager"
+summary = ".gitconfig sets [credential] helper = manager"
+tags = ["git"]
+detect = { command = "command -v git-credential-manager || command -v git-credential-manager-core", version_cmd = "git-credential-manager --version" }
+install = { method = "manual", note = "No apt package on Ubuntu. Install from https://github.com/git-ecosystem/git-credential-manager/blob/release/docs/install.md#linux" }
+upgrade = { method = "github_release", repo = "git-ecosystem/git-credential-manager" }
+
+# --- agents ----------------------------------------------------------------
+
+[[tool]]
+name = "herdr"
+summary = "Terminal multiplexer for coding agents"
+tags = ["agents"]
+requires = ["curl"]
+detect = { command = "command -v herdr", bin = "herdr", version_cmd = "herdr --version" }
+install = { method = "curl_script", url = "https://herdr.dev/install.sh", shell = "sh" }
+
+[[tool]]
+name = "aven"
+summary = "Local-first task manager; .zshrc aliases av to `aven tui`"
+tags = ["agents"]
+requires = ["curl"]
+detect = { command = "command -v aven", bin = "aven", version_cmd = "aven --version" }
+install = { method = "curl_script", url = "https://raw.githubusercontent.com/raine/aven/main/scripts/install", shell = "bash", github_repo = "raine/aven" }
+
+[[tool]]
+name = "opencode"
+summary = "AI coding agent"
+tags = ["agents"]
+requires = ["curl", "node"]
+detect = { command = "command -v opencode", bin = "opencode", version_cmd = "opencode --version" }
+install = { method = "curl_script", url = "https://opencode.ai/install", shell = "bash", github_repo = "sst/opencode" }
+
+[[tool]]
+name = "claude"
+summary = "Claude Code; .zshrc aliases clauded"
+tags = ["agents"]
+requires = ["curl"]
+detect = { command = "command -v claude", bin = "claude", version_cmd = "claude --version" }
+install = { method = "curl_script", url = "https://claude.ai/install.sh", shell = "bash" }
+
+# --- configs ---------------------------------------------------------------
+# source is a subdirectory of configs/ whose tree mirrors $HOME.
+
+[[config]]
+name = "zsh"
+source = "zsh"
+summary = "zshrc / zprofile / zshenv"
+requires_tool = "zsh"
+
+[[config]]
+name = "nvim"
+source = "nvim"
+summary = "Neovim config (lazy.nvim)"
+requires_tool = "neovim"
+
+[[config]]
+name = "herdr"
+source = "herdr"
+summary = "herdr config.toml"
+requires_tool = "herdr"
+
+[[config]]
+name = "git"
+source = "git"
+summary = "gitconfig (git identity is templated)"
+requires_tool = "git"
+templates = [".gitconfig"]
+
+# --- profiles --------------------------------------------------------------
+
+[profile.default]
+summary = "Everything this machine's stack needs"
+tags = ["base", "shell", "editor", "dev", "git", "agents"]
+
+[profile.minimal]
+summary = "Shell only — enough to be comfortable on a throwaway box"
+tags = ["base", "shell"]
