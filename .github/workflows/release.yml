@@ -44,6 +44,15 @@ jobs:
       release_created: ${{ steps.release.outputs.releases_created || steps.release.outputs['.--release_created'] }}
       tag_name: ${{ steps.release.outputs.tag_name || steps.release.outputs['.--tag_name'] }}
     steps:
+      # release-please-config.json deliberately does NOT set
+      # `separate-pull-requests`. For a single-package manifest it already
+      # defaults to true, and forcing it to false builds the *grouped* release
+      # PR on a componentless branch (release-please--branches--main). At
+      # release time buildRelease() compares that branch's component against
+      # getBranchComponent(), which — unlike getComponent() — ignores
+      # `include-component-in-tag` and returns the Cargo package name. The two
+      # never match, so release-please logs a warning, creates nothing, and
+      # still exits 0. That is how v0.2.0 merged without producing an artifact.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
