@@ -65,6 +65,9 @@ input and a defined artifact, not a suggestion.
 
 `conventional-commits` is not a lifecycle stage; it is called *by*
 `plan-implement` once per phase, and directly by a human via `/cc`.
+`create-pr` sits alongside it, at the other end: it reads the same plan the
+lifecycle produced and turns it into the PR description, so the reasoning
+recorded at planning time is what reviewers actually get.
 
 Neither is `pinst`, which is reference rather than procedure: the contract for
 driving the CLI this repo builds — its JSON envelope, exit codes, step
@@ -85,6 +88,7 @@ only reason the corpus is worth keeping rather than just being history.
 | "implement plan 3", "continue", "do phase 2" | `/implement` → `plan-implement` |
 | "what did we learn", "post-mortem this" | `/learn` → `plan-learnings` |
 | "commit this" | `/cc` → `conventional-commits` |
+| "open a PR", "ship this branch", "get this reviewed" | `/pr` → `create-pr` |
 | "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
 | a one-line fix with no design content | none of the above — just do it |
 
