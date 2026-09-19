@@ -17,9 +17,9 @@ use std::path::PathBuf;
 
 /// Marks a failure caused by *how pinst was asked* — an unknown tool or
 /// profile, a missing or invalid manifest — rather than by something going
-/// wrong while doing the work. `main` maps it to exit code 2, which
-/// AGENTS.md documents as the usage-error code, so an agent can tell a bad
-/// invocation from a real failure.
+/// wrong while doing the work. `main` maps it to exit code 2, the
+/// documented usage-error code, so an agent can tell a bad invocation from
+/// a real failure.
 #[derive(Debug)]
 pub struct UsageError(pub String);
 

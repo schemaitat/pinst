@@ -18,7 +18,7 @@ use output::{Ctx, ExitCode};
     about = "Self-contained toolchain and dotfiles manager",
     long_about = "pinst installs, updates, and doctors this machine's toolchain from a \
                   manifest, and lays down the configs it carries embedded. Every command \
-                  supports --json and --dry-run; see AGENTS.md for the machine contract.",
+                  supports --json and --dry-run; `pinst schema output` is the machine contract.",
     arg_required_else_help = true
 )]
 pub struct Cli {

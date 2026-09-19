@@ -1,9 +1,10 @@
 # The agent harness
 
-`AGENTS.md` at the repo root is the contract for *driving pinst*. This file is
-the contract for *working on pinst* — how an agent plans a change, implements
-it, and writes down what it learned, and what keeps those three things from
-drifting apart.
+The `pinst` skill is the contract for *driving pinst*. This file is the
+contract for *working on pinst* — how an agent plans a change, implements it,
+and writes down what it learned, and what keeps those three things from
+drifting apart. (`AGENTS.md` at the repo root is deliberately one line: it is
+always in context, so it carries only what is always true.)
 
 Two directories hold the whole thing:
 
@@ -65,6 +66,13 @@ input and a defined artifact, not a suggestion.
 `conventional-commits` is not a lifecycle stage; it is called *by*
 `plan-implement` once per phase, and directly by a human via `/cc`.
 
+Neither is `pinst`, which is reference rather than procedure: the contract for
+driving the CLI this repo builds — its JSON envelope, exit codes, step
+outcomes and doctor findings, and how to add a tool to `manifest.toml`. It
+lives as a skill so it loads when an agent is actually about to run `pinst`,
+instead of sitting in every session's context. That is why `AGENTS.md` is now
+one line.
+
 The loop closes at `plan-learn` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
@@ -77,6 +85,7 @@ only reason the corpus is worth keeping rather than just being history.
 | "implement plan 3", "continue", "do phase 2" | `/implement` → `plan-implement` |
 | "what did we learn", "post-mortem this" | `/learn` → `plan-learn` |
 | "commit this" | `/cc` → `conventional-commits` |
+| "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
 | a one-line fix with no design content | none of the above — just do it |
 
 That last row matters. A plan is overhead that buys traceability; work that

@@ -20,9 +20,12 @@ pinst apply                 # converge an existing machine
 pinst tui                   # interactive dashboard
 ```
 
-Driving it from an agent or a script? [AGENTS.md](AGENTS.md) is the machine
-contract: every command speaks `--json`, every mutating one speaks
-`--dry-run`, and the exit codes are part of the interface.
+Driving it from an agent or a script? The machine contract is the `pinst`
+skill, [`.agents/skills/pinst/SKILL.md`](.agents/skills/pinst/SKILL.md):
+every command speaks `--json`, every mutating one speaks `--dry-run`, and the
+exit codes are part of the interface. `pinst schema manifest` and
+`pinst schema output` emit the machine-readable versions, from inside the
+binary — so they answer on a machine with no checkout.
 
 ## Contents
 

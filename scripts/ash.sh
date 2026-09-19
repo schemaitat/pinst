@@ -9,7 +9,7 @@
 # Why this exists: the skills state a dozen invariants in prose ("the id must
 # match its directory", "never hand-edit INDEX.md", "mirror phase status").
 # Prose is enforced by remembering. This is enforced by an exit code — the
-# same contract pinst itself offers agents in AGENTS.md:
+# same contract pinst itself offers agents:
 #
 #   0  clean          2  usage error
 #   1  failed to run  3  ran fine, found things to act on
