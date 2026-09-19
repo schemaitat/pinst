@@ -35,3 +35,10 @@ fmt:
 # The self-contained release binary, the artifact that gets shipped.
 build:
     cargo build --release
+
+# Delegates to scripts/install.sh rather than repeating the build-and-place
+# steps, so there is one answer to "how does pinst get installed" — the same
+# one a fresh machine runs.
+[doc("Build and put pinst on PATH (default ~/.local/bin; pass a dir to override)")]
+install dir="":
+    PINST_INSTALL_DIR="{{ dir }}" scripts/install.sh

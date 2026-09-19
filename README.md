@@ -487,7 +487,12 @@ just run        # run from source (opens the dashboard)
 just run doctor --json   # ...or any other command; args forward
 just qc         # formatting, lints, and tests — what CI would run
 just build      # the self-contained release binary
+just install    # ...and put it on PATH (~/.local/bin)
 ```
+
+`just install <dir>` overrides the destination. It delegates to
+`scripts/install.sh`, so installing from a checkout takes the same path a
+fresh machine does.
 
 `just run` propagates pinst's exit codes, so `just run doctor` ending in
 "recipe failed with exit code 3" is pinst reporting findings, not a broken
