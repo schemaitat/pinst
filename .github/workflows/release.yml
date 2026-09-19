@@ -104,8 +104,17 @@ jobs:
 
       # The same recipe a maintainer runs locally, so the released artifact
       # is never built by a procedure that exists only in this file.
+      #
+      # The target is positional. `just dist target=<triple>` does NOT bind the
+      # `target` parameter — only `just target=<v> dist`, before the recipe
+      # name, sets a variable. After the recipe name it is a positional
+      # argument, so the parameter received the literal string
+      # "target=x86_64-unknown-linux-musl". That made the recipe's
+      # same-architecture check compare "target=x86_64" against "x86_64", miss,
+      # and fall through to the `cross` branch — which this job deliberately
+      # does not install. That is how v0.3.0 got a draft release with no assets.
       - name: Build release tarball
-        run: just dist target=${{ matrix.target }}
+        run: just dist ${{ matrix.target }}
 
       # This project refuses to pretend a `curl | sh` installer is verifiable;
       # it should not ship an unverifiable artifact of its own either.
