@@ -2,7 +2,7 @@
 index: "0001"
 slug: release-please-binary-artifacts
 phase: 3
-status: Proposed
+status: In Progress
 ---
 
 # Phase 3 — Build and attach the binary
@@ -23,7 +23,7 @@ plan — musl cross-compilation with `aws-lc-rs` in the dependency tree
 tag or the changelog.
 
 ## Steps
-- [ ] TASK-008: `justfile` — add a `dist` recipe taking a target (default
+- [x] TASK-008: `justfile` — add a `dist` recipe taking a target (default
       `x86_64-unknown-linux-musl`): build with `cross build --release
       --locked --target {{target}}` (falling back to `cargo` when the target
       is the host), then stage `target/{{target}}/release/pinst` into
@@ -32,10 +32,10 @@ tag or the changelog.
       knows how an artifact is made. `install.sh` is already the one answer
       to "how does pinst get installed"; this is the one answer to "how is a
       release artifact built", reproducible on a laptop with one command.
-- [ ] TASK-009: `.gitignore` — add `/dist`.
+- [x] TASK-009: `.gitignore` — add `/dist`.
       Why: TASK-008 writes build output into the tree; it must never be
       committable.
-- [ ] TASK-010: validate RISK-001 before wiring any CI to it — run
+- [x] TASK-010: validate RISK-001 before wiring any CI to it — run
       `just dist` locally (or on a scratch branch job) and confirm
       `aws-lc-rs` builds for musl inside the `cross` image. If it does not,
       switch `reqwest` to the `ring` crypto provider in `Cargo.toml` and
@@ -45,7 +45,7 @@ tag or the changelog.
       Why: every later step assumes the artifact can be produced at all.
       Finding out during a real release means an empty release that has
       already been tagged.
-- [ ] TASK-011: `.github/workflows/release.yml` — add an `artifacts` job:
+- [x] TASK-011: `.github/workflows/release.yml` — add an `artifacts` job:
       `needs: release-please`, `if:` the release output confirmed in
       TASK-006, `permissions: { contents: write, id-token: write,
       attestations: write }`, and a `strategy.matrix.target` holding the
@@ -58,13 +58,13 @@ tag or the changelog.
       Why: a matrix with one row is what makes adding `aarch64` a row rather
       than a rewrite (ASSUMPTION-002); `--clobber` makes a re-run of a failed
       job idempotent, matching the same property pinst demands of itself.
-- [ ] TASK-012: `.github/workflows/release.yml` — add
+- [x] TASK-012: `.github/workflows/release.yml` — add
       `actions/attest-build-provenance@v2` over the tarball in the same job.
       Why: SEC-002. This repo's own doctor flags `curl | sh` installers as
       unpinnable because they cannot be verified; shipping an unverifiable
       artifact of its own would be the same sin, and attestation plus a
       checksum is the cheap end of fixing it.
-- [ ] TASK-013: `.github/workflows/release.yml` — add a final `publish` job,
+- [x] TASK-013: `.github/workflows/release.yml` — add a final `publish` job,
       `needs: artifacts`, running `gh release edit <tag> --draft=false`.
       Why: RISK-002 — `/releases/latest/download/<asset>` is the URL both
       `install.sh` and pinst's `github_release` executor resolve, and it must
