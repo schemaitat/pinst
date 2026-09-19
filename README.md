@@ -24,7 +24,7 @@ contract: every command speaks `--json`, every mutating one speaks
 
 ## Contents
 
-- [Install](#install) · [Commands](#commands)
+- [Install](#install) · [Commands](#commands) · [How it works](#how-it-works)
 - [Managing tools](#managing-tools) — add, select, order, upgrade, remove
 - [Managing configs](#managing-configs) — edit, add, drift, machine-specific values
 - [What pinst will and will not do on its own](#what-pinst-will-and-will-not-do-on-its-own)
@@ -64,6 +64,19 @@ pinst bootstrap -y           # then provision
 
 Global flags: `--json`, `--dry-run`, `--yes`/`-y`, `--quiet`/`-q`,
 `--manifest <path>`.
+
+## How it works
+
+The manifest and the config tree say what *should* be true; probing the machine
+says what *is* true. Both feed one ordered plan — and that same plan is either
+printed (`--dry-run`) or executed, so the two can never disagree.
+
+![pinst architecture: the manifest and embedded config tree describe the desired state, probing the machine yields the actual state, both feed one ordered plan, which is either printed by the CLI under dry-run or handed to the executors that write to the machine.](docs/architecture.svg)
+
+Day to day that becomes a loop: find out what's off, read the exact commands
+before anything runs, converge, then verify.
+
+![pinst workflow: a fresh machine starts with bootstrap; from then on the loop is doctor to find what is off, plan to review the exact commands, apply to converge, then doctor again to verify. Doctor exits 0 when in sync, and hands drifted configs back to a human.](docs/workflow.svg)
 
 ---
 

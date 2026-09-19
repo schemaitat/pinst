@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 976 592" width="976" height="592" role="img" aria-labelledby="flow-title flow-desc">
+  <title id="flow-title">pinst workflow: diagnose, review, converge, verify</title>
+  <desc id="flow-desc">A fresh machine starts with bootstrap. From then on the loop is doctor to find what is off, plan to review the exact commands, apply to converge, then doctor again to verify. Doctor exits zero when the machine is in sync, and hands drifted configs back to a human because only they know which side should win.</desc>
+
+  <defs>
+    <marker id="flow-arrow" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#6B6B6B"/>
+    </marker>
+    <marker id="flow-arrow-soft" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#9A9A9A"/>
+    </marker>
+  </defs>
+
+  <rect width="976" height="592" fill="#F5F3EF"/>
+
+  <!-- title block -->
+  <text x="40" y="46" font-family="'Instrument Serif', Georgia, 'Times New Roman', serif" font-size="28" font-weight="400" fill="#1A1A1A">Using pinst day to day</text>
+  <text x="40" y="68" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B" letter-spacing="0.09em">NOTHING MUTATES UNTIL YOU HAVE SEEN THE PLAN</text>
+
+  <!-- ============ CONNECTORS (drawn before boxes) ============ -->
+  <g fill="none" stroke="#6B6B6B" stroke-width="1.25" marker-end="url(#flow-arrow)">
+    <!-- bootstrap -> doctor -->
+    <path d="M 216 232 H 292"/>
+    <!-- doctor -> plan -->
+    <path d="M 472 232 H 548"/>
+    <!-- plan -> apply -->
+    <path d="M 728 232 H 772"/>
+    <!-- apply -> doctor : the return leg that closes the loop -->
+    <path d="M 856 268 V 372 Q 856 380 848 380 H 392 Q 384 380 384 372 V 272"/>
+    <!-- doctor -> in sync -->
+    <path d="M 360 196 V 164"/>
+  </g>
+
+  <!-- drift branch: dashed, because it is the one decision pinst refuses to make -->
+  <path d="M 328 268 V 432" fill="none" stroke="#9A9A9A" stroke-width="1.25" stroke-dasharray="4 3" marker-end="url(#flow-arrow-soft)"/>
+
+  <!-- ============ ARROW LABELS (masked, 6px clear of stroke) ============ -->
+  <g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#6B6B6B" letter-spacing="0.08em" text-anchor="middle">
+    <rect x="490" y="214" width="40" height="12" fill="#F5F3EF"/>
+    <text x="510" y="223">EXIT 3</text>
+
+    <rect x="732" y="214" width="36" height="12" fill="#F5F3EF"/>
+    <text x="750" y="223">RUN IT</text>
+
+    <rect x="600" y="362" width="40" height="12" fill="#F5F3EF"/>
+    <text x="620" y="371">VERIFY</text>
+  </g>
+
+  <!-- vertical-segment labels sit beside their stroke, never on it -->
+  <g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#6B6B6B" letter-spacing="0.08em" text-anchor="end">
+    <rect x="308" y="172" width="46" height="12" fill="#F5F3EF"/>
+    <text x="352" y="181">EXIT 0</text>
+  </g>
+  <g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#9A9A9A" letter-spacing="0.08em" text-anchor="end">
+    <rect x="234" y="344" width="88" height="12" fill="#F5F3EF"/>
+    <text x="320" y="353">NEEDS A HUMAN</text>
+  </g>
+
+  <!-- ============ NODES ============ -->
+
+  <!-- in sync : terminal state -->
+  <rect x="296" y="104" width="176" height="56" fill="#F5F3EF"/>
+  <rect x="296" y="104" width="176" height="56" rx="6" fill="#EBE9E5" stroke="#6B6B6B" stroke-width="1"/>
+  <rect x="308" y="114" width="42" height="13" rx="2" fill="#DFDCD5"/>
+  <text x="313" y="123" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#4A4A4A" letter-spacing="0.1em">STATE</text>
+  <text x="308" y="144" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">In sync</text>
+  <text x="308" y="156" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">nothing outstanding</text>
+
+  <!-- bootstrap : entry -->
+  <rect x="40" y="196" width="176" height="72" fill="#F5F3EF"/>
+  <rect x="40" y="196" width="176" height="72" rx="6" fill="#E7E5E1" stroke="#9A9A9A" stroke-width="1"/>
+  <rect x="52" y="206" width="76" height="13" rx="2" fill="#DAD7D1"/>
+  <text x="57" y="215" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#4A4A4A" letter-spacing="0.1em">NEW MACHINE</text>
+  <text x="52" y="238" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">pinst bootstrap</text>
+  <text x="52" y="252" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">install.sh · one shot</text>
+  <text x="52" y="264" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">no clone needed</text>
+
+  <!-- doctor : the hub -->
+  <rect x="296" y="196" width="176" height="72" fill="#F5F3EF"/>
+  <rect x="296" y="196" width="176" height="72" rx="6" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1"/>
+  <rect x="308" y="206" width="62" height="13" rx="2" fill="#EDEBE6"/>
+  <text x="313" y="215" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#4A4A4A" letter-spacing="0.1em">DIAGNOSE</text>
+  <text x="308" y="238" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">pinst doctor</text>
+  <text x="308" y="252" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">findings + the exact</text>
+  <text x="308" y="264" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">fix for each</text>
+
+  <!-- plan : review -->
+  <rect x="552" y="196" width="176" height="72" fill="#F5F3EF"/>
+  <rect x="552" y="196" width="176" height="72" rx="6" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1"/>
+  <rect x="564" y="206" width="50" height="13" rx="2" fill="#EDEBE6"/>
+  <text x="569" y="215" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#4A4A4A" letter-spacing="0.1em">REVIEW</text>
+  <text x="564" y="238" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">pinst plan</text>
+  <text x="564" y="252" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">every command it</text>
+  <text x="564" y="264" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">would run · runs none</text>
+
+  <!-- apply : FOCAL -->
+  <rect x="776" y="196" width="160" height="72" fill="#F5F3EF"/>
+  <rect x="776" y="196" width="160" height="72" rx="6" fill="#FCEDE9" stroke="#E8674C" stroke-width="1.5"/>
+  <rect x="788" y="206" width="56" height="13" rx="2" fill="#F7D9D1"/>
+  <text x="793" y="215" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#A33A25" letter-spacing="0.1em">CONVERGE</text>
+  <text x="788" y="238" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">pinst apply -y</text>
+  <text x="788" y="252" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">install · link</text>
+  <text x="788" y="264" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">never clobbers</text>
+
+  <!-- drifted config : the human decision -->
+  <rect x="200" y="436" width="256" height="72" fill="#F5F3EF"/>
+  <rect x="200" y="436" width="256" height="72" rx="6" fill="#F1EFEB" stroke="#C4C4C4" stroke-width="1" stroke-dasharray="4 3"/>
+  <rect x="212" y="446" width="60" height="13" rx="2" fill="#E5E2DC"/>
+  <text x="217" y="455" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7" fill="#4A4A4A" letter-spacing="0.1em">YOUR CALL</text>
+  <text x="212" y="478" font-family="'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="600" fill="#1A1A1A">Config drifted</text>
+  <text x="212" y="492" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">config adopt &#8594; keep the edit</text>
+  <text x="212" y="504" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#6B6B6B">config apply &#8594; discard it</text>
+
+  <!-- ============ LEGEND (horizontal bottom strip) ============ -->
+  <line x1="40" y1="540" x2="936" y2="540" stroke="#E0DDD6" stroke-width="1"/>
+  <g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#6B6B6B" letter-spacing="0.06em">
+    <rect x="40" y="558" width="11" height="11" rx="2" fill="#E7E5E1" stroke="#9A9A9A" stroke-width="1"/>
+    <text x="58" y="567">ENTRY POINT</text>
+
+    <rect x="172" y="558" width="11" height="11" rx="2" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1"/>
+    <text x="190" y="567">READ-ONLY</text>
+
+    <rect x="300" y="558" width="11" height="11" rx="2" fill="#FCEDE9" stroke="#E8674C" stroke-width="1.5"/>
+    <text x="318" y="567">MUTATES</text>
+
+    <rect x="412" y="558" width="11" height="11" rx="2" fill="#EBE9E5" stroke="#6B6B6B" stroke-width="1"/>
+    <text x="430" y="567">STATE</text>
+
+    <rect x="500" y="558" width="11" height="11" rx="2" fill="#F1EFEB" stroke="#C4C4C4" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="518" y="567">NEEDS A HUMAN</text>
+  </g>
+</svg>
