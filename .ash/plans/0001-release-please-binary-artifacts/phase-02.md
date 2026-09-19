@@ -2,7 +2,7 @@
 index: "0001"
 slug: release-please-binary-artifacts
 phase: 2
-status: Proposed
+status: In Progress
 ---
 
 # Phase 2 — release-please owns the version
@@ -30,12 +30,12 @@ together would mean re-cutting releases to test a build.
       Why: without the second checkbox release-please fails to open its PR
       and the failure reads as a generic 403; checking first costs a minute
       and saves an hour. This is a human step, not a code change.
-- [ ] TASK-004: `.release-please-manifest.json` — new, `{".": "0.1.0"}`,
+- [x] TASK-004: `.release-please-manifest.json` — new, `{".": "0.1.0"}`,
       matching `Cargo.toml` today.
       Why: manifest mode needs to be told where the version currently stands;
       without it the first run re-derives a version from tag history that
       does not exist yet.
-- [ ] TASK-005: `release-please-config.json` — new: one package at `"."` with
+- [x] TASK-005: `release-please-config.json` — new: one package at `"."` with
       `"release-type": "rust"`, `"include-component-in-tag": false` (so the
       tag is `v0.2.0`, which `github_latest` in
       `src/core/upgrade/strategies.rs` already parses by stripping the `v`),
@@ -45,7 +45,7 @@ together would mean re-cutting releases to test a build.
       `Cargo.lock`; `draft: true` is what closes the RISK-002 window in
       Phase 3, and setting it now means Phase 3 only has to add the publish
       step.
-- [ ] TASK-006: `.github/workflows/release.yml` — new workflow on
+- [x] TASK-006: `.github/workflows/release.yml` — new workflow on
       `push: [main]`, `permissions: { contents: write, pull-requests: write }`,
       with a single `release-please` job running
       `googleapis/release-please-action@v4` (`id: release`) against the two

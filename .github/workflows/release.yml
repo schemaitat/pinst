@@ -1,0 +1,55 @@
+# How a pinst release happens, end to end.
+#
+#   1. release-please reads the Conventional Commits that landed on main and
+#      keeps a release PR open, bumping Cargo.toml + Cargo.lock and writing
+#      CHANGELOG.md.
+#   2. Merging that PR makes this workflow tag v<x.y.z> and create a DRAFT
+#      GitHub release.
+#   3. The artifacts job builds the binary and attaches it to that draft.
+#   4. Only then does the publish job un-draft it.
+#
+# The draft matters: both scripts/install.sh and pinst's own github_release
+# executor resolve /releases/latest/download/<asset>, and that URL must never
+# point at a release whose assets have not landed yet.
+#
+# The jobs are chained rather than split across workflows because a release
+# created with the default GITHUB_TOKEN does not trigger a `release` event —
+# listening for one would mean carrying a PAT for no other reason.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # release-please names its outputs differently in manifest mode than in
+      # single-package mode, and a mis-named output silently evaluates to ''
+      # — which would skip the artifacts job without failing anything. This
+      # step is how that gets diagnosed from a run log instead of guessed at.
+      - name: Show release-please outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$OUTPUTS"
