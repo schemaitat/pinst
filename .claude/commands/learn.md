@@ -14,7 +14,7 @@ description: Write up what implementing a plan actually taught us
 
 Write up the learnings for: $ARGUMENTS
 
-Use the `plan-learn` skill — read `.agents/skills/plan-learn/SKILL.md` and
+Use the `plan-learnings` skill — read `.agents/skills/plan-learnings/SKILL.md` and
 follow it rather than working from memory, since it carries the `ISSUE-NNN`
 format, the append-don't-overwrite rule, and the test for what deserves
 promoting to `.ash/LEARNINGS.md`.

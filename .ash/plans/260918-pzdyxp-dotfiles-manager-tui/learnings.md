@@ -11,7 +11,7 @@ issue_count: 0
 ## Source
 - Plan: `./README.md`
 - Basis: none — this plan was implemented before the `plan-implement` and
-  `plan-learn` skills existed, so no run logs were kept and no session
+  `plan-learnings` skills existed, so no run logs were kept and no session
   context survives.
 - Logs consulted: none — `logs/` was never written for this plan.
 

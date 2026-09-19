@@ -49,9 +49,9 @@ input and a defined artifact, not a suggestion.
  └─────┬──────────┘    and one commit per phase via conventional-commits
        │ a run outcome
        ▼
- ┌────────────┐
- │ plan-learn │──▶ learnings.md, and what generalizes → LEARNINGS.md
- └─────┬──────┘
+ ┌────────────────┐
+ │ plan-learnings │──▶ learnings.md, and what generalizes → LEARNINGS.md
+ └─────┬──────────┘
        │
        └──▶ read by the next plan-write, before it picks an approach
 ```
@@ -59,8 +59,8 @@ input and a defined artifact, not a suggestion.
 | Skill | Reads | Writes | Ends by |
 |-------|-------|--------|---------|
 | `plan-write` | the session, `.ash/LEARNINGS.md` | `.ash/plans/<id>-<slug>/` | handing back a plan id |
-| `plan-implement` | that plan, phase by phase | checkboxes, `logs/`, `.ash/CHANGELOG.log` | invoking `plan-learn` |
-| `plan-learn` | session context, or `logs/` | `learnings.md`, `.ash/LEARNINGS.md` | reporting both paths |
+| `plan-implement` | that plan, phase by phase | checkboxes, `logs/`, `.ash/CHANGELOG.log` | invoking `plan-learnings` |
+| `plan-learnings` | session context, or `logs/` | `learnings.md`, `.ash/LEARNINGS.md` | reporting both paths |
 | `conventional-commits` | the diff, `git log` | a commit | — |
 
 `conventional-commits` is not a lifecycle stage; it is called *by*
@@ -73,7 +73,7 @@ lives as a skill so it loads when an agent is actually about to run `pinst`,
 instead of sitting in every session's context. That is why `AGENTS.md` is now
 one line.
 
-The loop closes at `plan-learn` → `.ash/LEARNINGS.md` → the next
+The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
 
@@ -83,7 +83,7 @@ only reason the corpus is worth keeping rather than just being history.
 |-------------|-------------|
 | "plan this", "write it up", "how should we do X" | `/plan` → `plan-write` |
 | "implement plan 3", "continue", "do phase 2" | `/implement` → `plan-implement` |
-| "what did we learn", "post-mortem this" | `/learn` → `plan-learn` |
+| "what did we learn", "post-mortem this" | `/learn` → `plan-learnings` |
 | "commit this" | `/cc` → `conventional-commits` |
 | "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
 | a one-line fix with no design content | none of the above — just do it |

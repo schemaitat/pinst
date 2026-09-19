@@ -15,7 +15,7 @@ Every file must read like Architectural Decision Record: captures not just
 why alternatives rejected, why each phase structured the way it is.
 
 `.ash/` is a growing, searchable memory of how this codebase has been
-changed. Its layout, which this skill and `plan-implement`/`plan-learn`
+changed. Its layout, which this skill and `plan-implement`/`plan-learnings`
 share:
 
 ```
@@ -116,7 +116,7 @@ consumers never branch on "is it a file or a directory".
 
 Everything about one plan is co-located in that folder: the ADR docs, the
 implementation logs `plan-implement` writes under `logs/`, and the
-`learnings.md` that `plan-learn` writes when implementation finishes. One
+`learnings.md` that `plan-learnings` writes when implementation finishes. One
 unit of work, one directory — nothing to keep in sync across the tree, and
 a single `grep -r` there answers "what do we know about this work".
 

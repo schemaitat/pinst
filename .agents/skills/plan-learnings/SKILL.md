@@ -1,9 +1,9 @@
 ---
-name: plan-learn
+name: plan-learnings
 description: Write or update an ADR-style learning summary for a plan at .ash/plans/<id>-<slug>/learnings.md, promoting lessons that generalize into .ash/LEARNINGS.md, capturing what went wrong during implementation and how to fix, avoid, or improve it next time. Always invoke this right after plan-implement finishes a run (completed, aborted, or blocked) — implementation is not done until the learnings are written. Also use it on demand for a past plan (e.g. "what did we learn from 260919-qwerty", "write up the learnings for the mlflow plan", "post-mortem this implementation"), in which case it reads the plan's implementation logs instead of live session context.
 ---
 
-# Plan Learn Skill
+# Plan Learnings Skill
 
 Captures what actually happened while implementing a plan — specifically
 the things that went wrong, were surprising, or took a workaround — as an

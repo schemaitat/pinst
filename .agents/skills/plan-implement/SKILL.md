@@ -194,14 +194,14 @@ change during implementation. If the approach itself needs to change,
 that's a plan revision (back to `plan-write`), not something this skill
 does on its own.
 
-## Step 6 — Hand off to plan-learn
+## Step 6 — Hand off to plan-learnings
 
 Once the run ends — whatever the outcome, `completed`, `aborted`, or
-`blocked` — invoke the `plan-learn` skill for this plan before reporting
+`blocked` — invoke the `plan-learnings` skill for this plan before reporting
 back. Implementation isn't finished until whatever went wrong (or went
 smoothly) is captured at `.ash/plans/<id>-<slug>/learnings.md`; skipping this on
 a "successful" run is exactly how the same mistake gets repeated silently
-next time. `plan-learn` will use this session's own context as its source,
+next time. `plan-learnings` will use this session's own context as its source,
 since it's being invoked right after the work happened.
 
 ## Step 7 — Report back
