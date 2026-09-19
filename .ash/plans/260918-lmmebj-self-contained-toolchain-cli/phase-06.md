@@ -1,7 +1,11 @@
-# Phase 6 — Distribution, cutover, agent docs
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 6
+status: Done
+---
 
-## Status
-Done
+# Phase 6 — Distribution, cutover, agent docs
 
 ## Goal
 GOAL-006: Ship it as the self-contained artifact the whole plan is for — a

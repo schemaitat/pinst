@@ -1,7 +1,11 @@
-# Phase 1 — Skeleton UI & terminal lifecycle
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+phase: 1
+status: Done
+---
 
-## Status
-Done
+# Phase 1 — Skeleton UI & terminal lifecycle
 
 ## Goal
 GOAL-001: Boot a ratatui alternate-screen TUI with tab navigation, a status

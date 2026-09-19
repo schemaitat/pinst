@@ -1,7 +1,11 @@
-# Phase 4 — Config quick-access / editor launch
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+phase: 4
+status: Done
+---
 
-## Status
-Done
+# Phase 4 — Config quick-access / editor launch
 
 ## Goal
 GOAL-004: Add a global keybinding that drops into `$EDITOR` on `~/.zshrc`

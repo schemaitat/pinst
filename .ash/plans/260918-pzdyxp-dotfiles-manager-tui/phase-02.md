@@ -1,7 +1,11 @@
-# Phase 2 — Tool registry + async probing + Overview view
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+phase: 2
+status: Done
+---
 
-## Status
-Done
+# Phase 2 — Tool registry + async probing + Overview view
 
 ## Goal
 GOAL-002: Ship a TOML tool registry seeded from `bootstrap.sh`'s existing tool

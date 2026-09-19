@@ -1,7 +1,11 @@
-# Phase 2 — CLI shell + AI-readiness contract
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 2
+status: Done
+---
 
-## Status
-Done
+# Phase 2 — CLI shell + AI-readiness contract
 
 ## Goal
 GOAL-002: Put a clap-driven command surface in front of the core with the

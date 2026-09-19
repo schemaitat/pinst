@@ -1,7 +1,11 @@
-# Phase 5 — Doctor + apply/sync convergence
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 5
+status: Done
+---
 
-## Status
-Done
+# Phase 5 — Doctor + apply/sync convergence
 
 ## Goal
 GOAL-005: Compose the tool state from Phase 3 and the config state from Phase 4

@@ -1,7 +1,11 @@
-# Phase 3 — Dotfiles Health view
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+phase: 3
+status: Done
+---
 
-## Status
-Done
+# Phase 3 — Dotfiles Health view
 
 ## Goal
 GOAL-003: Check Stow symlink integrity per dotfiles package (`nvim`, `zsh`,

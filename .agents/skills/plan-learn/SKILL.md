@@ -1,13 +1,13 @@
 ---
 name: plan-learn
-description: Write or update an ADR-style learning summary for a plan at .ash/plans/<index>-<slug>/learnings.md, promoting lessons that generalize into .ash/LEARNINGS.md, capturing what went wrong during implementation and how to fix, avoid, or improve it next time. Always invoke this right after plan-implement finishes a run (completed, aborted, or blocked) — implementation is not done until the learnings are written. Also use it on demand for a past plan (e.g. "what did we learn from plan 0001", "write up the learnings for the mlflow plan", "post-mortem this implementation"), in which case it reads the plan's implementation logs instead of live session context.
+description: Write or update an ADR-style learning summary for a plan at .ash/plans/<id>-<slug>/learnings.md, promoting lessons that generalize into .ash/LEARNINGS.md, capturing what went wrong during implementation and how to fix, avoid, or improve it next time. Always invoke this right after plan-implement finishes a run (completed, aborted, or blocked) — implementation is not done until the learnings are written. Also use it on demand for a past plan (e.g. "what did we learn from 260919-qwerty", "write up the learnings for the mlflow plan", "post-mortem this implementation"), in which case it reads the plan's implementation logs instead of live session context.
 ---
 
 # Plan Learn Skill
 
 Captures what actually happened while implementing a plan — specifically
 the things that went wrong, were surprising, or took a workaround — as an
-ADR-style record at `.ash/plans/<index>-<slug>/learnings.md`, sitting
+ADR-style record at `.ash/plans/<id>-<slug>/learnings.md`, sitting
 beside the plan it came from. A plan document records what was *decided*;
 this file records what was *learned by trying it*, so the next person (or
 the next plan) doesn't rediscover the same problem from scratch.
@@ -15,7 +15,7 @@ the next plan) doesn't rediscover the same problem from scratch.
 Learnings are written at two levels, and the split is what keeps this
 memory useful as it grows:
 
-- **`.ash/plans/<index>-<slug>/learnings.md`** — raw and specific. Every
+- **`.ash/plans/<id>-<slug>/learnings.md`** — raw and specific. Every
   issue this plan hit, in full detail, next to the plan that caused it.
 - **`.ash/LEARNINGS.md`** — distilled and general. Only the lessons that
   apply beyond their own plan. This is the file read *before* new work
@@ -45,7 +45,7 @@ Then pick your source, based on how you were invoked:
   check it against this run's log file for anything the conversation
   glossed over.
 - **On demand, standalone**: there is no fresh context to draw from, so
-  read every file under `.ash/plans/<index>-<slug>/logs/` in chronological
+  read every file under `.ash/plans/<id>-<slug>/logs/` in chronological
   order (oldest to newest) to reconstruct what happened across all runs.
   The `task_failed`, `phase_failed`, and `issue` events are exactly what
   you're looking for; `task_done`/`phase_done`/`commit` fill in the
@@ -53,7 +53,7 @@ Then pick your source, based on how you were invoked:
 
 ## Step 2 — Read what's already been learned
 
-Check whether `.ash/plans/<index>-<slug>/learnings.md` already exists. If
+Check whether `.ash/plans/<id>-<slug>/learnings.md` already exists. If
 it does, read it — you're appending, not restarting. Note the highest
 existing `ISSUE-NNN` number so new entries continue the sequence, and skip
 anything already captured rather than writing a near-duplicate entry for it.
@@ -86,18 +86,18 @@ single problem instead of a whole plan:
 
 ## Step 4 — Write or update the plan's learnings file
 
-`.ash/plans/<index>-<slug>/learnings.md`:
+`.ash/plans/<id>-<slug>/learnings.md`:
 
 ```markdown
 ---
-index: "<index>"
+id: <id>
 slug: <slug>
 updated: <YYYY-MM-DD>
 areas: [<area>, <area>]
 issue_count: <N>
 ---
 
-# Learnings — <plan goal> (<index>-<slug>)
+# Learnings — <plan goal> (<id>-<slug>)
 
 ## Source
 - Plan: `./README.md`
@@ -124,13 +124,15 @@ surfacing above the issue list.>
 If a run genuinely produced no issues, still write the file with an empty
 `## Issues` section (`None — implementation went as planned.`) rather than
 skipping the file — a missing file and a clean run should look different
-to someone checking later.
+to someone checking later. `scripts/ash.sh check` enforces exactly that
+distinction: a plan marked `Done` with no `learnings.md` is a finding
+(`plan.learnings-missing.<plan>`), and `just qc` runs it.
 
 When appending to an existing file, insert new `ISSUE-NNN` entries after
 the existing ones (continuing the numbering) and update `## Summary` if
 the new run changes the overall picture; leave prior entries untouched.
-Quote the `index` in frontmatter (`index: "0001"`) — unquoted, YAML reads
-it as the integer `1` and the zero-padding is silently lost.
+The `id` in frontmatter must match the plan's directory; `scripts/ash.sh
+check` reports it as `plan.id-mismatch.<plan>` if it drifts.
 
 ## Step 4b — Promote what generalizes to `.ash/LEARNINGS.md`
 
@@ -160,7 +162,7 @@ before planning new work.
 reading the source plan>
 **Why:** <the underlying reason — the thing that makes it true in general,
 not just the anecdote it came from>
-**Seen in:** 0001-add-mlflow-experiment-tracking (ISSUE-002)
+**Seen in:** 260919-qwerty-add-mlflow-experiment-tracking (ISSUE-002)
 ```
 
 When a lesson already in the file recurs in a new plan, don't add a second
@@ -171,8 +173,8 @@ rather than remembering harder.
 
 ## Step 5 — Report back
 
-Tell the user both file paths, how many issues were recorded (or that it
-was a clean run), and which lessons — if any — were promoted to
-`.ash/LEARNINGS.md`. Don't paste the full files into the conversation;
+Run `just harness` to confirm the corpus is clean, then tell the user both
+file paths, how many issues were recorded (or that it was a clean run), and
+which lessons — if any — were promoted to `.ash/LEARNINGS.md`. Don't paste the full files into the conversation;
 they're meant to be read later, by a human or by a future planning
 session, not re-consumed immediately.

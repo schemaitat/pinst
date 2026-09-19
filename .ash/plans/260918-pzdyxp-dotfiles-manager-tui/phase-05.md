@@ -1,7 +1,11 @@
-# Phase 5 — Upgrade detection
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+phase: 5
+status: Done
+---
 
-## Status
-Done
+# Phase 5 — Upgrade detection
 
 ## Goal
 GOAL-005: Detect, per tool, whether a newer version is available than what's

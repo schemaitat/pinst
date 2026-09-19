@@ -1,7 +1,15 @@
-# pinst: a ratatui TUI dashboard for ~/dotfiles
+---
+id: 260918-pzdyxp
+slug: dotfiles-manager-tui
+status: Done
+created: 2026-09-18
+updated: 2026-09-18
+areas: [tui, registry, probe]
+summary: A read-only ratatui dashboard over the ~/dotfiles toolchain — tool inventory, Stow symlink health, and upgrade detection.
+files_touched: [src/main.rs, src/app.rs, src/event.rs, src/editor.rs, src/ui/, registry.toml]
+---
 
-## Status
-Done
+# pinst: a ratatui TUI dashboard for ~/dotfiles
 
 ## Context
 `~/dotfiles` is a GNU Stow–managed repo (packages: `nvim`, `zsh`, `herdr`, `git`,

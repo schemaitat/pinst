@@ -1,7 +1,11 @@
-# Phase 4 — Embedded configs + native linking
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 4
+status: Done
+---
 
-## Status
-Done
+# Phase 4 — Embedded configs + native linking
 
 ## Goal
 GOAL-004: Absorb the dotfiles tree into this repo under `configs/`, embed it

@@ -15,7 +15,7 @@ run *ARGS="tui":
     cargo run --quiet -- {{ ARGS }}
 
 # Every quality check, in the order that fails fastest.
-qc: fmt-check lint test
+qc: fmt-check lint test harness
 
 # Fail if the tree is not formatted.
 fmt-check:
@@ -42,3 +42,23 @@ build:
 [doc("Build and put pinst on PATH (default ~/.local/bin; pass a dir to override)")]
 install dir="":
     PINST_INSTALL_DIR="{{ dir }}" scripts/install.sh
+
+# --- the agent harness -----------------------------------------------------
+# Source of truth is .agents/ (skills) and .ash/ (the plan corpus). These
+# recipes are what keeps both honest; see .agents/README.md.
+
+# Without this the skills in .agents/ are inert: no runtime reads that path.
+[doc("Wire .agents/skills into .claude/skills; run after adding or renaming one")]
+wire:
+    scripts/agents-wire.sh
+
+[doc("Regenerate .ash/INDEX.md from the plan frontmatter (never hand-edit it)")]
+index:
+    scripts/ash.sh index
+
+# Exit code 3 means "found things to act on", the same verdict pinst itself
+# gives — so this fails `qc` until the corpus is clean again.
+[doc("Validate the harness: skills wired, plan corpus consistent")]
+harness:
+    scripts/agents-wire.sh --check
+    scripts/ash.sh check

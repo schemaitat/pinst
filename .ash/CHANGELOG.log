@@ -1,0 +1,4 @@
+# Append-only, one line per shipped phase, logfmt. Written by plan-implement.
+# Skim with `tail`, filter with `grep id=260918-lmmebj`. Never rewrite past lines.
+ts=2026-09-18T21:48:27Z id=260918-pzdyxp slug=dotfiles-manager-tui summary="shipped the read-only ratatui dashboard over the dotfiles toolchain" refs=".ash/plans/260918-pzdyxp-dotfiles-manager-tui/README.md"
+ts=2026-09-18T22:23:14Z id=260918-lmmebj slug=self-contained-toolchain-cli summary="shipped the manifest-driven CLI that installs, updates and doctors the stack" refs=".ash/plans/260918-lmmebj-self-contained-toolchain-cli/README.md"

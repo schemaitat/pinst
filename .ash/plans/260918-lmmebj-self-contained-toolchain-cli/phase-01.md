@@ -1,7 +1,11 @@
-# Phase 1 — Manifest schema + core domain model
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 1
+status: Done
+---
 
-## Status
-Done
+# Phase 1 — Manifest schema + core domain model
 
 ## Goal
 GOAL-001: Replace `registry.toml` with a `manifest.toml` that is the single

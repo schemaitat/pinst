@@ -505,5 +505,11 @@ recipe.
 | `src/core/` | The engine: manifest, graph, probing, planning, execution, configs, doctor |
 | `src/cli/` | The command surface — thin, no logic |
 | `src/ui/` | The TUI — also thin, over the same core |
+| `.agents/` | The agent harness: skills, and the contract for working on pinst |
+| `.ash/` | Every plan, run log, and lesson this repo has produced |
 
-Plans and architectural decisions live in `.ash/plans/`.
+Plans and architectural decisions live in `.ash/plans/`, indexed by
+[`.ash/INDEX.md`](.ash/INDEX.md). If you are working on pinst with an agent —
+or as one — [`.agents/README.md`](.agents/README.md) explains the lifecycle
+those plans move through and the `just harness` checks that keep the corpus
+honest.

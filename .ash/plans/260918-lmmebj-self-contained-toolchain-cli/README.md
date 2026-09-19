@@ -1,14 +1,22 @@
-# pinst as a self-contained, AI-ready toolchain CLI
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+status: Done
+created: 2026-09-18
+updated: 2026-09-18
+areas: [cli, manifest, configs, engine]
+summary: Turn pinst into a self-contained, manifest-driven CLI that installs, updates and doctors the whole stack and carries its configs embedded.
+files_touched: [manifest.toml, configs/, src/core/, src/cli/, scripts/install.sh, AGENTS.md]
+---
 
-## Status
-Done
+# pinst as a self-contained, AI-ready toolchain CLI
 
 ## Context
 `pinst` today is a read-only ratatui dashboard: it probes ~22 tools listed in
 `registry.toml`, checks GNU Stow symlink health against `~/dotfiles`, and
 reports available upgrades — but every mutation still belongs to
 `~/dotfiles/scripts/bootstrap.sh` and the `justfile` (see the previous plan,
-[.ash/plans/dotfiles-manager-tui/](../dotfiles-manager-tui/README.md), all
+[.ash/plans/260918-pzdyxp-dotfiles-manager-tui/](../260918-pzdyxp-dotfiles-manager-tui/README.md), all
 phases Done). That split leaves two sources of truth for the same toolchain,
 and it leaves a fresh machine unable to do anything until someone clones the
 dotfiles repo and installs `just` and `stow` first. The user now wants one

@@ -177,3 +177,16 @@ pinst apply --dry-run --json      # inspect the plan
 pinst apply --yes --json          # converge
 pinst doctor --json               # verify: exit 0 means clean
 ```
+
+## Working *on* pinst
+
+Everything above is about driving pinst. If you are changing pinst itself,
+[`.agents/README.md`](.agents/README.md) is the contract for that: the
+plan → implement → learn lifecycle, the skills in `.agents/skills/` that
+carry it, the `.ash/` corpus of past decisions, and the checks that keep
+them consistent.
+
+```sh
+just harness      # skills wired, plan corpus consistent — 0 clean, 3 findings
+just qc           # fmt, clippy, tests, and the above
+```

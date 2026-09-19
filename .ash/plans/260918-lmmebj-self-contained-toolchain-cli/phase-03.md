@@ -1,7 +1,11 @@
-# Phase 3 — Install/update execution engine
+---
+id: 260918-lmmebj
+slug: self-contained-toolchain-cli
+phase: 3
+status: Done
+---
 
-## Status
-Done
+# Phase 3 — Install/update execution engine
 
 ## Goal
 GOAL-003: Make pinst actually install and update tools — an `Executor` per
