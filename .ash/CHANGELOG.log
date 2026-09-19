@@ -1,0 +1,1 @@
+ts=2026-09-19T11:16:00Z index=0001 slug=release-please-binary-artifacts phase=1 summary="CI gates main on fmt, clippy -D warnings and tests, all --locked" refs=".ash/plans/0001-release-please-binary-artifacts/phase-01.md,.ash/plans/0001-release-please-binary-artifacts/logs/20260919T111301Z-claude-opus-5.log,.github/workflows/ci.yml"
