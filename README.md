@@ -34,19 +34,36 @@ contract: every command speaks `--json`, every mutating one speaks
 
 ## Install
 
-On a fresh machine:
+On a fresh machine — no clone, no Rust toolchain:
 
 ```sh
-git clone <this repo> ~/.local/share/pinst/src
-~/.local/share/pinst/src/scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/schemaitat/pinst/main/scripts/install.sh | sh
 ```
 
-The script builds the release binary (installing Rust first if the machine has
-none) and puts it in `~/.local/bin`. From there:
+That downloads the latest release binary, checks it against the `.sha256`
+published beside it, and puts it in `~/.local/bin`. From there:
 
 ```sh
 pinst bootstrap --dry-run    # read the plan first
 pinst bootstrap -y           # then provision
+```
+
+The script builds from source instead when there is no prebuilt binary for
+the machine, when the download fails, or when told to:
+
+```sh
+PINST_BUILD_FROM_SOURCE=1 sh scripts/install.sh   # compile, installing Rust if needed
+PINST_VERSION=v0.2.0 sh scripts/install.sh        # pin a release
+PINST_INSTALL_DIR=~/bin sh scripts/install.sh     # somewhere other than ~/.local/bin
+```
+
+Running it from inside a checkout always builds that checkout — a working
+tree never gets silently replaced by the last release.
+
+Once installed, pinst keeps itself current like any other tool it manages:
+
+```sh
+pinst update pinst
 ```
 
 ## Commands
@@ -490,6 +507,7 @@ just run doctor --json   # ...or any other command; args forward
 just qc         # formatting, lints, and tests — what CI would run
 just build      # the self-contained release binary
 just install    # ...and put it on PATH (~/.local/bin)
+just dist       # the release tarball + checksum, exactly as CI builds it
 ```
 
 `just install <dir>` overrides the destination. It delegates to
@@ -509,3 +527,14 @@ recipe.
 | `src/ui/` | The TUI — also thin, over the same core |
 
 Plans and architectural decisions live in `.ash/plans/`.
+
+### Releasing
+
+Nothing is released by hand. release-please reads the Conventional Commits on
+`main` and keeps a release PR open; merging it bumps the version, writes
+`CHANGELOG.md`, tags `v<x.y.z>` and publishes a release with the musl binary,
+its checksum and a build provenance attestation attached. The release stays a
+draft until those assets are in place, so
+`/releases/latest/download/pinst-x86_64-unknown-linux-musl.tar.gz` — the URL
+`install.sh` and `pinst update pinst` both resolve — never points at an empty
+release.
