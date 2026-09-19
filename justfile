@@ -22,11 +22,16 @@ fmt-check:
     cargo fmt --check
 
 # Lint, treating warnings as errors so they cannot accumulate.
+#
+# `--locked` here and in `test` mirrors CI exactly. Without it a stale
+# Cargo.lock passes locally *and gets silently rewritten*, while CI — which
+# has always passed --locked — fails. That is precisely the tree
+# release-please's release PR produces, so the two must not disagree.
 lint:
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --locked -- -D warnings
 
 test:
-    cargo test
+    cargo test --locked
 
 # Reformat the tree in place.
 fmt:
