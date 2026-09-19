@@ -141,10 +141,11 @@ check all fail unauthenticated — every consumer Phase 4 was written for.
 **Root cause:** The plan asserted the repo slug in ASSUMPTION-001 but never
 its visibility, and nothing in the working tree reveals it. The artifact
 half of the plan is unaffected; only consuming it breaks.
-**Fix applied:** Unresolved — it is a decision, not a bug: make the repo
-public, teach the download paths to send a token, or accept that
-`install.sh` falls back to a source build. Recorded so the choice is made
-deliberately rather than discovered by a failing install.
+**Fix applied:** The repo was made public, on explicit confirmation, after
+scanning both the working tree and every blob in history for secrets — none
+found, and `.gitconfig` is templated so no identity is committed. The
+alternatives, had the answer been no, were sending a token from the download
+paths or accepting the source-build fallback.
 **Recommendation:** This is LESSON-002 again. A plan that ends in "a machine
 downloads this artifact" must state the repo's visibility as a checked fact,
 because it decides whether the artifact is reachable at all.
