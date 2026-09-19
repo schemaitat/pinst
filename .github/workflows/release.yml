@@ -35,9 +35,14 @@ env:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Manifest mode publishes per-path outputs (`.--tag_name`) and, for a
+    # single root package, unprefixed ones. Which of the two appears has
+    # changed between versions of the action, and an output that silently
+    # evaluates to '' would skip the artifacts job without failing anything —
+    # so read both and let the later `gh` call fail loudly if neither is set.
     outputs:
-      release_created: ${{ steps.release.outputs.releases_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.release.outputs.releases_created || steps.release.outputs['.--release_created'] }}
+      tag_name: ${{ steps.release.outputs.tag_name || steps.release.outputs['.--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
