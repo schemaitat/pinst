@@ -2,7 +2,7 @@
 index: "0001"
 slug: release-please-binary-artifacts
 phase: 4
-status: Proposed
+status: In Progress
 ---
 
 # Phase 4 — Consume the artifact
@@ -36,7 +36,7 @@ path, and it should be revertable without touching how releases are cut.
       staged-then-moved action sequence, including the elevation branch.
       Why: this is the one behavioral change in the plan, and the failure it
       prevents only reproduces while pinst is running itself.
-- [ ] TASK-017: `scripts/install.sh` — try the release asset first:
+- [x] TASK-017: `scripts/install.sh` — try the release asset first:
       `curl -fsSL` the tarball for the host triple from
       `/releases/latest/download/`, verify it against the `.sha256`, install
       it to `$PINST_INSTALL_DIR`, and fall back to the existing
@@ -47,7 +47,7 @@ path, and it should be revertable without touching how releases are cut.
       from a fresh-machine install entirely, and the retained source path
       means a missing asset degrades to today's behavior instead of leaving
       the machine with nothing.
-- [ ] TASK-018: `manifest.toml` — add a `[[tool]] name = "pinst"` entry:
+- [x] TASK-018: `manifest.toml` — add a `[[tool]] name = "pinst"` entry:
       `detect` via `command -v pinst` with `version_cmd = "pinst --version"`,
       `install = { method = "github_release", repo = "schemaitat/pinst",
       asset = "pinst-x86_64-unknown-linux-musl.tar.gz", dest = "$HOME/.local/bin" }`,
@@ -62,14 +62,14 @@ path, and it should be revertable without touching how releases are cut.
       release.
       Why: TASK-015 exists for this exact call; running it is the only
       honest proof.
-- [ ] TASK-020: `AGENTS.md` — document the release process in a short
+- [x] TASK-020: `AGENTS.md` — document the release process in a short
       section: conventional commits feed release-please, merging the release
       PR cuts `v<x.y.z>`, the asset name is stable, and the binary is
       self-updating via `pinst update pinst`.
       Why: AGENTS.md is the contract an agent reads before touching this
       repo; "how do I ship this" belongs there next to "how do I extend the
       manifest".
-- [ ] TASK-021: `README.md` — replace the build-from-source install
+- [x] TASK-021: `README.md` — replace the build-from-source install
       instructions with the download one-liner, keep the source build as the
       documented fallback, and describe the release flow for humans.
       Why: the README currently tells a reader to compile pinst; leaving that
