@@ -26,7 +26,9 @@ fn status(ctx: &Ctx, set: &ConfigSet, only_differing: bool) -> Result<ExitCode> 
     let all = set.status()?;
     let items: Vec<_> = all
         .into_iter()
-        .filter(|s| !only_differing || s.state != FileState::Linked && s.state != FileState::Materialized)
+        .filter(|s| {
+            !only_differing || s.state != FileState::Linked && s.state != FileState::Materialized
+        })
         .collect();
 
     let issues = items
@@ -48,11 +50,23 @@ fn status(ctx: &Ctx, set: &ConfigSet, only_differing: bool) -> Result<ExitCode> 
         }
     }
 
-    let status = if issues > 0 { Status::Issues } else { Status::Ok };
+    let status = if issues > 0 {
+        Status::Issues
+    } else {
+        Status::Ok
+    };
     let total = items.len();
     ctx.finish(
-        Envelope::new(if only_differing { "config diff" } else { "config status" }, status, items)
-            .summary(serde_json::json!({ "total": total, "issues": issues })),
+        Envelope::new(
+            if only_differing {
+                "config diff"
+            } else {
+                "config status"
+            },
+            status,
+            items,
+        )
+        .summary(serde_json::json!({ "total": total, "issues": issues })),
     )
 }
 

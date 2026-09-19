@@ -60,7 +60,10 @@ fn report(
 
     let mut value = serde_json::to_value(&summary)?;
     if let Some(map) = value.as_object_mut() {
-        map.insert("fixed".to_string(), serde_json::Value::Bool(fixed_something));
+        map.insert(
+            "fixed".to_string(),
+            serde_json::Value::Bool(fixed_something),
+        );
     }
 
     ctx.finish(
@@ -102,9 +105,8 @@ async fn fix(
         let install_plan = engine::build_install_plan(&missing, probes)?;
         plan.steps.extend(install_plan.steps);
     }
-    let config_plan = configs.build_plan_where(|state| {
-        matches!(state, FileState::Missing | FileState::Foreign)
-    })?;
+    let config_plan = configs
+        .build_plan_where(|state| matches!(state, FileState::Missing | FileState::Foreign))?;
     plan.steps.extend(config_plan.steps);
 
     let ctx_for_auth = ctx.clone();

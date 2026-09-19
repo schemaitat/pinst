@@ -122,7 +122,11 @@ mod tests {
 
     #[test]
     fn substitutes_known_variables() {
-        let rendered = render("name = ${GIT_USER_NAME}\nemail = ${GIT_USER_EMAIL}", &values()).unwrap();
+        let rendered = render(
+            "name = ${GIT_USER_NAME}\nemail = ${GIT_USER_EMAIL}",
+            &values(),
+        )
+        .unwrap();
         assert_eq!(rendered, "name = Ada\nemail = ada@example.com");
     }
 

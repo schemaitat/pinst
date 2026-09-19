@@ -62,7 +62,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let title = match (app.upgrades_loading, app.search_query.is_empty()) {
-        (true, true) => format!(" Upgrades ({}/{} checked) ", app.upgrades.len(), app.registry.len()),
+        (true, true) => format!(
+            " Upgrades ({}/{} checked) ",
+            app.upgrades.len(),
+            app.registry.len()
+        ),
         (true, false) => format!(
             " Upgrades ({} match{}, {}/{} checked) ",
             filtered.len(),

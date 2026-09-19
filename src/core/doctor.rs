@@ -86,7 +86,10 @@ fn check_tools(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult>, out: &mu
                 Install::Manual { note } => out.push(Finding {
                     id: format!("tool.manual.{}", tool.name),
                     severity: Severity::Warning,
-                    message: format!("{} is not installed and has no automated install", tool.name),
+                    message: format!(
+                        "{} is not installed and has no automated install",
+                        tool.name
+                    ),
                     remediation: note.clone(),
                     fixable: false,
                 }),
@@ -160,11 +163,14 @@ fn check_configs(configs: &ConfigSet, out: &mut Vec<Finding>) -> Result<()> {
             FileState::Drifted => out.push(Finding {
                 id: format!("config.drifted.{path}"),
                 severity: Severity::Warning,
-                message: format!("~/{path} was edited in place and differs from what pinst carries"),
+                message: format!(
+                    "~/{path} was edited in place and differs from what pinst carries"
+                ),
                 // Not auto-fixable: only a human knows whether the edit should
                 // win (adopt) or be discarded (apply).
-                remediation: "pinst config adopt (keep the edit) or pinst config apply (discard it)"
-                    .to_string(),
+                remediation:
+                    "pinst config adopt (keep the edit) or pinst config apply (discard it)"
+                        .to_string(),
                 fixable: false,
             }),
         }
@@ -217,7 +223,10 @@ mod tests {
         let mut findings = Vec::new();
         check_tools(&tools, &probe_map(&tools, &[]), &mut findings);
 
-        let zsh = findings.iter().find(|f| f.id == "tool.missing.zsh").unwrap();
+        let zsh = findings
+            .iter()
+            .find(|f| f.id == "tool.missing.zsh")
+            .unwrap();
         assert_eq!(zsh.severity, Severity::Error);
         assert!(zsh.fixable);
         assert_eq!(zsh.remediation, "pinst install zsh");
@@ -242,13 +251,15 @@ mod tests {
         )
         .unwrap();
         let mut findings = Vec::new();
-        check_tools(&tools, &probe_map(&tools, &["claude", "curl"]), &mut findings);
+        check_tools(
+            &tools,
+            &probe_map(&tools, &["claude", "curl"]),
+            &mut findings,
+        );
 
         assert!(findings.iter().any(|f| f.id == "tool.unpinnable.claude"));
         assert!(
-            findings
-                .iter()
-                .all(|f| f.severity != Severity::Error),
+            findings.iter().all(|f| f.severity != Severity::Error),
             "an unverifiable install is informational, not a failure"
         );
     }

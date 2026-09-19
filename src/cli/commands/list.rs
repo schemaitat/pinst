@@ -57,7 +57,11 @@ pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
 
     // Missing tools are a reportable condition, not a failure of `list`
     // itself — the exit code tells an agent there is work to do.
-    let status = if missing > 0 { Status::Issues } else { Status::Ok };
+    let status = if missing > 0 {
+        Status::Issues
+    } else {
+        Status::Ok
+    };
     let total = items.len();
     ctx.finish(
         Envelope::new("list", status, items)

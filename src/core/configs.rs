@@ -192,8 +192,9 @@ impl ConfigSet {
             return Ok(raw);
         }
 
-        let text = String::from_utf8(raw)
-            .with_context(|| format!("templated config {} is not UTF-8", file.relative.display()))?;
+        let text = String::from_utf8(raw).with_context(|| {
+            format!("templated config {} is not UTF-8", file.relative.display())
+        })?;
         Ok(template::render(&text, &self.values)?.into_bytes())
     }
 
@@ -211,9 +212,10 @@ impl ConfigSet {
             // lives; a dangling link fails here and is reported rather than
             // passing as healthy.
             let matches = match (&file.source_path, file.target.canonicalize().ok()) {
-                (Some(expected), Some(actual)) => {
-                    expected.canonicalize().map(|e| e == actual).unwrap_or(false)
-                }
+                (Some(expected), Some(actual)) => expected
+                    .canonicalize()
+                    .map(|e| e == actual)
+                    .unwrap_or(false),
                 _ => false,
             };
             return Ok(if matches {
@@ -403,7 +405,11 @@ fn collect_package(
         Source::Tree(root) => {
             let dir = root.join(&package.source);
             if !dir.is_dir() {
-                bail!("config package '{}' not found at {}", package.name, dir.display());
+                bail!(
+                    "config package '{}' not found at {}",
+                    package.name,
+                    dir.display()
+                );
             }
             let mut found = Vec::new();
             walk(&dir, &dir, &mut found);
@@ -412,7 +418,10 @@ fn collect_package(
         Source::Embedded => {
             let mut found = Vec::new();
             let Some(dir) = EMBEDDED.get_dir(&package.source) else {
-                bail!("config package '{}' is not embedded in this binary", package.name);
+                bail!(
+                    "config package '{}' is not embedded in this binary",
+                    package.name
+                );
             };
             collect_embedded(dir, &package.source, &mut found);
             found
@@ -514,7 +523,10 @@ mod tests {
                 "secret-shaped file embedded in the binary: {path}"
             );
         }
-        assert!(!offenders.is_empty(), "expected the config tree to be embedded");
+        assert!(
+            !offenders.is_empty(),
+            "expected the config tree to be embedded"
+        );
     }
 
     fn collect_all(dir: &Dir<'_>, out: &mut Vec<String>) {
@@ -622,12 +634,20 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(backups.len(), 1, "the prior file must survive under a backup name");
+        assert_eq!(
+            backups.len(),
+            1,
+            "the prior file must survive under a backup name"
+        );
         assert_eq!(
             std::fs::read_to_string(&backups[0]).unwrap(),
             "# the machine's own zshrc\n"
         );
-        assert!(std::fs::read_to_string(&zshrc).unwrap().contains("oh-my-zsh"));
+        assert!(
+            std::fs::read_to_string(&zshrc)
+                .unwrap()
+                .contains("oh-my-zsh")
+        );
     }
 
     #[test]
@@ -691,18 +711,29 @@ mod tests {
             values: Values::new(std::collections::BTreeMap::new()),
         };
 
-        let plan = set.build_plan().expect("planning must not fail on missing values");
+        let plan = set
+            .build_plan()
+            .expect("planning must not fail on missing values");
         apply(&set);
 
-        assert!(home.path().join(".zshrc").is_file(), "unrelated configs still land");
-        assert!(!home.path().join(".gitconfig").exists(), "the unrenderable one is skipped");
+        assert!(
+            home.path().join(".zshrc").is_file(),
+            "unrelated configs still land"
+        );
+        assert!(
+            !home.path().join(".gitconfig").exists(),
+            "the unrenderable one is skipped"
+        );
 
         let blocked = plan
             .steps
             .iter()
             .filter(|s| matches!(s.state, crate::core::plan::StepState::Blocked(_)))
             .count();
-        assert_eq!(blocked, 1, "the templated file is reported, not silently dropped");
+        assert_eq!(
+            blocked, 1,
+            "the templated file is reported, not silently dropped"
+        );
 
         let gitconfig = set
             .status()
@@ -734,7 +765,9 @@ mod tests {
                 "resolved source tree must be absolute, got {}",
                 path.display()
             ),
-            Source::Embedded => panic!("an explicit PINST_SOURCE checkout should resolve to a tree"),
+            Source::Embedded => {
+                panic!("an explicit PINST_SOURCE checkout should resolve to a tree")
+            }
         }
     }
 
@@ -758,7 +791,11 @@ mod tests {
 
         // Break the link's destination and confirm it stops reporting healthy.
         std::fs::remove_file(checkout.path().join("configs/zsh/.zshrc")).unwrap();
-        let file = set.files.iter().find(|f| f.relative == Path::new(".zshrc")).unwrap();
+        let file = set
+            .files
+            .iter()
+            .find(|f| f.relative == Path::new(".zshrc"))
+            .unwrap();
         assert_ne!(
             set.classify(file).unwrap(),
             FileState::Linked,
@@ -820,8 +857,15 @@ mod tests {
         std::fs::write(home.path().join(".gitconfig"), "# hand-edited\n").unwrap();
 
         let (adopted, skipped) = set.adopt(false).expect("adopt must not abort");
-        assert!(adopted.iter().any(|a| a.path == ".zshrc"), "the plain file is adopted");
-        assert_eq!(skipped.len(), 1, "the templated file is reported, not adopted");
+        assert!(
+            adopted.iter().any(|a| a.path == ".zshrc"),
+            "the plain file is adopted"
+        );
+        assert_eq!(
+            skipped.len(),
+            1,
+            "the templated file is reported, not adopted"
+        );
         assert!(skipped[0].contains("templated"), "{:?}", skipped);
         assert_eq!(
             std::fs::read_to_string(configs.join("zsh/.zshrc")).unwrap(),

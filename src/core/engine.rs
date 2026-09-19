@@ -53,10 +53,14 @@ pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult
                 if matches!(tool.install, Install::Apt { .. }) && !apt_update_added {
                     apt_update_added = true;
                     plan.push(
-                        Step::new("apt:update", StepKind::AptUpdate, "refresh apt package lists")
-                            .actions(vec![Action::Shell {
-                                command: "sudo apt-get update -qq".to_string(),
-                            }]),
+                        Step::new(
+                            "apt:update",
+                            StepKind::AptUpdate,
+                            "refresh apt package lists",
+                        )
+                        .actions(vec![Action::Shell {
+                            command: "sudo apt-get update -qq".to_string(),
+                        }]),
                     );
                 }
 
@@ -110,9 +114,13 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
         let executor = exec::executor_for(&tool.install);
         if let Some(reason) = executor.blocked_reason(tool) {
             plan.push(
-                Step::new(step_id, StepKind::Manual, format!("upgrade {} manually", tool.name))
-                    .tool(&tool.name)
-                    .blocked(reason),
+                Step::new(
+                    step_id,
+                    StepKind::Manual,
+                    format!("upgrade {} manually", tool.name),
+                )
+                .tool(&tool.name)
+                .blocked(reason),
             );
             continue;
         }
@@ -120,15 +128,21 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
         if matches!(tool.install, Install::Apt { .. }) && !apt_update_added {
             apt_update_added = true;
             plan.push(
-                Step::new("apt:update", StepKind::AptUpdate, "refresh apt package lists").actions(
-                    vec![Action::Shell {
-                        command: "sudo apt-get update -qq".to_string(),
-                    }],
-                ),
+                Step::new(
+                    "apt:update",
+                    StepKind::AptUpdate,
+                    "refresh apt package lists",
+                )
+                .actions(vec![Action::Shell {
+                    command: "sudo apt-get update -qq".to_string(),
+                }]),
             );
         }
 
-        let latest = result.latest.clone().unwrap_or_else(|| "latest".to_string());
+        let latest = result
+            .latest
+            .clone()
+            .unwrap_or_else(|| "latest".to_string());
         plan.push(
             Step::new(
                 step_id,
@@ -362,7 +376,11 @@ mod tests {
             .find(|s| s.id == "install:direnv")
             .unwrap();
         assert!(matches!(step.state, StepState::Skipped(_)));
-        assert_eq!(plan.pending_count(), 0, "a provisioned machine plans no work");
+        assert_eq!(
+            plan.pending_count(),
+            0,
+            "a provisioned machine plans no work"
+        );
     }
 
     #[test]
@@ -461,8 +479,16 @@ mod tests {
             &mut |_| {},
         );
 
-        assert_eq!(reports[1].outcome, Outcome::Skipped, "blocked tool's post step");
-        assert_eq!(reports[3].outcome, Outcome::Skipped, "failed tool's post step");
+        assert_eq!(
+            reports[1].outcome,
+            Outcome::Skipped,
+            "blocked tool's post step"
+        );
+        assert_eq!(
+            reports[3].outcome,
+            Outcome::Skipped,
+            "failed tool's post step"
+        );
         assert!(!std::path::Path::new("/tmp/pinst-post-must-not-run").exists());
         assert!(!std::path::Path::new("/tmp/pinst-post-must-not-run-2").exists());
     }

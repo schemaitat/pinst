@@ -20,7 +20,9 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
             let probe = app.probes.get(&spec.name);
             let (icon, status_text, style) = match probe {
                 None => ("...", "probing", theme::muted_style()),
-                Some(ProbeResult { installed: true, .. }) => ("[OK]", "installed", theme::ok_style()),
+                Some(ProbeResult {
+                    installed: true, ..
+                }) => ("[OK]", "installed", theme::ok_style()),
                 Some(ProbeResult {
                     installed: false, ..
                 }) => ("[--]", "missing", theme::bad_style()),
@@ -47,7 +49,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     ];
 
     let title = if app.search_query.is_empty() {
-        format!(" Tools ({}/{} probed) ", app.probes_received, app.probes_expected)
+        format!(
+            " Tools ({}/{} probed) ",
+            app.probes_received, app.probes_expected
+        )
     } else {
         format!(
             " Tools ({} match{}, {}/{} probed) ",

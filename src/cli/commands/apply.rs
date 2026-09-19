@@ -72,8 +72,14 @@ pub async fn converge(ctx: &Ctx, args: &SelectArgs, command: &str) -> Result<Exi
             doctor_summary.errors,
             doctor_summary.warnings
         ));
-        for finding in findings.iter().filter(|f| f.severity != doctor::Severity::Info) {
-            println!("[{:?}] {} — fix: {}", finding.severity, finding.message, finding.remediation);
+        for finding in findings
+            .iter()
+            .filter(|f| f.severity != doctor::Severity::Info)
+        {
+            println!(
+                "[{:?}] {} — fix: {}",
+                finding.severity, finding.message, finding.remediation
+            );
         }
     }
 

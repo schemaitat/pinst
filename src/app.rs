@@ -137,7 +137,10 @@ impl App {
             self.status = "diagnosing...".to_string();
             self.spawn_health_check();
         } else if !self.health_ready {
-            self.status = format!("probing tools... ({}/{})", self.probes_received, self.probes_expected);
+            self.status = format!(
+                "probing tools... ({}/{})",
+                self.probes_received, self.probes_expected
+            );
         }
     }
 

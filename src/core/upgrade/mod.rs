@@ -79,10 +79,7 @@ fn upstream_of(candidate: &str) -> &str {
         .split_once(':')
         .map(|(_, rest)| rest)
         .unwrap_or(candidate);
-    without_epoch
-        .split('-')
-        .next()
-        .unwrap_or(without_epoch)
+    without_epoch.split('-').next().unwrap_or(without_epoch)
 }
 
 fn compare(
@@ -110,7 +107,12 @@ fn compare(
 }
 
 /// Looks up the latest version for one tool, using the cache unless `force`.
-fn check_one(tool: &Tool, current: Option<String>, cache: &mut Cache, force: bool) -> UpgradeResult {
+fn check_one(
+    tool: &Tool,
+    current: Option<String>,
+    cache: &mut Cache,
+    force: bool,
+) -> UpgradeResult {
     let spec = tool.upgrade_spec();
     if matches!(spec, UpgradeSpec::None {}) {
         return compare(tool, &spec, current, None);

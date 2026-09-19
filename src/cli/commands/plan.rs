@@ -31,7 +31,11 @@ pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
     }
 
     let pending = plan.pending_count();
-    let status = if pending > 0 { Status::Issues } else { Status::Ok };
+    let status = if pending > 0 {
+        Status::Issues
+    } else {
+        Status::Ok
+    };
     let total = plan.steps.len();
     ctx.finish(
         Envelope::new("plan", status, plan.steps.clone())

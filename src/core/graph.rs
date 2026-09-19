@@ -35,7 +35,9 @@ pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
     while let Some(name) = ready.pop_front() {
         ordered.push(name.to_string());
         for dependent in dependents.get(name).into_iter().flatten() {
-            let deg = indegree.get_mut(*dependent).expect("dependent is a known tool");
+            let deg = indegree
+                .get_mut(*dependent)
+                .expect("dependent is a known tool");
             *deg -= 1;
             if *deg == 0 {
                 ready.push_back(dependent);
@@ -226,7 +228,10 @@ mod tests {
             .collect();
 
         assert!(selected.contains(&"zsh"));
-        assert!(!selected.contains(&"neovim"), "editor tag is not in minimal");
+        assert!(
+            !selected.contains(&"neovim"),
+            "editor tag is not in minimal"
+        );
     }
 
     #[test]

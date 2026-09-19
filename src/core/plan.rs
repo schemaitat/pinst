@@ -16,10 +16,18 @@ use serde::Serialize;
 pub enum Action {
     /// Run with `sh -c`. `sudo` appears inside the command text itself, the
     /// same way the upstream install docs write it.
-    Shell { command: String },
-    Download { url: String, dest: PathBuf },
+    Shell {
+        command: String,
+    },
+    Download {
+        url: String,
+        dest: PathBuf,
+    },
     /// Symlink `target` -> `source`.
-    Link { source: PathBuf, target: PathBuf },
+    Link {
+        source: PathBuf,
+        target: PathBuf,
+    },
     /// Write literal content to `target`. The bytes stay out of the
     /// serialized plan (a config file's contents are not plan metadata);
     /// only their length is reported.
@@ -31,7 +39,10 @@ pub enum Action {
         content: Arc<Vec<u8>>,
     },
     /// Move an existing file aside before writing over its path.
-    Backup { path: PathBuf, to: PathBuf },
+    Backup {
+        path: PathBuf,
+        to: PathBuf,
+    },
 }
 
 impl Action {
@@ -199,7 +210,6 @@ impl Plan {
     pub fn pending_count(&self) -> usize {
         self.pending().count()
     }
-
 }
 
 /// What happened to one step during execution.

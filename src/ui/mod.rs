@@ -77,7 +77,9 @@ fn draw_picker(frame: &mut Frame, app: &App) {
         .highlight_symbol("> ");
 
     let mut state = ratatui::widgets::ListState::default();
-    state.select(Some(app.picker_selected.min(targets.len().saturating_sub(1))));
+    state.select(Some(
+        app.picker_selected.min(targets.len().saturating_sub(1)),
+    ));
 
     frame.render_widget(Clear, area);
     frame.render_stateful_widget(list, area, &mut state);

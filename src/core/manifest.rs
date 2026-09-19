@@ -139,9 +139,15 @@ fn default_nvm_version() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum UpgradeSpec {
-    Apt { package: String },
-    Cargo { crate_name: String },
-    GithubRelease { repo: String },
+    Apt {
+        package: String,
+    },
+    Cargo {
+        crate_name: String,
+    },
+    GithubRelease {
+        repo: String,
+    },
     Nvm {},
     /// Explicitly opt out of upgrade checking (e.g. rustup self-manages).
     None {},
@@ -179,7 +185,10 @@ impl Tool {
         }
         match &self.install {
             Install::Apt { packages } => UpgradeSpec::Apt {
-                package: packages.first().cloned().unwrap_or_else(|| self.name.clone()),
+                package: packages
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| self.name.clone()),
             },
             Install::Cargo { crate_name } => UpgradeSpec::Cargo {
                 crate_name: crate_name.clone(),
@@ -188,7 +197,9 @@ impl Tool {
                 Some(repo) => UpgradeSpec::GithubRelease { repo: repo.clone() },
                 None => UpgradeSpec::None {},
             },
-            Install::GithubRelease { repo, .. } => UpgradeSpec::GithubRelease { repo: repo.clone() },
+            Install::GithubRelease { repo, .. } => {
+                UpgradeSpec::GithubRelease { repo: repo.clone() }
+            }
             Install::Nvm { .. } => UpgradeSpec::Nvm {},
             Install::Shell { .. } | Install::GitClone { .. } | Install::Manual { .. } => {
                 UpgradeSpec::None {}
@@ -264,11 +275,7 @@ impl Manifest {
             if let Some(tool) = &config.requires_tool
                 && !seen.contains(tool.as_str())
             {
-                bail!(
-                    "config '{}' requires unknown tool '{}'",
-                    config.name,
-                    tool
-                );
+                bail!("config '{}' requires unknown tool '{}'", config.name, tool);
             }
         }
 
@@ -373,7 +380,8 @@ fn discover() -> Option<ManifestSource> {
 /// The embedded manifest, parsed. Used by tests to exercise the real data.
 #[cfg(test)]
 pub fn embedded() -> Result<Manifest> {
-    let manifest: Manifest = toml::from_str(EMBEDDED_MANIFEST).context("parsing embedded manifest")?;
+    let manifest: Manifest =
+        toml::from_str(EMBEDDED_MANIFEST).context("parsing embedded manifest")?;
     Ok(manifest)
 }
 
@@ -454,7 +462,10 @@ mod tests {
         let claude = manifest.tool("claude").unwrap();
         assert!(matches!(claude.upgrade_spec(), UpgradeSpec::None {}));
         let uv = manifest.tool("uv").unwrap();
-        assert!(matches!(uv.upgrade_spec(), UpgradeSpec::GithubRelease { .. }));
+        assert!(matches!(
+            uv.upgrade_spec(),
+            UpgradeSpec::GithubRelease { .. }
+        ));
 
         // An explicit override wins over the derived default.
         let rust = manifest.tool("rust").unwrap();

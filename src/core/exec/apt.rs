@@ -23,7 +23,10 @@ impl Executor for Apt {
         // --only-upgrade keeps an upgrade from silently installing something
         // that was removed out from under the manifest.
         Ok(vec![Action::Shell {
-            command: format!("sudo apt-get install -y --only-upgrade {}", packages.join(" ")),
+            command: format!(
+                "sudo apt-get install -y --only-upgrade {}",
+                packages.join(" ")
+            ),
         }])
     }
 }

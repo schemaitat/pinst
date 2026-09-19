@@ -74,13 +74,7 @@ pub async fn execute_and_report(ctx: &Ctx, command: &str, plan: Plan) -> Result<
     let errors: Vec<String> = reports
         .iter()
         .filter(|r| r.outcome == Outcome::Failed)
-        .map(|r| {
-            format!(
-                "{}: {}",
-                r.id,
-                r.detail.as_deref().unwrap_or("failed")
-            )
-        })
+        .map(|r| format!("{}: {}", r.id, r.detail.as_deref().unwrap_or("failed")))
         .collect();
 
     let status = if summary.failed > 0 {

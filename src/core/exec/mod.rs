@@ -147,8 +147,8 @@ fn download(url: &str, dest: &std::path::Path) -> Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut file = std::fs::File::create(dest)
-        .with_context(|| format!("creating {}", dest.display()))?;
+    let mut file =
+        std::fs::File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
     resp.copy_to(&mut file)?;
     file.flush()?;
     Ok(())
@@ -176,14 +176,13 @@ fn write_file(target: &std::path::Path, content: &[u8]) -> Result<()> {
     if std::fs::symlink_metadata(target).is_ok() {
         remove_any(target)?;
     }
-    std::fs::write(target, content)
-        .with_context(|| format!("writing {}", target.display()))?;
+    std::fs::write(target, content).with_context(|| format!("writing {}", target.display()))?;
     Ok(())
 }
 
 fn remove_any(path: &std::path::Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(path)
-        .with_context(|| format!("stat {}", path.display()))?;
+    let meta =
+        std::fs::symlink_metadata(path).with_context(|| format!("stat {}", path.display()))?;
     if meta.is_dir() && !meta.file_type().is_symlink() {
         std::fs::remove_dir_all(path)
     } else {
