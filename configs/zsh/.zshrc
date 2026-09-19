@@ -38,6 +38,7 @@ zstyle ':completion:*' cache-path ~/.zsh/cache
 
 alias clauded="claude --dangerously-skip-permissions"
 alias v="nvim"
+alias ll="ls -alh"
 
 # --- opencode ---
 
