@@ -42,3 +42,38 @@ build:
 [doc("Build and put pinst on PATH (default ~/.local/bin; pass a dir to override)")]
 install dir="":
     PINST_INSTALL_DIR="{{ dir }}" scripts/install.sh
+
+# The release artifact, exactly as CI builds it: one statically linked binary
+# in a tarball, plus the checksum scripts/install.sh verifies before trusting
+# a download.
+#
+# The release workflow calls this same recipe, so there is one answer to "how
+# is a release artifact built" — the way scripts/install.sh is the one answer
+# to "how does pinst get installed". The tarball name carries no version: the
+# github_release install method resolves
+# /releases/latest/download/<asset>, which is a fixed path.
+[doc("Build the release tarball for a target into dist/ (default: static musl)")]
+dist target="x86_64-unknown-linux-musl":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="{{ target }}"
+    host="$(rustc -vV | sed -n 's/^host: //p')"
+    # Same architecture, different libc, is something the local toolchain
+    # handles: the musl build needs only `musl-tools` and `cmake` installed
+    # (cmake for aws-lc-rs, rustls' crypto provider via reqwest). cross is
+    # reserved for a genuinely foreign architecture, where a whole
+    # cross-toolchain in a container is the only sane way.
+    if [ "${target%%-*}" = "${host%%-*}" ]; then
+        rustup target add "$target"
+        cargo build --release --locked --target "$target" \
+            || { echo "hint: the musl build needs musl-tools and cmake" >&2; exit 1; }
+    else
+        cross build --release --locked --target "$target"
+    fi
+    rm -rf dist && mkdir -p dist
+    # --sort/--owner/--group keep the archive identical whoever builds it, so
+    # a locally built artifact can be compared against the released one.
+    tar --sort=name --owner=0 --group=0 --numeric-owner \
+        -C "target/$target/release" -czf "dist/pinst-$target.tar.gz" pinst
+    cd dist && sha256sum "pinst-$target.tar.gz" > "pinst-$target.tar.gz.sha256"
+    ls -l "pinst-$target.tar.gz" "pinst-$target.tar.gz.sha256"
