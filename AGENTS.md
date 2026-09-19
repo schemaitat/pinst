@@ -158,6 +158,34 @@ GIT_USER_EMAIL = "ada@example.com"
 Secrets are never embedded. `.zshrc` sources `~/.zshrc.secrets` at runtime if
 it exists; that file stays untracked and outside pinst entirely.
 
+## Releases
+
+Releases are cut by release-please from the Conventional Commits that land on
+`main`. Merging the release PR it keeps open bumps `Cargo.toml` and
+`Cargo.lock`, writes `CHANGELOG.md`, tags `v<x.y.z>`, and publishes a GitHub
+release carrying:
+
+| Asset | |
+|-------|--|
+| `pinst-x86_64-unknown-linux-musl.tar.gz` | The statically linked binary |
+| `pinst-x86_64-unknown-linux-musl.tar.gz.sha256` | Its checksum |
+
+The asset name never carries the version: `/releases/latest/download/<asset>`
+is a fixed path, and both `scripts/install.sh` and pinst's own
+`github_release` install method resolve it. `just dist` builds the same
+artifact locally.
+
+pinst is a `[[tool]]` in its own manifest, so it upgrades the way everything
+else does:
+
+```sh
+pinst update pinst --dry-run --json
+pinst update pinst
+```
+
+Nothing here changes the contract above: `schema_version` is what moves when
+the JSON envelope does, not the release version.
+
 ## Safety model
 
 - Mutations only ever happen through a plan, so `--dry-run` and a real run

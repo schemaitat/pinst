@@ -235,6 +235,15 @@ requires = ["curl"]
 detect = { command = "command -v claude", bin = "claude", version_cmd = "claude --version" }
 install = { method = "curl_script", url = "https://claude.ai/install.sh", shell = "bash" }
 
+# --- pinst itself ----------------------------------------------------------
+
+[[tool]]
+name = "pinst"
+summary = "This tool, installed from its own releases so it can update itself"
+tags = ["dev"]
+detect = { command = "command -v pinst", bin = "pinst", version_cmd = "pinst --version" }
+install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-x86_64-unknown-linux-musl.tar.gz", dest = "$HOME/.local/bin" }
+
 # --- configs ---------------------------------------------------------------
 # source is a subdirectory of configs/ whose tree mirrors $HOME.
 

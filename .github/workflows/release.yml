@@ -1,0 +1,134 @@
+# How a pinst release happens, end to end.
+#
+#   1. release-please reads the Conventional Commits that landed on main and
+#      keeps a release PR open, bumping Cargo.toml + Cargo.lock and writing
+#      CHANGELOG.md.
+#   2. Merging that PR makes this workflow tag v<x.y.z> and create a DRAFT
+#      GitHub release.
+#   3. The artifacts job builds the binary and attaches it to that draft.
+#   4. Only then does the publish job un-draft it.
+#
+# The draft matters: both scripts/install.sh and pinst's own github_release
+# executor resolve /releases/latest/download/<asset>, and that URL must never
+# point at a release whose assets have not landed yet.
+#
+# The jobs are chained rather than split across workflows because a release
+# created with the default GITHUB_TOKEN does not trigger a `release` event —
+# listening for one would mean carrying a PAT for no other reason.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    # Manifest mode publishes per-path outputs (`.--tag_name`) and, for a
+    # single root package, unprefixed ones. Which of the two appears has
+    # changed between versions of the action, and an output that silently
+    # evaluates to '' would skip the artifacts job without failing anything —
+    # so read both and let the later `gh` call fail loudly if neither is set.
+    outputs:
+      release_created: ${{ steps.release.outputs.releases_created || steps.release.outputs['.--release_created'] }}
+      tag_name: ${{ steps.release.outputs.tag_name || steps.release.outputs['.--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # release-please names its outputs differently in manifest mode than in
+      # single-package mode, and a mis-named output silently evaluates to ''
+      # — which would skip the artifacts job without failing anything. This
+      # step is how that gets diagnosed from a run log instead of guessed at.
+      - name: Show release-please outputs
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$OUTPUTS"
+
+  artifacts:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        # One row today (ASSUMPTION-002: Linux x86_64 is what this manifest
+        # targets). A second platform is a row here, not a rewrite.
+        target: [x86_64-unknown-linux-musl]
+    steps:
+      # No `ref:` — the commit this workflow ran on *is* the release commit,
+      # and a draft release has no git tag yet for a checkout to resolve.
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - uses: extractions/setup-just@v3
+
+      # musl-tools gives the build a musl C compiler and cmake builds
+      # aws-lc-rs, rustls' crypto provider. With both present the target
+      # builds with plain cargo — no container, no cross-toolchain image.
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools cmake
+
+      # The same recipe a maintainer runs locally, so the released artifact
+      # is never built by a procedure that exists only in this file.
+      - name: Build release tarball
+        run: just dist target=${{ matrix.target }}
+
+      # This project refuses to pretend a `curl | sh` installer is verifiable;
+      # it should not ship an unverifiable artifact of its own either.
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/pinst-${{ matrix.target }}.tar.gz
+
+      # --clobber so re-running a failed job converges instead of erroring —
+      # the same property pinst demands of its own steps.
+      - name: Attach to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          gh release upload "$TAG" \
+            "dist/pinst-${{ matrix.target }}.tar.gz" \
+            "dist/pinst-${{ matrix.target }}.tar.gz.sha256" \
+            --clobber
+
+  # Publishing last is what makes a release atomic for whoever is downloading
+  # it: /releases/latest/download/<asset> starts resolving only once every
+  # asset is attached. A failed artifacts job leaves a draft nobody can hit.
+  publish:
+    needs: [release-please, artifacts]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release edit "$TAG" --draft=false --latest

@@ -1,0 +1,56 @@
+# The gate in front of main. Releases are cut from whatever lands there
+# (see .github/workflows/release.yml), so "merged" has to mean "checked".
+#
+# The steps mirror the `qc` recipe in the justfile, in the same order — it is
+# already ordered to fail fastest — so a green CI and a green `just qc` mean
+# the same thing.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      # `--locked` everywhere below: release-please rewrites Cargo.lock in its
+      # release PR, and a lockfile that no longer matches Cargo.toml must fail
+      # here rather than inside a release build.
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      # The fourth `qc` step, spelled out like the three above rather than
+      # shelling out to `just`, so CI needs no extra tooling. Checks that the
+      # skills in .agents/ are wired into the directory the runtime actually
+      # reads, and that the .ash/ plan corpus is internally consistent; either
+      # exits 3 if it has drifted.
+      - name: Harness
+        run: |
+          scripts/agents-wire.sh --check
+          scripts/ash.sh check

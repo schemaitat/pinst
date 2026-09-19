@@ -6,3 +6,4 @@
 |------|----|--------|---------|-------|---------|
 | [self-contained-toolchain-cli](plans/260918-lmmebj-self-contained-toolchain-cli/README.md) | 260918-lmmebj | Done | 2026-09-18 | cli, manifest, configs, engine | Turn pinst into a self-contained, manifest-driven CLI that installs, updates and doctors the whole stack and carries its configs embedded. |
 | [dotfiles-manager-tui](plans/260918-pzdyxp-dotfiles-manager-tui/README.md) | 260918-pzdyxp | Done | 2026-09-18 | tui, registry, probe | A read-only ratatui dashboard over the ~/dotfiles toolchain — tool inventory, Stow symlink health, and upgrade detection. |
+| [release-please-binary-artifacts](plans/260919-zeuuaj-release-please-binary-artifacts/README.md) | 260919-zeuuaj | In Progress | 2026-09-19 | ci, distribution, manifest | Automate releases with release-please and attach a self-contained Linux binary tarball to every GitHub release. |
