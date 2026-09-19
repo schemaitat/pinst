@@ -125,9 +125,15 @@ is linked to `configs/`), or edit `configs/` directly, and commit.
 ## Development
 
 ```sh
-cargo test           # unit tests, including config apply against a temp $HOME
-cargo clippy --all-targets
-cargo build --release
+just            # list the recipes
+just run        # run from source (opens the dashboard)
+just run doctor --json   # ...or any other command; args forward
+just qc         # formatting, lints, and tests — what CI would run
+just build      # the self-contained release binary
 ```
+
+`just run` propagates pinst's exit codes, so `just run doctor` ending in
+"recipe failed with exit code 3" is pinst reporting findings, not a broken
+recipe.
 
 Plans and architectural decisions live in `.ash/plans/`.
