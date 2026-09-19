@@ -18,6 +18,7 @@ set -euo pipefail
 ASH_DIR="${ASH_DIR:-.ash}"
 PLANS_DIR="$ASH_DIR/plans"
 INDEX_FILE="$ASH_DIR/INDEX.md"
+LOG_FILE="$ASH_DIR/CHANGELOG.log"
 JSON=0
 
 FIND_ID=(); FIND_SEV=(); FIND_MSG=(); FIND_REM=()
@@ -139,6 +140,7 @@ check_corpus() {
     check_plan_readme "$d" "$name" "$id" "$slug" "$readme"
     check_phases "$d" "$name" "$id" "$slug" "$readme"
     check_learnings "$d" "$name"
+    check_changelog "$d" "$name" "$id"
   done <<< "$(plan_dirs)"
 }
 
@@ -269,7 +271,64 @@ check_phases() {
         "$name is marked Done but $file is not" \
         "finish the phase, or set the plan back to In Progress"
     done <<< "$phases"
+  # ...and the converse, which is the cheaper half to forget: when the last
+  # phase closes, the plan is over. Left In Progress it goes on advertising
+  # work that has already shipped, and the longer it does the more expensive
+  # it is for the next reader to tell the difference.
+  else
+    local open=0
+    while IFS= read -r file; do
+      [ -n "$file" ] || continue
+      [ "$(fm_raw "$file" status)" = "Done" ] || open=1
+    done <<< "$phases"
+    [ "$open" -eq 1 ] || finding "plan.phases-all-done.$name" warning \
+      "every phase of $name is Done but the plan is '$(fm_raw "$readme" status)'" \
+      "close the plan (status: Done) and run the plan-learn skill, or reopen the phase that is not finished"
   fi
+}
+
+# --- the shipped log --------------------------------------------------------
+# .ash/CHANGELOG.log is append-only and one line per shipped phase, so it is
+# the only part of the corpus that records what actually reached main. That
+# makes it the one thing a stale plan can be checked against without asking
+# GitHub anything: a log line saying a phase shipped and a phase file still
+# saying In Progress cannot both be true, and the log is the half that cannot
+# be wrong retroactively.
+#
+# This is the check that was missing when plan 260919-zeuuaj sat In Progress
+# for a day with its own log recording all four phases as shipped.
+
+check_changelog() {
+  local d="$1" name="$2" id="$3"
+  [ -f "$LOG_FILE" ] || return 0
+
+  local status logged
+  status="$(fm_raw "$d/README.md" status)"
+  logged="$(grep -F "id=$id " "$LOG_FILE" || true)"
+
+  if [ "$status" = "Done" ] && [ -z "$logged" ]; then
+    finding "plan.unlogged.$name" warning \
+      "$name is Done but $LOG_FILE has no entry for id=$id" \
+      "append the closing line plan-implement writes when a plan ships"
+  fi
+
+  # Only this direction is an invariant. A phase with no log line may simply
+  # predate the log; a log line with no finished phase is drift.
+  local n file pstatus
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    file="$(printf '%s/phase-%02d.md' "$d" "$((10#$n))")"
+    if [ ! -f "$file" ]; then
+      finding "phase.logged-missing.$name.$n" warning \
+        "$LOG_FILE records phase $n of $id as shipped but $file does not exist" \
+        "restore the phase file, or correct the id in the log entry"
+      continue
+    fi
+    pstatus="$(fm_raw "$file" status)"
+    [ "$pstatus" = "Done" ] || finding "phase.logged-not-done.$name.$n" warning \
+      "$LOG_FILE says phase $n of $id shipped, but $file is '$pstatus'" \
+      "set that phase to Done, or work out what the log entry was really about"
+  done <<< "$(printf '%s\n' "$logged" | grep -oE 'phase=[0-9]+' | cut -d= -f2 | sort -un || true)"
 }
 
 # plan-learn's contract: a missing learnings.md and a clean run must look
