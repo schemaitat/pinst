@@ -114,7 +114,7 @@ broken binaries.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | A CI gate on main | [phase-01.md](phase-01.md) | Done |
-| 2 | release-please owns the version | [phase-02.md](phase-02.md) | In Progress |
+| 2 | release-please owns the version | [phase-02.md](phase-02.md) | Done |
 | 3 | Build and attach the binary | [phase-03.md](phase-03.md) | In Progress |
 | 4 | Consume the artifact | [phase-04.md](phase-04.md) | In Progress |
 

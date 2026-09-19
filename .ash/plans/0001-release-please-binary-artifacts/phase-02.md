@@ -2,7 +2,7 @@
 index: "0001"
 slug: release-please-binary-artifacts
 phase: 2
-status: In Progress
+status: Done
 ---
 
 # Phase 2 — release-please owns the version
@@ -24,7 +24,7 @@ permissions and commit parsing here, cross-compilation there). Debugging them
 together would mean re-cutting releases to test a build.
 
 ## Steps
-- [ ] TASK-003: verify the repo setting ASSUMPTION-001 depends on — Settings
+- [x] TASK-003: verify the repo setting ASSUMPTION-001 depends on — Settings
       → Actions → General → Workflow permissions set to read *and write*, and
       "Allow GitHub Actions to create and approve pull requests" enabled.
       Why: without the second checkbox release-please fails to open its PR
@@ -54,7 +54,7 @@ together would mean re-cutting releases to test a build.
       branch on — `releases_created`/`release_created`/`tag_name` differ
       between manifest and single-package mode, and guessing (RISK-003) means
       a chained job that silently never runs.
-- [ ] TASK-007: land a `feat:` or `fix:` commit on `main` and confirm the
+- [x] TASK-007: land a `feat:` or `fix:` commit on `main` and confirm the
       release PR appears with the bumped `Cargo.toml`, the updated
       `Cargo.lock` and a generated `CHANGELOG.md`. Do not merge it yet.
       Why: leaving it open is the cleanest hand-off — Phase 3 merges it once
