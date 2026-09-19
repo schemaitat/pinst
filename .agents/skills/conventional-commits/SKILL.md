@@ -78,9 +78,9 @@ made — a one-line diff rarely needs one, a workaround for a subtle bug
 usually does. Skip footers entirely unless there's a breaking change or an
 issue to reference.
 
-If this commit implements work tracked under `.ash/plans/<index>-<slug>/`
-(see the `plan-write` skill), add a `Plan: <index>-<slug>` footer line too,
-after any other footers — that's how the plan's permanent index gets carried
+If this commit implements work tracked under `.ash/plans/<id>-<slug>/`
+(see the `plan-write` skill), add a `Plan: <id>-<slug>` footer line too,
+after any other footers — that's how the plan's permanent id gets carried
 into `git log`.
 
 ## Workflow
@@ -106,6 +106,10 @@ into `git log`.
    )"
    ```
 7. Confirm it landed: `git log -1 --format='%H %s'` or `git status`.
+
+If the commit touches `.ash/` or `.agents/`, run `just harness` before
+step 6 — a commit that leaves `.ash/INDEX.md` stale or a skill unwired
+passes review easily and is annoying to track down later.
 
 ## Examples (drawn from this repo's own history)
 

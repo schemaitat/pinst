@@ -1,14 +1,14 @@
 ---
 name: plan-implement
-description: Autonomously implement a plan written by the plan-write skill, working phase by phase through its ADR docs under .ash/plans/<index>-<slug>/, ticking off tasks, and keeping a structured run log under .ash/plans/<index>-<slug>/logs/. Use whenever the user asks to implement, execute, start, resume, or continue a plan (e.g. "implement plan 0001", "start on the mlflow plan", "continue implementing this", "work through phase 2"), even if they don't name the skill directly.
+description: Autonomously implement a plan written by the plan-write skill, working phase by phase through its ADR docs under .ash/plans/<id>-<slug>/, ticking off tasks, and keeping a structured run log under .ash/plans/<id>-<slug>/logs/. Use whenever the user asks to implement, execute, start, resume, or continue a plan (e.g. "implement 260919-qwerty", "start on the mlflow plan", "continue implementing this", "work through phase 2"), even if they don't name the skill directly.
 ---
 
 # Plan Implement Skill
 
 Implements a plan written by `plan-write`: works through its phases and tasks
-in order, ticks off checkboxes and flips `Status` fields as work lands, and
+in order, ticks off checkboxes and flips `status` frontmatter as work lands, and
 appends a structured, append-only log of what happened to
-`.ash/plans/<index>-<slug>/logs/`. The plan doc is the source of truth for *what*
+`.ash/plans/<id>-<slug>/logs/`. The plan doc is the source of truth for *what*
 to build; the log is the audit trail of *what actually happened* when it was
 attempted — especially failures and surprises, which are the first things
 lost once a session ends and the easiest thing for a future run (or a human)
@@ -24,10 +24,10 @@ ______________________________________________________________________
 
 ## Step 1 — Identify the plan
 
-- If the user names an index or slug, use it directly:
-  `.ash/plans/<index>-<slug>/`.
-- Otherwise, list `.ash/plans/`. If exactly one plan has `Status: In
-  Progress`, resume that one. If there's more than one candidate (several
+- If the user names an id or slug, use it directly:
+  `.ash/plans/<id>-<slug>/`.
+- Otherwise, read `.ash/INDEX.md` (or list `.ash/plans/`). If exactly one
+  plan has frontmatter `status: In Progress`, resume that one. If there's more than one candidate (several
   in progress, or none and several `Proposed`), ask the user which plan
   they mean (AskUserQuestion) — guessing which unfinished plan to pick up
   is not a call to make silently.
@@ -49,7 +49,7 @@ ______________________________________________________________________
 
 ## Step 3 — Start the run log
 
-- Directory: `.ash/plans/<index>-<slug>/logs/` — create it if it doesn't
+- Directory: `.ash/plans/<id>-<slug>/logs/` — create it if it doesn't
   exist. Logs live inside the plan's own folder so one directory holds
   everything about one unit of work: the decision record, the runs that
   implemented it, and what was learned.
@@ -68,7 +68,7 @@ ______________________________________________________________________
 Each line follows this shape:
 
 ```json
-{"ts": "2026-09-19T10:42:03Z", "event": "task_done", "plan": "0001-add-mlflow-experiment-tracking", "phase": 1, "task": "TASK-003", "message": "wired MLflow client into the training loop", "detail": {}}
+{"ts": "2026-09-19T10:42:03Z", "event": "task_done", "plan": "260919-qwerty-add-mlflow-experiment-tracking", "phase": 1, "task": "TASK-003", "message": "wired MLflow client into the training loop", "detail": {}}
 ```
 
 `phase` and `task` are `null` when not applicable (e.g. `run_start`).
@@ -112,8 +112,15 @@ Starting from the resume point, for each phase in the plan's own order:
    `status: Done` (and its mirror in the `## Phases` table), log
    `phase_done`. If they fail: log `phase_failed` with `detail`, log
    `run_end` aborted, and stop.
+
+   When the criteria are separable — the CLI contract, the JSON envelope, the
+   exit codes — verifying them is read-only and independent, so it can be
+   delegated in parallel. Implementing is not: the phase chain is a
+   correctness property, and concurrent writers race on the checkboxes,
+   the frontmatter, `INDEX.md`, and the append-only changelog. See
+   "Delegating" in `.agents/README.md`.
 4. Commit the phase's changes (use the `conventional-commits` skill),
-   including a `Plan: <index>-<slug>` footer so the commit traces back to
+   including a `Plan: <id>-<slug>` footer so the commit traces back to
    this plan. One commit per phase keeps history traceable phase-by-phase
    unless the plan calls for finer-grained commits per task. Log the
    result as a `commit` event with the hash and subject.
@@ -126,10 +133,18 @@ If every phase completes, set the README's frontmatter `status: Done`, log
 `.ash/CHANGELOG.log` entry marking the whole plan done.
 
 Whenever a `status` changes — at any point in a run, not just at the end —
-regenerate `.ash/INDEX.md` from the plan frontmatter as specified in the
-`plan-write` skill (Step 7). The index is only worth consulting if it's
-never stale, and a run that aborts halfway is exactly when an accurate
-"what's in progress" row matters most.
+regenerate the index and re-check the corpus:
+
+```sh
+just index          # rewrite .ash/INDEX.md from the plan frontmatter
+just harness        # 0 clean, 3 findings to act on
+```
+
+The index is only worth consulting if it's never stale, and a run that aborts
+halfway is exactly when an accurate "what's in progress" row matters most.
+`just harness` also catches the failure mode this step invites: flipping a
+phase's frontmatter `status` but not its mirror in the README's `## Phases`
+table, which it reports as a `phase.status-mirror.*` finding.
 
 ### Updating the changelog
 
@@ -138,16 +153,16 @@ where the per-run log is a detailed, per-plan record for debugging one
 run, the changelog is the project-wide, at-a-glance history of what has
 actually shipped. Keep entries to one line each, in
 [logfmt](https://brandur.org/logfmt) style, so the file stays skimmable
-with `tail` and greppable by `index=` or `slug=` without a JSON parser:
+with `tail` and greppable by `id=` or `slug=` without a JSON parser:
 
 ```
-ts=2026-09-19T10:42:03Z index=0001 slug=add-mlflow-experiment-tracking phase=1 summary="wired MLflow client into the training loop" refs=".ash/plans/0001-add-mlflow-experiment-tracking/phase-01.md,.ash/plans/0001-add-mlflow-experiment-tracking/logs/20260919T104203Z-claude-opus-5.log"
+ts=2026-09-19T10:42:03Z id=260919-qwerty slug=add-mlflow-experiment-tracking phase=1 summary="wired MLflow client into the training loop" refs=".ash/plans/260919-qwerty-add-mlflow-experiment-tracking/phase-01.md,.ash/plans/260919-qwerty-add-mlflow-experiment-tracking/logs/20260919T104203Z-claude-opus-5.log"
 ```
 
 Fields:
 
 - `ts` — UTC timestamp of the entry, same format as the run log.
-- `index` / `slug` — the plan's identifier, split so either half greps
+- `id` / `slug` — the plan's identifier, split so either half greps
   cleanly on its own.
 - `phase` — the phase number just completed, or omitted for the
   whole-plan-done entry.
@@ -174,26 +189,26 @@ the point of having one. Prefer stopping over guessing whenever the
 deviation would change what the plan actually delivers.
 
 Never edit a plan's `Context`, `Decision`, or `Alternatives Considered`
-sections while implementing — only `Status` fields and task checkboxes
+sections while implementing — only `status` fields and task checkboxes
 change during implementation. If the approach itself needs to change,
 that's a plan revision (back to `plan-write`), not something this skill
 does on its own.
 
-## Step 6 — Hand off to plan-learn
+## Step 6 — Hand off to plan-learnings
 
 Once the run ends — whatever the outcome, `completed`, `aborted`, or
-`blocked` — invoke the `plan-learn` skill for this plan before reporting
+`blocked` — invoke the `plan-learnings` skill for this plan before reporting
 back. Implementation isn't finished until whatever went wrong (or went
-smoothly) is captured at `.ash/plans/<index>-<slug>/learnings.md`; skipping this on
+smoothly) is captured at `.ash/plans/<id>-<slug>/learnings.md`; skipping this on
 a "successful" run is exactly how the same mistake gets repeated silently
-next time. `plan-learn` will use this session's own context as its source,
+next time. `plan-learnings` will use this session's own context as its source,
 since it's being invoked right after the work happened.
 
 ## Step 7 — Report back
 
 At the end of a run summarize for the user: which phases/tasks were
 finished this run, what failed or is still open, the plan's current
-`Status`, and the paths to the run log and the (now updated) learn file.
+`status`, and the paths to the run log and the (now updated) learn file.
 Point to those files rather than pasting their contents; they're meant to
 be read with `grep`/`jq` when something needs investigating, not
 reproduced inline.

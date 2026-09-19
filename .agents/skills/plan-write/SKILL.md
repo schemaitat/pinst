@@ -6,7 +6,7 @@ description: Create and persist an implementation plan as ADR-style docs under .
 # Plan Write Skill
 
 Take current session's discussion, write directly as ADR-style planning docs
-under `.ash/plans/<index>-<slug>/` — no intermediate structured file ever
+under `.ash/plans/<id>-<slug>/` — no intermediate structured file ever
 written to disk. `.ash/plans` is always the execution substrate — these files
 are read and ticked off directly as implementation progresses.
 
@@ -15,7 +15,7 @@ Every file must read like Architectural Decision Record: captures not just
 why alternatives rejected, why each phase structured the way it is.
 
 `.ash/` is a growing, searchable memory of how this codebase has been
-changed. Its layout, which this skill and `plan-implement`/`plan-learn`
+changed. Its layout, which this skill and `plan-implement`/`plan-learnings`
 share:
 
 ```
@@ -24,7 +24,7 @@ share:
 ├── LEARNINGS.md      # distilled cross-plan lessons; read before planning new work
 ├── CHANGELOG.log     # chronological feed of shipped work (logfmt, one line each)
 └── plans/
-    └── 0001-add-mlflow-experiment-tracking/
+    └── 260919-qwerty-add-mlflow-experiment-tracking/
         ├── README.md      # ADR index (frontmatter + decision record)
         ├── phase-01.md    # per-phase ADR (multi-phase plans only)
         ├── learnings.md   # what went wrong implementing it, and what to do instead
@@ -41,6 +41,13 @@ ______________________________________________________________________
 
 Confirm plan's goal (one sentence) if not already clear from session. Explore
 codebase as needed to identify affected files, existing patterns, dependencies.
+
+This survey is the one part of the lifecycle worth fanning out for. The
+questions it answers — "which modules touch the manifest schema", "where is
+version probing done", "what already handles config drift" — are independent
+of each other, read-only, and merge cleanly, so they can be delegated in
+parallel. Everything downstream is deliberately sequential; see "Delegating"
+in `.agents/README.md`.
 
 Extract + label session's content using identifier categories below. These
 identifiers are in-context reasoning scaffold only — never written to disk as
@@ -69,29 +76,47 @@ anything is written to disk.
 
 ______________________________________________________________________
 
-## Step 2 — Derive an index and slug
+## Step 2 — Mint an id and a slug
 
-Every plan gets a permanent 4-digit index, assigned once and never reused or
-renumbered — it's how commits and PRs trace back to the plan that authorized
-them (see "Carrying the index forward" below), so it must stay stable even if
-the plan is later abandoned.
+Every plan gets a permanent id of the form `<yymmdd>-<six letters>`, e.g.
+`260919-qwerty`. It is assigned once and never changed — it's how commits and
+PRs trace back to the plan that authorized them (see "Carrying the id
+forward" below), so it must stay stable even if the plan is later abandoned.
 
-1. List `.ash/plans/` and extract the leading 4-digit number from each
-   existing folder name (`0001-...`, `0002-...`). Take the highest one found
-   and add 1, zero-padded to 4 digits. If `.ash/plans/` doesn't exist yet or
-   has no numbered folders, start at `0001`.
+1. Mint it:
+
+   ```sh
+   scripts/ash.sh new-id        # -> 260919-qwerty
+   ```
+
+   (The `/plan` command already runs this and puts the result in context.)
 2. Create a short kebab-case slug from the goal identified in Step 1 (3–5
    words, lowercase, hyphens only). Example: "Add MLflow experiment
    tracking" → `add-mlflow-experiment-tracking`.
-3. Combine as `<index>-<slug>`, e.g. `0001-add-mlflow-experiment-tracking`.
+3. Combine as `<id>-<slug>`, e.g.
+   `260919-qwerty-add-mlflow-experiment-tracking`.
 
-All files for this plan live under `.ash/plans/<index>-<slug>/`, always a
+**Never derive an id by counting existing plans.** The obvious scheme —
+highest number plus one — requires asking the whole corpus a question, and
+work here happens in parallel git worktrees branched from the same commit.
+Two sessions both compute the same "next" value, both use it, and the
+collision only surfaces at merge, when the identifier is already written into
+commit footers and cannot be changed without breaking exactly the traceability
+it exists to provide. The random half of the id needs no coordination, so
+there is nothing to collide over.
+
+The date half is `yymmdd` rather than the friendlier `ddmmyy` for one
+reason: most-significant-first means string order *is* date order, so a plain
+`ls .ash/plans/` and the generated `INDEX.md` both come out chronological
+without a sort key.
+
+All files for this plan live under `.ash/plans/<id>-<slug>/`, always a
 folder — single-phase and multi-phase plans share one layout so downstream
 consumers never branch on "is it a file or a directory".
 
 Everything about one plan is co-located in that folder: the ADR docs, the
 implementation logs `plan-implement` writes under `logs/`, and the
-`learnings.md` that `plan-learn` writes when implementation finishes. One
+`learnings.md` that `plan-learnings` writes when implementation finishes. One
 unit of work, one directory — nothing to keep in sync across the tree, and
 a single `grep -r` there answers "what do we know about this work".
 
@@ -105,23 +130,23 @@ ______________________________________________________________________
 ## Step 3 — Determine single-phase vs. multi-phase
 
 - **Single-phase plan** (only one Implementation Phase identified in Step 1's
-  GOAL/TASK labelling): write **`.ash/plans/<index>-<slug>/README.md`** only,
+  GOAL/TASK labelling): write **`.ash/plans/<id>-<slug>/README.md`** only,
   using the full ADR template from Step 5. Skip Step 4.
 - **Multi-phase plan** (two+ Implementation Phases): write
-  `.ash/plans/<index>-<slug>/README.md` as the index plus one `phase-NN.md`
+  `.ash/plans/<id>-<slug>/README.md` as the index plus one `phase-NN.md`
   per phase. Continue with Step 4.
 
 ______________________________________________________________________
 
 ## Step 4 — Multi-phase layout
 
-### Main index file: `.ash/plans/<index>-<slug>/README.md`
+### Main index file: `.ash/plans/<id>-<slug>/README.md`
 
 This is ADR index. Must capture full decision record for feature.
 
 ```markdown
 ---
-index: "<index>"
+id: <id>
 slug: <slug>
 status: Proposed          # Proposed | In Progress | Done
 created: <YYYY-MM-DD>
@@ -167,7 +192,7 @@ and dependencies (DEP identifiers) that affect future work.>
 <Any unresolved ASSUMPTION identifiers, or "None." if all are resolved>
 ```
 
-### Per-phase files: `.ash/plans/<index>-<slug>/phase-<NN>.md`
+### Per-phase files: `.ash/plans/<id>-<slug>/phase-<NN>.md`
 
 Use zero-padded two-digit numbers (`01`, `02`, …).
 
@@ -175,7 +200,7 @@ Each phase file also ADR-like: must justify why this slice structured as it is.
 
 ```markdown
 ---
-index: "<index>"
+id: <id>
 slug: <slug>
 phase: <N>
 status: Proposed          # Proposed | In Progress | Done
@@ -228,11 +253,11 @@ ______________________________________________________________________
 ## Step 5 — Single-phase file layout
 
 When plan has only one Implementation Phase,
-`.ash/plans/<index>-<slug>/README.md` must follow full ADR structure:
+`.ash/plans/<id>-<slug>/README.md` must follow full ADR structure:
 
 ```markdown
 ---
-index: "<index>"
+id: <id>
 slug: <slug>
 status: Proposed          # Proposed | In Progress | Done
 created: <YYYY-MM-DD>
@@ -283,9 +308,10 @@ Steps start unchecked; tick them off as work progresses and flip `## Status` to 
 The frontmatter is what makes this a searchable corpus rather than a pile
 of prose, so it has to stay trustworthy:
 
-- **Quote the index** (`index: "0001"`). Unquoted, YAML reads `0001` as
-  the integer `1` and the zero-padding — the thing that links plan to
-  commits and PRs — is silently lost.
+- **`id` must match the directory it lives in.** It needs no quoting:
+  `260919-qwerty` is not numeric, so YAML cannot mangle it the way it
+  silently turned a zero-padded `0001` into the integer `1` under the
+  scheme this replaced.
 - **`status` lives in frontmatter only.** Don't also add a `## Status`
   section; two copies of a mutable field is two copies to drift apart.
   For multi-phase plans, each `phase-NN.md` frontmatter holds that
@@ -315,16 +341,22 @@ If either check fails, reorder or flatten the offending phases/tasks and re-run
 this check before continuing to Step 6. Never invoke Write while a check is
 still failing.
 
+These two are on you: linearity and declared-exactly-once are properties of
+the *reasoning*, and no script can tell a well-ordered plan from a badly
+ordered one. `scripts/ash.sh check` covers the mechanical half afterwards
+(phase numbering, frontmatter, status mirrors) — it is not a substitute for
+this step.
+
 ______________________________________________________________________
 
 ## Step 6 — Write the plan
 
 Use Write tool to create every ADR file determined above under
-`.ash/plans/<index>-<slug>/`. Don't modify any existing file outside
+`.ash/plans/<id>-<slug>/`. Don't modify any existing file outside
 `.ash/plans/`, except `.ash/INDEX.md` (Step 7).
 
 After writing, print short summary listing every file created + its path,
-and call out the plan's index explicitly (e.g. "Plan ID: 0001") so it's easy
+and call out the plan's id explicitly (e.g. "Plan ID: 260919-qwerty") so it's easy
 to carry into the commits/PRs that implement it.
 
 ______________________________________________________________________
@@ -337,44 +369,54 @@ of plans, reading every README to find the relevant one stops being
 affordable; reading one table and then opening two files stays cheap
 forever.
 
-**Always regenerate it from the plan frontmatter; never hand-edit it.** A
-hand-maintained index drifts out of sync and then confidently reports
-things that aren't true, which is worse than having no index at all. Scan
-every `.ash/plans/*/README.md`, read its frontmatter, and rewrite the file
-whole:
+**Never hand-edit it — regenerate it:**
 
-```markdown
-# Plan index
-
-<!-- Generated from .ash/plans/*/README.md frontmatter. Do not hand-edit. -->
-
-| Index | Plan | Status | Updated | Areas | Summary |
-|-------|------|--------|---------|-------|---------|
-| 0001 | [add-mlflow-experiment-tracking](plans/0001-add-mlflow-experiment-tracking/README.md) | Done | 2026-09-19 | training, observability | <summary from frontmatter> |
-| 0002 | … | Proposed | … | … | … |
+```sh
+just index          # or: scripts/ash.sh index
 ```
 
-Sort by index ascending. Every field comes verbatim from the corresponding
-frontmatter key — if a value looks wrong in the index, fix the plan's
-frontmatter and regenerate, rather than patching the table.
+That script rewrites the table whole from every `.ash/plans/*/README.md`
+frontmatter, sorted by id — which, because ids start with `yymmdd`, is
+chronological order. Every field is taken verbatim. If a
+value looks wrong in the index, fix the plan's frontmatter and regenerate
+rather than patching the table.
+
+Regenerating is mechanical for a reason: a hand-maintained index drifts out
+of sync and then confidently reports things that aren't true, which is worse
+than having no index at all. `scripts/ash.sh check` treats a stale index as
+a finding, and `just qc` runs it, so a forgotten regeneration surfaces as a
+failing check rather than as a quietly wrong table.
+
+Then confirm the corpus you just wrote is well-formed:
+
+```sh
+just harness        # exit 0 clean, 3 means findings to act on
+```
+
+It validates what this skill has been asserting in prose all along — quoted
+indices that match their directory, required frontmatter keys, legal
+`status` values, no `## Status` section duplicating frontmatter, phase files
+numbered `01..N` with no gaps, and each phase's status agreeing with the
+README's `## Phases` table. Fix anything it reports before handing the plan
+back; findings carry the exact remediation.
 
 ______________________________________________________________________
 
-## Carrying the index forward
+## Carrying the id forward
 
-The index assigned in Step 2 is the plan's permanent identifier. Once
+The id assigned in Step 2 is the plan's permanent identifier. Once
 implementation starts, every commit and pull request for this plan must
 reference it — otherwise the link between a plan and the code it produced is
 only findable by memory, and that's exactly the kind of thing this skill
 exists to avoid losing.
 
-- **Commits**: add a trailing footer line `Plan: <index>-<slug>` (e.g.
-  `Plan: 0001-add-mlflow-experiment-tracking`), after any other footers like
-  `BREAKING CHANGE:` or attribution lines.
-- **Pull requests**: prefix the title with the index in brackets, e.g.
-  `[0001] Add MLflow experiment tracking`, so it's visible in PR lists without
-  opening the description.
+- **Commits**: add a trailing footer line `Plan: <id>-<slug>` (e.g.
+  `Plan: 260919-qwerty-add-mlflow-experiment-tracking`), after any other
+  footers like `BREAKING CHANGE:` or attribution lines.
+- **Pull requests**: prefix the title with the id in brackets, e.g.
+  `[260919-qwerty] Add MLflow experiment tracking`, so it's visible in PR
+  lists without opening the description.
 
 This applies for the plan's entire lifetime, not just its first commit — if
 work spans several phases and several PRs, every one of them carries the same
-index.
+id.

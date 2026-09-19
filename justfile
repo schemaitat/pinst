@@ -15,18 +15,23 @@ run *ARGS="tui":
     cargo run --quiet -- {{ ARGS }}
 
 # Every quality check, in the order that fails fastest.
-qc: fmt-check lint test
+qc: fmt-check lint test harness
 
 # Fail if the tree is not formatted.
 fmt-check:
     cargo fmt --check
 
 # Lint, treating warnings as errors so they cannot accumulate.
+#
+# `--locked` here and in `test` mirrors CI exactly. Without it a stale
+# Cargo.lock passes locally *and gets silently rewritten*, while CI — which
+# has always passed --locked — fails. That is precisely the tree
+# release-please's release PR produces, so the two must not disagree.
 lint:
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --locked -- -D warnings
 
 test:
-    cargo test
+    cargo test --locked
 
 # Reformat the tree in place.
 fmt:
@@ -77,3 +82,23 @@ dist target="x86_64-unknown-linux-musl":
         -C "target/$target/release" -czf "dist/pinst-$target.tar.gz" pinst
     cd dist && sha256sum "pinst-$target.tar.gz" > "pinst-$target.tar.gz.sha256"
     ls -l "pinst-$target.tar.gz" "pinst-$target.tar.gz.sha256"
+
+# --- the agent harness -----------------------------------------------------
+# Source of truth is .agents/ (skills) and .ash/ (the plan corpus). These
+# recipes are what keeps both honest; see .agents/README.md.
+
+# Without this the skills in .agents/ are inert: no runtime reads that path.
+[doc("Wire .agents/skills into .claude/skills; run after adding or renaming one")]
+wire:
+    scripts/agents-wire.sh
+
+[doc("Regenerate .ash/INDEX.md from the plan frontmatter (never hand-edit it)")]
+index:
+    scripts/ash.sh index
+
+# Exit code 3 means "found things to act on", the same verdict pinst itself
+# gives — so this fails `qc` until the corpus is clean again.
+[doc("Validate the harness: skills wired, plan corpus consistent")]
+harness:
+    scripts/agents-wire.sh --check
+    scripts/ash.sh check

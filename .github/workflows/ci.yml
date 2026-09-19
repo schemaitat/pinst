@@ -44,3 +44,13 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+      # The fourth `qc` step, spelled out like the three above rather than
+      # shelling out to `just`, so CI needs no extra tooling. Checks that the
+      # skills in .agents/ are wired into the directory the runtime actually
+      # reads, and that the .ash/ plan corpus is internally consistent; either
+      # exits 3 if it has drifted.
+      - name: Harness
+        run: |
+          scripts/agents-wire.sh --check
+          scripts/ash.sh check

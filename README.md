@@ -20,9 +20,12 @@ pinst apply                 # converge an existing machine
 pinst tui                   # interactive dashboard
 ```
 
-Driving it from an agent or a script? [AGENTS.md](AGENTS.md) is the machine
-contract: every command speaks `--json`, every mutating one speaks
-`--dry-run`, and the exit codes are part of the interface.
+Driving it from an agent or a script? The machine contract is the `pinst`
+skill, [`.agents/skills/pinst/SKILL.md`](.agents/skills/pinst/SKILL.md):
+every command speaks `--json`, every mutating one speaks `--dry-run`, and the
+exit codes are part of the interface. `pinst schema manifest` and
+`pinst schema output` emit the machine-readable versions, from inside the
+binary — so they answer on a machine with no checkout.
 
 ## Contents
 
@@ -525,8 +528,14 @@ recipe.
 | `src/core/` | The engine: manifest, graph, probing, planning, execution, configs, doctor |
 | `src/cli/` | The command surface — thin, no logic |
 | `src/ui/` | The TUI — also thin, over the same core |
+| `.agents/` | The agent harness: skills, and the contract for working on pinst |
+| `.ash/` | Every plan, run log, and lesson this repo has produced |
 
-Plans and architectural decisions live in `.ash/plans/`.
+Plans and architectural decisions live in `.ash/plans/`, indexed by
+[`.ash/INDEX.md`](.ash/INDEX.md). If you are working on pinst with an agent —
+or as one — [`.agents/README.md`](.agents/README.md) explains the lifecycle
+those plans move through and the `just harness` checks that keep the corpus
+honest.
 
 ### Releasing
 

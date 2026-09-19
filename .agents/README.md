@@ -1,0 +1,196 @@
+# The agent harness
+
+The `pinst` skill is the contract for *driving pinst*. This file is the
+contract for *working on pinst* — how an agent plans a change, implements it,
+and writes down what it learned, and what keeps those three things from
+drifting apart. (`AGENTS.md` at the repo root is deliberately one line: it is
+always in context, so it carries only what is always true.)
+
+Two directories hold the whole thing:
+
+```
+.agents/skills/     the skills — vendor-neutral source of truth
+.ash/               the corpus — every plan, log, and lesson this repo has produced
+```
+
+A plan is identified by `<yymmdd>-<six letters>`, and lives in
+`.ash/plans/<id>-<slug>/`:
+
+```
+.ash/plans/260919-qwerty-add-mlflow-experiment-tracking/
+           └─── id ────┘ └─────────── slug ───────────┘
+```
+
+Both halves earn their place. The random half needs no coordination, which
+is the point: work happens in parallel git worktrees branched from the same
+commit, so any "next number in sequence" scheme has two sessions computing
+the same answer and colliding at merge — by which time the identifier is
+already written into commit footers and can no longer be changed. The date
+half is `yymmdd`, most-significant-first, so string order is date order and
+`ls .ash/plans/` comes out chronological with no sort key.
+
+Mint one with `scripts/ash.sh new-id`; never derive one by counting.
+
+Everything else named here is projection or enforcement.
+
+## The lifecycle
+
+One unit of work runs top to bottom. Each arrow is a handoff with a defined
+input and a defined artifact, not a suggestion.
+
+```
+ ┌────────────┐
+ │ plan-write │──▶ README.md + phase-NN.md — the decision record
+ └─────┬──────┘
+       │ a plan id
+       ▼
+ ┌────────────────┐
+ │ plan-implement │──▶ ticked checkboxes, logs/*.jsonl, CHANGELOG.log,
+ └─────┬──────────┘    and one commit per phase via conventional-commits
+       │ a run outcome
+       ▼
+ ┌────────────────┐
+ │ plan-learnings │──▶ learnings.md, and what generalizes → LEARNINGS.md
+ └─────┬──────────┘
+       │
+       └──▶ read by the next plan-write, before it picks an approach
+```
+
+| Skill | Reads | Writes | Ends by |
+|-------|-------|--------|---------|
+| `plan-write` | the session, `.ash/LEARNINGS.md` | `.ash/plans/<id>-<slug>/` | handing back a plan id |
+| `plan-implement` | that plan, phase by phase | checkboxes, `logs/`, `.ash/CHANGELOG.log` | invoking `plan-learnings` |
+| `plan-learnings` | session context, or `logs/` | `learnings.md`, `.ash/LEARNINGS.md` | reporting both paths |
+| `conventional-commits` | the diff, `git log` | a commit | — |
+
+`conventional-commits` is not a lifecycle stage; it is called *by*
+`plan-implement` once per phase, and directly by a human via `/cc`.
+`create-pr` sits alongside it, at the other end: it reads the same plan the
+lifecycle produced and turns it into the PR description, so the reasoning
+recorded at planning time is what reviewers actually get.
+
+Neither is `pinst`, which is reference rather than procedure: the contract for
+driving the CLI this repo builds — its JSON envelope, exit codes, step
+outcomes and doctor findings, and how to add a tool to `manifest.toml`. It
+lives as a skill so it loads when an agent is actually about to run `pinst`,
+instead of sitting in every session's context. That is why `AGENTS.md` is now
+one line.
+
+The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
+`plan-write`, which reads it before choosing an approach. That file is the
+only reason the corpus is worth keeping rather than just being history.
+
+## Routing
+
+| The request | Entry point |
+|-------------|-------------|
+| "plan this", "write it up", "how should we do X" | `/plan` → `plan-write` |
+| "implement plan 3", "continue", "do phase 2" | `/implement` → `plan-implement` |
+| "what did we learn", "post-mortem this" | `/learn` → `plan-learnings` |
+| "commit this" | `/cc` → `conventional-commits` |
+| "open a PR", "ship this branch", "get this reviewed" | `/pr` → `create-pr` |
+| "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
+| a one-line fix with no design content | none of the above — just do it |
+
+That last row matters. A plan is overhead that buys traceability; work that
+nobody will need to trace next quarter should not pay for it. Reach for
+`plan-write` when the *why* is worth more than the diff, which is roughly:
+more than one phase, more than one plausible approach, or a decision someone
+will later ask about.
+
+## Slash commands are the entry points
+
+`.claude/commands/` holds one command per lifecycle stage. They exist rather
+than relying on the model to pick the right skill unprompted, and each one
+front-loads the context that stage always needs — the plan corpus for
+`/plan`, the in-progress plans for `/implement`, the diff and scope
+vocabulary for `/cc` — so the skill starts with its inputs already in hand
+instead of spending its first three tool calls collecting them.
+
+## How the skills reach a runtime
+
+**No agent runtime reads `.agents/skills/.`** Claude Code reads
+`.claude/skills/`. So the skills are *projected*:
+
+```sh
+just wire        # .claude/skills/<name> -> ../../.agents/skills/<name>
+```
+
+The links are relative and committed, so a fresh clone or a new worktree
+arrives already wired; `just wire` is only needed after adding, renaming, or
+deleting a skill. `.agents/` stays canonical because it is the cross-vendor
+convention — adding a second runtime means one more entry in
+`TARGET_DIRS` in `scripts/agents-wire.sh`, not a second copy of every skill.
+
+This mirrors what pinst does with `configs/`: one source tree, symlinked
+into the place the consumer looks, so edits round-trip with no sync step.
+
+If a runtime turns out not to follow symlinked skill directories,
+`scripts/agents-wire.sh --copy` writes real copies instead, and
+`--check` still verifies them — the projection is the contract, the link
+style is an implementation detail.
+
+## The checks
+
+Both are in `just qc`, so the harness is held to the same standard as the
+Rust. Both use pinst's own exit-code contract: `0` clean, `2` usage, `3` ran
+fine and found things to act on.
+
+```sh
+just harness                      # both of the below
+scripts/agents-wire.sh --check    # every skill wired, names match their dirs
+scripts/ash.sh check              # the corpus invariants
+scripts/ash.sh check --json       # ... as a machine-readable envelope
+just index                        # regenerate .ash/INDEX.md
+```
+
+`ash.sh check` enforces what the skills previously only asserted in prose:
+indices unique, quoted, and matching their directory; required frontmatter
+present; `status` a legal value; no `## Status` section duplicating
+frontmatter; phase files numbered `01..N` with no gaps; each phase's status
+agreeing with the README's `## Phases` table; no plan marked `Done` over an
+unfinished phase; a `learnings.md` wherever one is owed; and `INDEX.md`
+matching the frontmatter it is generated from.
+
+Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
+`remediation` string, exactly like `pinst doctor` — match on the id, don't
+parse the prose.
+
+## Delegating
+
+The plan skills are deliberately sequential: `plan-write` enforces a strictly
+linear phase chain, and `plan-implement` refuses to start a phase before its
+predecessor is `Done`. That constraint is about *the order work lands*, and
+it says nothing about how many agents gather the information behind it.
+
+Fan out, in parallel, for read-only work whose results merge cleanly:
+
+- **Surveying the codebase** during `plan-write` Step 1 — "which modules
+  touch the manifest schema", "where is version probing done" — are
+  independent questions with independent answers.
+- **Verifying `## Done criteria`** at the end of a phase, when the criteria
+  are separable (the CLI contract, the JSON envelope, the exit codes).
+- **Reviewing a finished phase** before its commit.
+
+Do not fan out to *implement* phases or tasks concurrently. The linear chain
+is a correctness property of the plan — phase N was written assuming N-1
+landed — and parallel writers also race on the very files that record
+progress: the checkboxes, the frontmatter `status`, `INDEX.md`, and the
+append-only `CHANGELOG.log`.
+
+If concurrent work is genuinely wanted, the unit of concurrency is a *plan*,
+not a phase: separate plans, separate indices, separate git worktrees. This
+repo is normally worked on through worktrees under `.herdr/worktrees/`, which
+already gives each line of work its own checkout.
+
+## Adding a skill
+
+1. `mkdir .agents/skills/<name>` and write `SKILL.md` with `name:` (matching
+   the directory) and `description:` frontmatter. The description is the only
+   thing a model sees when deciding whether to load the skill — write it as
+   the trigger condition, listing the phrasings a user would actually say,
+   the way the existing four do.
+2. `just wire`.
+3. If it is a lifecycle entry point, add a `.claude/commands/<name>.md` that
+   pre-loads its context, and add a row to the routing table above.
+4. `just harness`.

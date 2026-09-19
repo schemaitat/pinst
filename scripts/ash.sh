@@ -1,0 +1,420 @@
+#!/usr/bin/env bash
+# Maintains and validates the .ash/ plan corpus that the plan-write,
+# plan-implement and plan-learn skills read and write.
+#
+#   scripts/ash.sh index [--check]   regenerate (or verify) .ash/INDEX.md
+#   scripts/ash.sh check             validate every corpus invariant
+#   scripts/ash.sh new-id [DATE]     mint a plan id: <yymmdd>-<6 letters>
+#
+# Why this exists: the skills state a dozen invariants in prose ("the id must
+# match its directory", "never hand-edit INDEX.md", "mirror phase status").
+# Prose is enforced by remembering. This is enforced by an exit code — the
+# same contract pinst itself offers agents:
+#
+#   0  clean          2  usage error
+#   1  failed to run  3  ran fine, found things to act on
+set -euo pipefail
+
+ASH_DIR="${ASH_DIR:-.ash}"
+PLANS_DIR="$ASH_DIR/plans"
+INDEX_FILE="$ASH_DIR/INDEX.md"
+JSON=0
+
+FIND_ID=(); FIND_SEV=(); FIND_MSG=(); FIND_REM=()
+
+finding() { FIND_ID+=("$1"); FIND_SEV+=("$2"); FIND_MSG+=("$3"); FIND_REM+=("$4"); }
+
+# `${!arr[@]}` on an empty array trips `set -u` on older bash, and "no
+# findings" is the expected case, so indices come from here instead.
+find_indices() { [ "${#FIND_ID[@]}" -gt 0 ] && printf '%s\n' "${!FIND_ID[@]}"; return 0; }
+
+usage() {
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+# --- frontmatter ------------------------------------------------------------
+# The block between the first two `---` lines. Everything downstream treats a
+# file with no such block as having no frontmatter at all, which is itself a
+# finding rather than a crash.
+
+fm_block() {
+  awk 'NR==1 && $0!="---" {exit} NR==1 {next} /^---[[:space:]]*$/ {exit} {print}' "$1"
+}
+
+fm() { fm_block "$1" | awk -v k="$2" -F': *' '$1==k {sub(/^[^:]*: */,""); print; exit}'; }
+
+fm_raw() { fm_block "$1" | awk -v k="$2" '$0 ~ "^"k":" {sub(/^[^:]*:[[:space:]]*/,""); print; exit}'; }
+
+unquote() { local v="$1"; v="${v%\"}"; v="${v#\"}"; printf '%s' "$v"; }
+
+# `[a, b, c]` -> `a, b, c`
+delist() { local v="$1"; v="${v#[}"; v="${v%]}"; printf '%s' "$v"; }
+
+# Finding ids are match keys, so they carry the corpus-relative path, never
+# the absolute one — the id must not change with the checkout location.
+rel() { printf '%s' "${1#"$PLANS_DIR"/}"; }
+
+jesc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g'; }
+
+# --- plan ids ---------------------------------------------------------------
+# A plan id is <yymmdd>-<six lowercase letters>, e.g. 260919-qwerty.
+#
+# The hash half is random, not allocated: work happens in parallel git
+# worktrees branched from the same commit, so any "next number" scheme has two
+# sessions computing the same answer and colliding at merge. Nothing that
+# needs to ask the rest of the corpus a question can be a stable identifier
+# here. Six letters is 26^6 ~= 309M, which is ample for a corpus of dozens.
+#
+# The date half is most-significant-first so that string order *is* date
+# order: `ls` comes out chronological, and so does the generated index. This
+# is the whole reason it is yymmdd and not the friendlier-looking ddmmyy —
+# under ddmmyy, 011026 (1 Oct) would sort before 180926 (18 Sep).
+
+mint_id() {
+  local date_part="${1:-}"
+  if [ -n "$date_part" ]; then
+    # Accept an ISO date (YYYY-MM-DD) and render it ddmmyy.
+    date_part="$(printf '%s' "$date_part" | awk -F- '{printf "%s%s%s", substr($1,3,2), $2, $3}')"
+  else
+    date_part="$(date -u +%y%m%d)"
+  fi
+  # Read a fixed block and filter it, rather than piping an endless
+  # /dev/urandom into `head -c` — that closes the pipe early, and under
+  # `pipefail` the resulting SIGPIPE fails the whole command.
+  local hash=""
+  while [ "${#hash}" -lt 6 ]; do
+    hash="$hash$(LC_ALL=C head -c 1024 /dev/urandom | LC_ALL=C tr -dc 'a-z')"
+  done
+  printf '%s-%s\n' "$date_part" "${hash:0:6}"
+}
+
+# --- collection -------------------------------------------------------------
+
+plan_dirs() {
+  [ -d "$PLANS_DIR" ] || return 0
+  find "$PLANS_DIR" -mindepth 1 -maxdepth 1 -type d | sort
+}
+
+# Every check below appends findings; none of them exit early, so one run
+# reports the whole state of the corpus rather than its first problem.
+check_corpus() {
+  local seen_ids=""
+
+  if [ ! -d "$PLANS_DIR" ]; then
+    finding "corpus.missing" error "$PLANS_DIR does not exist" \
+      "create it, or run plan-write to author the first plan"
+    return
+  fi
+
+  local d name id slug rest readme
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+
+    if ! printf '%s' "$name" | grep -qE '^[0-9]{6}-[a-z]{6}-[a-z0-9]+(-[a-z0-9]+)*$'; then
+      finding "plan.malformed-dir.$name" error \
+        "plan directory '$name' is not <ddmmyy>-<6 letters>-<kebab-slug>" \
+        "rename it, e.g. $(mint_id)-$name"
+      continue
+    fi
+    rest="${name#*-}"
+    id="${name%%-*}-${rest%%-*}"
+    slug="${rest#*-}"
+
+    case " $seen_ids " in
+      *" $id "*) finding "plan.duplicate-id.$id" error \
+        "id $id is used by more than one plan directory" \
+        "mint a fresh id for the later plan: scripts/ash.sh new-id" ;;
+    esac
+    seen_ids="$seen_ids $id"
+
+    readme="$d/README.md"
+    if [ ! -f "$readme" ]; then
+      finding "plan.readme-missing.$name" error "$readme is missing" \
+        "every plan folder needs a README.md, single- or multi-phase"
+      continue
+    fi
+
+    check_plan_readme "$d" "$name" "$id" "$slug" "$readme"
+    check_phases "$d" "$name" "$id" "$slug" "$readme"
+    check_learnings "$d" "$name"
+  done <<< "$(plan_dirs)"
+}
+
+check_plan_readme() {
+  local d="$1" name="$2" id="$3" slug="$4" readme="$5"
+
+  if [ -z "$(fm_block "$readme")" ]; then
+    finding "plan.frontmatter-missing.$name" error \
+      "$readme has no YAML frontmatter" \
+      "add the frontmatter block from the plan-write skill (Step 5)"
+    return
+  fi
+
+  local k
+  for k in id slug status created updated areas summary; do
+    [ -n "$(fm_raw "$readme" "$k")" ] || finding "plan.frontmatter-key.$name.$k" error \
+      "$readme frontmatter is missing '$k'" \
+      "add '$k:' — .ash/INDEX.md is generated from these keys"
+  done
+
+  local fm_id
+  fm_id="$(fm_raw "$readme" id)"
+  [ -z "$fm_id" ] || [ "$(unquote "$fm_id")" = "$id" ] || \
+    finding "plan.id-mismatch.$name" error \
+      "$readme frontmatter id '$(unquote "$fm_id")' does not match directory id '$id'" \
+      "set id: $id"
+
+  local fm_slug
+  fm_slug="$(fm_raw "$readme" slug)"
+  [ -z "$fm_slug" ] || [ "$fm_slug" = "$slug" ] || finding "plan.slug-mismatch.$name" error \
+    "$readme frontmatter slug '$fm_slug' does not match directory slug '$slug'" \
+    "set slug: $slug"
+
+  check_status_value "$readme" "plan.status-invalid.$name"
+  check_no_status_section "$readme"
+}
+
+check_status_value() {
+  local file="$1" id="$2" st
+  st="$(fm_raw "$file" status)"
+  case "$st" in
+    Proposed|"In Progress"|Done|"") : ;;
+    *) finding "$id" error "$file has status '$st'" \
+         "use one of: Proposed, In Progress, Done" ;;
+  esac
+}
+
+# The skills forbid a `## Status` section: status lives in frontmatter only,
+# because two copies of a mutable field is two copies to drift apart.
+check_no_status_section() {
+  local file="$1"
+  grep -qE '^## Status[[:space:]]*$' "$file" || return 0
+  finding "plan.status-section.$(rel "$file")" warning \
+    "$file has a '## Status' section as well as frontmatter status" \
+    "delete the section; frontmatter status is authoritative"
+}
+
+check_phases() {
+  local d="$1" name="$2" id="$3" slug="$4" readme="$5"
+  local phases n expected=1 file pnum pstatus table_status
+
+  phases="$(find "$d" -mindepth 1 -maxdepth 1 -name 'phase-*.md' | sort)"
+  [ -n "$phases" ] || return 0
+
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    n="$(basename "$file" .md)"; n="${n#phase-}"
+
+    if ! printf '%s' "$n" | grep -qE '^[0-9]{2}$'; then
+      finding "phase.malformed-name.$(rel "$file")" error \
+        "$file is not phase-<two digits>.md" "rename it, e.g. phase-0$((expected)).md"
+      continue
+    fi
+
+    # Phases are a strictly linear chain, so their numbers must be 1..N with
+    # no gaps — a gap means a phase file was lost or never written.
+    if [ "$((10#$n))" -ne "$expected" ]; then
+      finding "phase.chain-gap.$name" error \
+        "$file breaks the phase chain: expected phase $expected" \
+        "renumber the phase files so they run 01..N with no gaps"
+    fi
+    expected=$((expected + 1))
+
+    if [ -z "$(fm_block "$file")" ]; then
+      finding "phase.frontmatter-missing.$(rel "$file")" error \
+        "$file has no YAML frontmatter" \
+        "add index/slug/phase/status per the plan-write skill (Step 4)"
+      continue
+    fi
+
+    local k
+    for k in id slug phase status; do
+      [ -n "$(fm_raw "$file" "$k")" ] || finding "phase.frontmatter-key.$(rel "$file").$k" error \
+        "$file frontmatter is missing '$k'" "add '$k:'"
+    done
+
+    [ "$(unquote "$(fm_raw "$file" id)")" = "$id" ] || finding "phase.id-mismatch.$(rel "$file")" error \
+      "$file frontmatter id does not match its plan's id '$id'" "set id: $id"
+
+    pnum="$(fm_raw "$file" phase)"
+    [ -z "$pnum" ] || [ "$pnum" = "$((10#$n))" ] || finding "phase.number-mismatch.$(rel "$file")" error \
+      "$file frontmatter says phase $pnum but the filename says $((10#$n))" \
+      "make them agree"
+
+    check_status_value "$file" "phase.status-invalid.$(rel "$file")"
+    check_no_status_section "$file"
+
+    # The README's ## Phases table mirrors each phase's status for readability;
+    # whoever flips one must flip both, so disagreement is a finding.
+    pstatus="$(fm_raw "$file" status)"
+    table_status="$(awk -F'|' -v want="$((10#$n))" '
+      /^\|[[:space:]]*[0-9]+[[:space:]]*\|/ {
+        num=$2; gsub(/[[:space:]]/,"",num)
+        if (num == want) { st=$5; gsub(/^[[:space:]]+|[[:space:]]+$/,"",st); print st; exit }
+      }' "$readme")"
+    if [ -n "$table_status" ] && [ -n "$pstatus" ] && [ "$table_status" != "$pstatus" ]; then
+      finding "phase.status-mirror.$name.$((10#$n))" warning \
+        "phase $((10#$n)) is '$pstatus' in $file but '$table_status' in the README's Phases table" \
+        "update the table row to '$pstatus'"
+    fi
+  done <<< "$phases"
+
+  # A plan cannot be Done while a phase it depends on is not.
+  if [ "$(fm_raw "$readme" status)" = "Done" ]; then
+    while IFS= read -r file; do
+      [ -n "$file" ] || continue
+      [ "$(fm_raw "$file" status)" = "Done" ] || finding "plan.done-with-open-phase.$name" error \
+        "$name is marked Done but $file is not" \
+        "finish the phase, or set the plan back to In Progress"
+    done <<< "$phases"
+  fi
+}
+
+# plan-learn's contract: a missing learnings.md and a clean run must look
+# different to whoever checks later, so a finished or attempted plan has one.
+check_learnings() {
+  local d="$1" name="$2"
+  local status; status="$(fm_raw "$d/README.md" status)"
+  [ ! -f "$d/learnings.md" ] || return 0
+  if [ "$status" = "Done" ]; then
+    finding "plan.learnings-missing.$name" warning \
+      "$name is Done but has no learnings.md" \
+      "run the plan-learn skill for $name"
+  elif [ -d "$d/logs" ] && [ -n "$(find "$d/logs" -type f -print -quit)" ]; then
+    finding "plan.learnings-missing.$name" info \
+      "$name has implementation logs but no learnings.md yet" \
+      "run the plan-learn skill for $name when the run ends"
+  fi
+}
+
+# --- index ------------------------------------------------------------------
+
+render_index() {
+  printf '# Plan index\n\n'
+  printf '<!-- Generated by scripts/ash.sh index from .ash/plans/*/README.md frontmatter. Do not hand-edit. -->\n\n'
+  printf '| Plan | ID | Status | Updated | Areas | Summary |\n'
+  printf '|------|----|--------|---------|-------|---------|\n'
+  # No sort key needed: plan ids start with a yymmdd date, so plan_dirs'
+  # plain name sort is already chronological.
+  local d name id slug rest readme
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+    printf '%s' "$name" | grep -qE '^[0-9]{6}-[a-z]{6}-' || continue
+    readme="$d/README.md"
+    [ -f "$readme" ] || continue
+    rest="${name#*-}"
+    id="${name%%-*}-${rest%%-*}"
+    slug="${rest#*-}"
+    printf '| [%s](plans/%s/README.md) | %s | %s | %s | %s | %s |\n' \
+      "$slug" "$name" "$id" \
+      "$(fm_raw "$readme" status)" "$(fm_raw "$readme" updated)" \
+      "$(delist "$(fm_raw "$readme" areas)")" "$(fm_raw "$readme" summary)"
+  done <<< "$(plan_dirs)"
+}
+
+# --- reporting --------------------------------------------------------------
+
+report() {
+  local command="$1" clean_msg="${2:-}" errors=0 warnings=0 infos=0 i
+  for i in $(find_indices); do
+    case "${FIND_SEV[$i]}" in
+      error) errors=$((errors + 1)) ;;
+      warning) warnings=$((warnings + 1)) ;;
+      *) infos=$((infos + 1)) ;;
+    esac
+  done
+  local total=$((errors + warnings + infos))
+
+  if [ "$JSON" -eq 1 ]; then
+    local status="ok"
+    [ "$total" -eq 0 ] || status="issues"
+    printf '{"schema_version":1,"command":"%s","status":"%s","items":[' "$command" "$status"
+    local sep=""
+    for i in $(find_indices); do
+      printf '%s{"id":"%s","severity":"%s","message":"%s","remediation":"%s"}' \
+        "$sep" "$(jesc "${FIND_ID[$i]}")" "${FIND_SEV[$i]}" \
+        "$(jesc "${FIND_MSG[$i]}")" "$(jesc "${FIND_REM[$i]}")"
+      sep=","
+    done
+    printf '],"errors":[],"summary":{"plans":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
+      "$(plan_dirs | grep -c . || true)" "$total" "$errors" "$warnings" "$infos"
+  else
+    for i in $(find_indices); do
+      printf '%-7s %s\n         %s\n         fix: %s\n' \
+        "${FIND_SEV[$i]}" "${FIND_ID[$i]}" "${FIND_MSG[$i]}" "${FIND_REM[$i]}" >&2
+    done
+    if [ "$total" -eq 0 ]; then
+      [ -z "$clean_msg" ] || printf 'ash: %s\n' "$clean_msg" >&2
+    else
+      printf 'ash: %s finding(s) — %s error, %s warning, %s info\n' \
+        "$total" "$errors" "$warnings" "$infos" >&2
+    fi
+  fi
+
+  [ "$total" -eq 0 ] || return 3
+}
+
+# --- main -------------------------------------------------------------------
+
+cmd="${1:-}"
+[ $# -eq 0 ] || shift
+check_only=0
+positional=""
+for arg in "$@"; do
+  case "$arg" in
+    --json) JSON=1 ;;
+    --check) check_only=1 ;;
+    -h|--help) usage ;;
+    --*) printf 'ash: unknown flag %s\n' "$arg" >&2; usage ;;
+    *)
+      [ -z "$positional" ] || { printf 'ash: unexpected argument %s\n' "$arg" >&2; usage; }
+      positional="$arg"
+      ;;
+  esac
+done
+
+case "$cmd" in
+  check)
+    check_corpus
+    # A stale index is a corpus problem like any other, so `check` catches it
+    # without the caller having to remember a second command.
+    if [ -f "$INDEX_FILE" ]; then
+      if ! render_index | diff -q - "$INDEX_FILE" >/dev/null 2>&1; then
+        finding "index.stale" warning \
+          "$INDEX_FILE does not match the plan frontmatter" \
+          "run: scripts/ash.sh index"
+      fi
+    else
+      finding "index.missing" warning "$INDEX_FILE does not exist" \
+        "run: scripts/ash.sh index"
+    fi
+    report check "corpus clean ($(plan_dirs | grep -c . || true) plans)"
+    ;;
+  index)
+    if [ "$check_only" -eq 1 ]; then
+      if [ -f "$INDEX_FILE" ] && render_index | diff -q - "$INDEX_FILE" >/dev/null 2>&1; then
+        report index "$INDEX_FILE is up to date"
+      else
+        finding "index.stale" warning \
+          "$INDEX_FILE does not match the plan frontmatter" \
+          "run: scripts/ash.sh index"
+        report index
+      fi
+    else
+      mkdir -p "$ASH_DIR"
+      render_index > "$INDEX_FILE.tmp"
+      mv "$INDEX_FILE.tmp" "$INDEX_FILE"
+      report index "wrote $INDEX_FILE"
+    fi
+    ;;
+  new-id)
+    # `plan-write` calls this rather than inventing an id, so the format has
+    # exactly one definition and it lives here.
+    mint_id "$positional"
+    ;;
+  ""|-h|--help) usage ;;
+  *) printf 'ash: unknown command %s\n' "$cmd" >&2; usage ;;
+esac
