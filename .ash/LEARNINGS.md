@@ -23,7 +23,7 @@ written, not asserted as an ASSUMPTION for implementation to discover.
 codebase, and getting one wrong blocks a whole phase on someone else's action.
 `gh api repos/<slug>/actions/permissions/workflow` would have shown up front
 that this repo cannot let Actions open a pull request.
-**Seen in:** 0001-release-please-binary-artifacts (ISSUE-001)
+**Seen in:** 0001-release-please-binary-artifacts (ISSUE-001, ISSUE-007)
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
 **Lesson:** When verification depends on landing on `main`, an admin action or
@@ -32,7 +32,7 @@ the working tree, and what can only be confirmed afterwards.
 **Why:** Otherwise a phase whose code is complete and committed still reads as
 unfinished, and the distinction between "not written" and "written, awaiting a
 merge" is lost exactly when someone picks the work back up.
-**Seen in:** 0001-release-please-binary-artifacts (ISSUE-005)
+**Seen in:** 0001-release-please-binary-artifacts (ISSUE-005, ISSUE-008)
 
 ### LESSON-004: A manifest value that reaches a shell is read twice
 **Lesson:** Manifest fields interpolated into shell commands (paths,
@@ -51,3 +51,14 @@ installed root-owned files into the user's own home.
 **Why:** It removes a Docker image pull from every release build and keeps the
 same command working on a developer machine as in CI.
 **Seen in:** 0001-release-please-binary-artifacts (ISSUE-004)
+
+### LESSON-006: Print another action's outputs on the first run that uses them
+**Lesson:** When a job branches on or consumes the outputs of a third-party
+action, add a step that dumps `toJSON(steps.<id>.outputs)`, and read both the
+prefixed and unprefixed spelling if the action has modes. Keep the step.
+**Why:** An output name that does not exist evaluates to the empty string, so
+the failure mode is a job that is silently skipped or runs with an empty
+argument — indistinguishable in the UI from "nothing to do". release-please's
+manifest mode emits `.--tag_name`, not `tag_name`, and the dump step is what
+turned that from a broken release into a three-line fix.
+**Seen in:** 0001-release-please-binary-artifacts (ISSUE-006)
