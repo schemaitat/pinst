@@ -32,7 +32,9 @@ the working tree, and what can only be confirmed afterwards.
 **Why:** Otherwise a phase whose code is complete and committed still reads as
 unfinished, and the distinction between "not written" and "written, awaiting a
 merge" is lost exactly when someone picks the work back up.
-**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005, ISSUE-008)
+**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005,
+ISSUE-008, and again as ISSUE-009 — the lesson was written during that plan
+and still not applied to its own phases, which is what let them go stale)
 
 ### LESSON-004: A manifest value that reaches a shell is read twice
 **Lesson:** Manifest fields interpolated into shell commands (paths,
@@ -87,4 +89,40 @@ a regenerated `INDEX.md` — was being violated by the corpus at the moment the
 skills were committed. An exit code is checkable by anyone, at any time,
 without having read the skill.
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
-plans predated the format their own skills mandate).
+plans predated the format their own skills mandate); again in
+260919-zeuuaj-release-please-binary-artifacts (ISSUE-009).
+
+### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
+**Lesson:** A checker that compares a record only with itself will pass on a
+record that describes a world which no longer exists. Whenever work is
+handed off to someone else — a merge, an admin action, a deploy — the last
+item in the handover is returning the outcome to the record, and something
+mechanical has to notice when that did not happen. Point the check at
+whatever local artifact is written *after* the fact; in this repo that is the
+append-only `.ash/CHANGELOG.log`, which is why `ash.sh check` now compares it
+against every phase's status.
+**Why:** The corpus reported `corpus clean (3 plans)` for a full day while it
+told its next reader to merge two already-merged PRs and to expect a version
+three releases old. Every invariant held; all of them were about the corpus
+agreeing with itself. The contradiction was sitting in plain sight — the
+changelog recorded phases 3 and 4 as shipped while the phase files said
+`In Progress` — and nothing was comparing the two halves. Staleness costs
+more than inconsistency, because a stale record still reads as authoritative.
+**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-009)
+
+### LESSON-010: Never run a state-deriving tool inside the window where the workflow hides that state
+**Lesson:** When a workflow deliberately keeps something provisional for part
+of its run — a draft release, an unpushed tag, an unmerged PR — no tool that
+derives its state from that same thing may run before it becomes real. Split
+the tool's invocation in two and gate the second half on the thing being
+published.
+**Why:** A draft GitHub release has no git tag, and a tagged release is how
+release-please knows what has already shipped. Doing both jobs in one
+invocation — create the draft, then compute the next release PR — made the
+second half re-read the history from the first commit and propose another
+version bump, whose merge created another draft, which blinded the next run.
+Two releases and an empty third release PR came out of that loop in fifteen
+minutes, each changelog a copy of the whole history. The tell is generic
+enough to reuse: a release PR listing entries older than the previous release
+has lost its boundary, whatever version it proposes.
+**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-010)
