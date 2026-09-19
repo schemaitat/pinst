@@ -1,5 +1,7 @@
 # pinst
 
+[![ci](https://github.com/schemaitat/pinst/actions/workflows/ci.yml/badge.svg)](https://github.com/schemaitat/pinst/actions/workflows/ci.yml)
+
 One self-contained binary that installs, updates, and doctors this machine's
 toolchain — and carries the dotfiles with it.
 
