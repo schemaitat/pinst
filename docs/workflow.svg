@@ -3,10 +3,10 @@
   <desc id="flow-desc">A fresh machine starts with bootstrap. From then on the loop is doctor to find what is off, plan to review the exact commands, apply to converge, then doctor again to verify. Doctor exits zero when the machine is in sync, and hands drifted configs back to a human because only they know which side should win.</desc>
 
   <defs>
-    <marker id="flow-arrow" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="flow-arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L8 4 L0 8 Z" fill="#6B6B6B"/>
     </marker>
-    <marker id="flow-arrow-soft" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="flow-arrow-soft" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L8 4 L0 8 Z" fill="#9A9A9A"/>
     </marker>
   </defs>
