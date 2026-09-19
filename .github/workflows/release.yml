@@ -7,10 +7,22 @@
 #      GitHub release.
 #   3. The artifacts job builds the binary and attaches it to that draft.
 #   4. Only then does the publish job un-draft it.
+#   5. Only after that does release-please get a second turn, to open the
+#      release PR for whatever comes next.
 #
 # The draft matters: both scripts/install.sh and pinst's own github_release
 # executor resolve /releases/latest/download/<asset>, and that URL must never
 # point at a release whose assets have not landed yet.
+#
+# Step 5 is a separate job for a reason. A draft release has no git tag, and a
+# tagged release is how release-please finds the boundary of what has already
+# shipped. Let one invocation both create the draft and open the next PR and
+# the second half runs blind: it logs "No latest release found for path: .",
+# re-reads the history from the first commit, and opens a release PR that
+# bumps the version again and re-lists every commit ever made. Merging that
+# cuts another release, which leaves another draft, which blinds the next run.
+# That loop is how v0.3.0, v0.4.0 and an empty 0.5.0 PR were all produced
+# within fifteen minutes, each changelog a copy of the whole history.
 #
 # The jobs are chained rather than split across workflows because a release
 # created with the default GITHUB_TOKEN does not trigger a `release` event —
@@ -53,11 +65,16 @@ jobs:
       # `include-component-in-tag` and returns the Cargo package name. The two
       # never match, so release-please logs a warning, creates nothing, and
       # still exits 0. That is how v0.2.0 merged without producing an artifact.
+      #
+      # skip-github-pull-request: this pass only tags and drafts. Opening the
+      # next release PR is the release-pr job below, after publish has turned
+      # the draft into something release-please can actually see.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
 
       # release-please names its outputs differently in manifest mode than in
       # single-package mode, and a mis-named output silently evaluates to ''
@@ -150,3 +167,28 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: gh release edit "$TAG" --draft=false --latest
+
+  # The other half of release-please: open or refresh the release PR for the
+  # commits that have landed since the last *published* release.
+  #
+  # always(), because the ordinary case is a push that releases nothing — then
+  # artifacts and publish are skipped and this job is the only one with work.
+  # The condition has to tell that apart from the case where a release was cut
+  # but publishing did not happen, because the artifacts job failed and the
+  # draft is still sitting there untagged. Running release-please then is the
+  # bug itself, so the job sits the run out; re-running the failed job
+  # publishes the release and this runs with the boundary visible again.
+  release-pr:
+    needs: [release-please, publish]
+    if: |
+      always()
+      && needs.release-please.result == 'success'
+      && (needs.release-please.outputs.release_created != 'true'
+          || needs.publish.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true

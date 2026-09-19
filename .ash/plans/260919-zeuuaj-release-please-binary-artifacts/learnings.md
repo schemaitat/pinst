@@ -3,7 +3,7 @@ id: 260919-zeuuaj
 slug: release-please-binary-artifacts
 updated: 2026-09-19
 areas: [ci, distribution, manifest]
-issue_count: 8
+issue_count: 10
 ---
 
 # Learnings — release automation with a published binary (260919-zeuuaj-release-please-binary-artifacts)
@@ -17,12 +17,12 @@ issue_count: 8
 All four phases' code landed in six commits: a CI gate, release-please config
 plus the release workflow, a `just dist` recipe with the artifact/publish
 jobs, and `install.sh` + a manifest self-entry that consume the released
-binary. Phases 1 and 2 are `Done` and verified on GitHub — CI ran green on
-PR #1, and merging it produced release PR #2 bumping to `0.2.0` with a
-generated `CHANGELOG.md`. Phases 3 and 4 stay `In Progress`: their code is
-merged or in review, but the artifact chain has never executed, because
-merging the release PR is gated by a permission the implementing agent does
-not hold.
+binary. All four phases are now `Done`. Phases 1 and 2 closed in the
+first run — CI ran green on PR #1, and merging it produced release PR #2
+bumping to `0.2.0`. Phases 3 and 4 closed a day later, in a second session
+(2026-09-19, below): the human-gated merges had landed, v0.4.0 was published
+with its tarball, checksum and attestation, and every outstanding criterion
+verified on the first attempt.
 
 Two lessons stand out. The plan's most prominent risk (ETXTBSY on
 self-update, ISSUE-002) did not reproduce when tested, while the two that
@@ -165,6 +165,76 @@ the end of the plan, with the exact commands written out. A run then ends
 with a short handover rather than stopping mid-phase, and the difference
 between "not written" and "written, awaiting a merge" stays legible.
 
+## Second session — 2026-09-19, closing the plan out
+
+These came from picking the plan back up a day after the handover in
+ISSUE-008 was executed. Basis: session context.
+
+### ISSUE-009: The handover was carried out and the corpus was never told
+**What happened:** ISSUE-008's handover block worked — a human merged PR #3
+and PR #2, the artifact chain ran, v0.3.0 and v0.4.0 shipped with their
+assets. Nobody came back to `.ash`. For the rest of the day the corpus said
+phases 3 and 4 were `In Progress`, `INDEX.md` advertised the plan as in
+flight, and `TODO.md` instructed the next reader to merge two long-merged
+PRs and to expect `pinst --version` to print `0.2.0` — three releases out of
+date. `scripts/ash.sh check` reported `corpus clean (3 plans)` throughout,
+because every one of its invariants compares the corpus only with itself.
+**Root cause:** Two gaps, one of them self-inflicted. The handover block was
+written as a list of instructions for someone else with no final step
+returning the outcome to the plan, so "done" had nowhere to land. And nothing
+could notice: the corpus already contained the contradiction — `CHANGELOG.log`
+carried `phase=3` and `phase=4` entries recording both as shipped while the
+phase files said `In Progress` — and no check compared the two. LESSON-003,
+written in this very file during the first session, says to split Done
+criteria that need a merge from those that do not; the phases were never
+restructured that way, so there was no local half that could close on its own
+and no post-merge half a returning reader could see at a glance.
+**Fix applied:** Every outstanding criterion re-verified against the live
+v0.4.0 — artifact and checksum, static linking, `install.sh` with no cargo on
+`PATH`, a corrupted download aborting, `pinst update pinst` replacing the
+running binary — which took minutes, a day after it became possible. Phases 3
+and 4 closed with a `## Confirmed after the merge` section making LESSON-003's
+split structural; `TODO.md` deleted after moving its one durable statement
+(TASK-015/016 dropped on purpose) into phase-04; closing entries appended to
+`CHANGELOG.log`. Three invariants added to `ash.sh check` —
+`phase.logged-not-done`, `plan.phases-all-done`, `plan.unlogged` — each
+negative-tested against a deliberately broken copy of the corpus.
+**Recommendation:** A handover block's last line is "come back and close the
+corpus", and the corpus has to be able to notice when that did not happen.
+Internal consistency is not freshness: a checker that only compares a record
+with itself passes happily on a record describing a world that no longer
+exists. Where a cheap local proxy for reality exists — here the append-only
+changelog, written after the fact — check against it.
+
+### ISSUE-010: A draft release is invisible to release-please, so publishing last became a release loop
+**What happened:** v0.3.0 and v0.4.0 were cut three minutes apart and an empty
+`0.5.0` release PR was opened on top of them, with no commits since v0.4.0.
+Every one of those changelogs re-listed the entire history back to the first
+commit, and `CHANGELOG.md` on `main` ended up with a single `0.4.0` section
+covering every commit ever made, the `0.3.0` section overwritten.
+**Root cause:** RISK-002's fix and release-please's state model are in direct
+conflict, and the workflow ran them in the same pass. A draft release has no
+git tag, and a tagged release is exactly how release-please finds the boundary
+of what has already shipped. One invocation of the action both creates the
+draft and computes the next release PR, so the second half ran blind: the run
+log says `No latest release found for path: .`, after which it re-reads the
+history from the first commit and proposes another bump. Merging that leaves
+another draft, which blinds the next run — a loop that sustains itself.
+**Fix applied:** The action is invoked twice. The job that tags and drafts
+carries `skip-github-pull-request: true`; a new `release-pr` job carries
+`skip-github-release: true` and runs only once `publish` has un-drafted the
+release, or when nothing was released at all. A failed `artifacts` job leaves
+the draft unpublished and the PR pass sits the run out rather than running
+blind. The atomicity guarantee for `/releases/latest/download/` is unchanged.
+**Recommendation:** Two things worth carrying. When a workflow deliberately
+keeps something in a provisional form — a draft release, an unpushed tag, an
+unmerged PR — no tool that derives its state from that thing may run inside
+the window where it is hidden. And the symptom is recognizable: a release PR
+whose changelog contains entries older than the previous release has lost the
+boundary, whatever version number it proposes. Both were diagnosable in one
+command — `npx release-please release-pr --dry-run --debug` prints the
+boundary it found, or says it found none.
+
 ## Deviations from the plan, for the record
 - **TASK-015/TASK-016 dropped** (ISSUE-002), on an explicit user decision.
 - **`cross` removed from the CI path** (ISSUE-004); `just dist` still uses it
@@ -176,3 +246,8 @@ between "not written" and "written, awaiting a merge" stays legible.
   wrong without it.
 - **An extra PR (#3)** for the release-please output spelling (ISSUE-006),
   rather than amending the merged workflow in place.
+- **The release workflow now runs release-please twice** (ISSUE-010), which
+  TASK-005 did not anticipate; the draft-then-publish design of TASK-013 is
+  what forced it.
+- **`ash.sh check` gained three staleness invariants** (ISSUE-009), outside
+  this plan's scope but caused by it.

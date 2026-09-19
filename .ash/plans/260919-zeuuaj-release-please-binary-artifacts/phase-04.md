@@ -2,7 +2,7 @@
 id: 260919-zeuuaj
 slug: release-please-binary-artifacts
 phase: 4
-status: In Progress
+status: Done
 ---
 
 # Phase 4 — Consume the artifact
@@ -56,7 +56,7 @@ path, and it should be revertable without touching how releases are cut.
       ordinary managed tool — `pinst list` shows its version, `pinst update`
       offers the upgrade — using the `github_release` upgrade strategy that
       already parses `tag_name` by stripping the leading `v`.
-- [ ] TASK-019: verify the manifest edit loads and self-update works:
+- [x] TASK-019: verify the manifest edit loads and self-update works:
       `pinst list --json` (exit 2 means the entry is invalid),
       `pinst plan pinst --json`, then `pinst update pinst` against the real
       release.
@@ -78,6 +78,11 @@ path, and it should be revertable without touching how releases are cut.
 ## Trade-offs & risks
 - RISK-004 is retired by TASK-015/TASK-016; until then, `pinst update pinst`
   must not be advertised.
+  Superseded: TASK-015 and TASK-016 stay unticked on purpose. RISK-004 did
+  not reproduce — GNU tar unlinks before extracting, so untarring over the
+  running binary never raises `ETXTBSY` — and the staged-extract change was
+  reverted rather than kept as insurance (learnings.md ISSUE-002, LESSON-001).
+  They are not forgotten work, and `pinst update pinst` is advertised.
 - RISK-005 is mitigated, not eliminated: a corrupt-but-downloadable asset
   still installs. The `.sha256` check is what catches that, so it is part of
   TASK-017 rather than an enhancement.
@@ -101,3 +106,17 @@ path, and it should be revertable without touching how releases are cut.
 - TEST-005: `pinst update pinst` replaces the running binary without
   `ETXTBSY`, `pinst --version` afterwards reports the new release, and the
   new unit test covers the staged-extract action sequence.
+
+## Confirmed after the merge
+Verified on 2026-09-19 against the published v0.4.0.
+- TEST-004 ✓ — `scripts/install.sh` run with no cargo on `PATH` and outside a
+  checkout downloaded, verified and installed `pinst 0.4.0`; a deliberately
+  corrupted download aborted with "checksum mismatch — refusing to install
+  it" and left the install dir empty; `pinst doctor --json` runs and exits 3
+  with findings, which is its contract.
+- TEST-005 ✓ / TASK-019 ✓ — `pinst update pinst -y` from the installed
+  binary replaced itself in place (0.1.0 → 0.4.0, exit 0, no `ETXTBSY`) and
+  `pinst --version` afterwards reported `pinst 0.4.0`. The clause about a new
+  unit test is void with TASK-015/TASK-016 dropped.
+  The stale binary also re-confirmed LESSON-004: 0.1.0 planned
+  `sudo tar -C $HOME/.local/bin`, the released 0.4.0 plans it without sudo.

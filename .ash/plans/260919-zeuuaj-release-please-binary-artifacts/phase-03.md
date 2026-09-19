@@ -2,7 +2,7 @@
 id: 260919-zeuuaj
 slug: release-please-binary-artifacts
 phase: 3
-status: In Progress
+status: Done
 ---
 
 # Phase 3 — Build and attach the binary
@@ -70,7 +70,7 @@ tag or the changelog.
       `install.sh` and pinst's `github_release` executor resolve, and it must
       never resolve to a release whose assets have not landed. Publishing
       last makes the release atomic from a consumer's point of view.
-- [ ] TASK-014: merge the release PR left open by TASK-007 and verify the
+- [x] TASK-014: merge the release PR left open by TASK-007 and verify the
       whole chain end to end against the real release.
       Why: the first release is the only cheap opportunity to test this while
       nothing depends on it yet.
@@ -101,3 +101,17 @@ tag or the changelog.
 - TEST-006: `just dist target=x86_64-unknown-linux-musl` on a developer
   machine produces an archive with the same name and the same layout as the
   one CI uploaded.
+  TEST-006 ✓ — exercised while implementing TASK-010: `just dist` builds the
+  musl tarball on a developer machine with plain cargo, which is why the
+  `cross` branch survives only for a foreign architecture.
+
+## Confirmed after the merge
+Per LESSON-003 these could not be proved in the working tree; they were
+verified on 2026-09-19 against the published v0.4.0.
+- TEST-003 ✓ — `pinst-x86_64-unknown-linux-musl.tar.gz` and its `.sha256`
+  download from `/releases/latest/download/`, `sha256sum -c` passes, `ldd`
+  reports "statically linked", `./pinst --version` prints `pinst 0.4.0`, and
+  `./pinst list --json` runs outside any checkout.
+- TASK-014 ✓ — the `artifacts` job was not skipped (the release run for #7
+  succeeded in 1m42s) and the release is published, un-drafted, with both
+  assets attached.

@@ -152,6 +152,23 @@ agreeing with the README's `## Phases` table; no plan marked `Done` over an
 unfinished phase; a `learnings.md` wherever one is owed; and `INDEX.md`
 matching the frontmatter it is generated from.
 
+Three of those invariants exist to catch a corpus that has gone *stale*
+rather than inconsistent — a plan that still advertises work the project
+finished days ago:
+
+- `plan.phases-all-done` — every phase is `Done` but the plan is not. The
+  last phase closing is the moment a plan is over; leaving it open is how
+  `INDEX.md` starts lying about what is in flight.
+- `phase.logged-not-done` — `CHANGELOG.log` records a phase as shipped while
+  the phase file still says `In Progress`. The log is append-only and written
+  after the fact, so it is the half that cannot be wrong retroactively.
+- `plan.unlogged` — a plan is `Done` with no `CHANGELOG.log` entry at all,
+  which is the close-out skipped halfway.
+
+They are the only checks in here that compare the corpus against a record of
+what actually shipped, and they exist because plan `260919-zeuuaj` sat `In
+Progress` for a day with its own changelog recording all four phases as done.
+
 Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
 `remediation` string, exactly like `pinst doctor` — match on the id, don't
 parse the prose.
