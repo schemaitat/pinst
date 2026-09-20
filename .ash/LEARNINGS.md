@@ -406,3 +406,24 @@ depended on it, which is the more common failure and the harder one to
 notice.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-009)
+
+### LESSON-026: A write to an external system is verified by reading it back
+**Lesson:** Never pipe a command through `tail` or `head` when its exit code
+is what you are checking — `$?` becomes the pipe's last stage and is almost
+always 0. Capture the output to a file, or test `${PIPESTATUS[0]}`. And for
+anything that writes to a system you do not control — a PR body, a release, a
+remote file — the exit code is not the check anyway: fetch it back and assert
+on what is actually there.
+**Why:** `gh pr edit --body-file` failed against this repo because it fetches
+project cards as part of its update and GitHub now rejects that query — a
+deprecation with nothing to do with the body being written. It reports the
+failure properly, exiting **1**. But the command was run as `... 2>&1 | tail
+-2`, so the exit code belonged to `tail`, the error line read like a routine
+deprecation notice, and the PR body silently stayed as it was. What caught it
+was fetching the body back and finding the new section absent; what would have
+caught it sooner was not discarding the status of the thing being checked. The
+same pipe habit was used on `just qc` throughout that session and got away
+with it only because its failures happen to print a recognisable line near the
+end.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-011)

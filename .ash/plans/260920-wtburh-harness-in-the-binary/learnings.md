@@ -3,7 +3,7 @@ id: 260920-wtburh
 slug: harness-in-the-binary
 updated: 2026-09-20
 areas: [cli, harness, agents]
-issue_count: 10
+issue_count: 11
 ---
 
 # Learnings — the harness moves into the binary (260920-wtburh-harness-in-the-binary)
@@ -12,6 +12,10 @@ issue_count: 10
 - Plan: `./README.md`
 - Basis: session context, cross-checked against this run's log
 - Logs consulted: `logs/20260920T114819Z-claude-opus-5.log`
+- ISSUE-009 through ISSUE-011 were recorded after the run log closed, during
+  the pull request for this plan (#13). They are here rather than in a
+  separate file because they are this plan's work reaching CI and review,
+  which is where a port stops being theoretical.
 
 ## Summary
 All five phases completed in one run: 41 tasks, 62 new tests, `scripts/ash.sh`
@@ -227,3 +231,27 @@ the ones you already remembered.
 **Skill:** none
 **Gap:** answered — a sweep is a one-off; the durable answer is LESSON-023,
 not a skill.
+
+### ISSUE-011: piping a command through `tail` threw away the exit code I needed
+**What happened:** `gh pr edit 13 --body-file ...` printed a GraphQL error
+about Projects (classic) being deprecated and did **not** update the body. I
+ran it as `gh pr edit ... 2>&1 | tail -2`, saw a line that looked like a
+deprecation notice, and moved on. The PR body was unchanged, which I only
+found by fetching it back and counting lines.
+**Root cause:** Two things, and the second is mine. `gh pr edit` fetches
+project cards as part of its update and fails the whole operation when that
+query is rejected — nothing to do with the body. But the reason I missed it
+is that `| tail -2` makes `$?` the exit status of `tail`, which is always 0.
+Measured afterwards, `gh pr edit` exits **1** here: it reports the failure
+correctly and I had discarded the report.
+**Fix applied:** `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F
+body=@<file>`, which does not touch projects, then read the body back and
+checked the new section was present.
+**Recommendation:** Never pipe a command into `tail`/`head` when its exit
+code is what you are checking — capture to a file and inspect both, or test
+`${PIPESTATUS[0]}`. I did this throughout the session on `just qc` too, and
+got away with it only because its failures happen to print a recognisable
+line in the last few. For any write to an external system, the check is not
+the exit code anyway: read the thing back.
+**Skill:** none
+**Gap:** answered — a shell habit, not a procedure a skill would encode.
