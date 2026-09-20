@@ -2,7 +2,7 @@
 id: 260920-juwako
 slug: mechanize-lesson-renumbering
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Point the finding at the remedy, and close LESSON-022's own gap
@@ -22,7 +22,7 @@ command exists, which is why they wait for phase 1 rather than landing
 alongside it.
 
 ## Steps
-- [ ] TASK-001: `src/core/harness/check.rs` — change `lesson.duplicate-id`'s
+- [x] TASK-001: `src/core/harness/check.rs` — change `lesson.duplicate-id`'s
       remediation string from "renumber the later one to the next free
       LESSON-NNN and grep the corpus for citations of it" to point at
       `pinst harness renumber-lesson --title "<its title>"`. Update the
@@ -30,7 +30,7 @@ alongside it.
       verbatim.
       Why: this is the finding a person actually reads when the collision
       happens; it is the highest-value place to name the new command.
-- [ ] TASK-002: `.ash/LEARNINGS.md` — extend LESSON-022's `Lesson`/`Why`
+- [x] TASK-002: `.ash/LEARNINGS.md` — extend LESSON-022's `Lesson`/`Why`
       text to record that the remedy, not only the detection, is mechanized
       now (naming `pinst harness renumber-lesson`). `**Status:**
       mechanized` and `**Check:** lesson.duplicate-id` stay as PR #17 left
@@ -39,7 +39,7 @@ alongside it.
       Why: depends on TASK-001 — the lesson should describe the remedy as
       it actually reads in the check's own remediation text, not a
       paraphrase written before it existed.
-- [ ] TASK-003: Run `just qc` and `just harness` (TEST-007) and confirm
+- [x] TASK-003: Run `just qc` and `just harness` (TEST-007) and confirm
       clean.
       Why: depends on TASK-002 — nothing to verify until both edits land.
 
@@ -47,7 +47,7 @@ alongside it.
 None beyond what phase 1 already carries.
 
 ## Done criteria
-- [ ] TEST-007: `pinst harness check`'s `lesson.duplicate-id` remediation
+- [x] TEST-007: `pinst harness check`'s `lesson.duplicate-id` remediation
       text names `renumber-lesson`; `the_real_corpus_is_clean` and
       `every_mechanized_lesson_resolves_to_a_literal_in_the_source` both
       still pass against the updated `.ash/LEARNINGS.md`; `just qc` is

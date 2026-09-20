@@ -375,8 +375,11 @@ know which that is.
 **Lesson:** Any identifier minted by "highest existing number plus one" in a
 file that parallel branches all append to will collide. `LESSON-NNN` in this
 file is the remaining instance. Until it is minted like a plan id, resolve a
-collision by letting whichever side reached `main` first keep its numbers, and
-grep the whole corpus for references to the ones you renumber.
+collision by letting whichever side reached `main` first keep its numbers and
+running `pinst harness renumber-lesson --title "<the other one's title>"` on
+the side that has to move: it renames the heading and rewrites the citations
+this branch itself added, which is the subset a grep of the corpus cannot
+safely decide for you.
 **Why:** The plan id carries six random letters for exactly this reason, and
 `.agents/README.md` argues it at length: two sessions in parallel worktrees
 compute the same "next" value, both use it, and the collision only surfaces at
@@ -386,7 +389,16 @@ from the explanation of why it was avoided. It surfaced the first time two
 plans were distilled on the same day: `260920-impoxu` and `260920-tensvp` both
 minted 015, 016 and 017 for different lessons. The renumbering is manual and
 silent, which is the part worth fixing — nothing checks that every lesson id is
-unique or that a reference to one still resolves.
+unique or that a reference to one still resolves. Both of those are closed
+now, the check first: detection was the easy half, and mechanizing the
+*remedy* took longer because a check only has to say two headings share a
+number, whereas a fix has to know *which* citations of that number mean the
+heading being moved. Reading them off `git diff` against the merge-base is what
+makes that answerable without a person — a branch can only have meant the lines
+it added — and it is why the command scopes its rewrite instead of replacing
+the literal everywhere. A blind replace would quietly repoint the citations
+that predate the collision at the wrong lesson, which is worse than leaving
+them alone, so what falls outside that scope is printed rather than guessed at.
 **Status:** mechanized
 **Check:** lesson.duplicate-id
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012); again the same day

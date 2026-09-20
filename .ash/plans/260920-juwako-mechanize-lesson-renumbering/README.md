@@ -1,7 +1,7 @@
 ---
 id: 260920-juwako
 slug: mechanize-lesson-renumbering
-status: Proposed
+status: Done
 created: 2026-09-20
 updated: 2026-09-20
 areas: [harness, agents, learnings]
@@ -95,7 +95,7 @@ so far.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | Build `pinst harness renumber-lesson` | [phase-01.md](phase-01.md) | Done |
-| 2 | Point the finding at the remedy, and close LESSON-022's own gap | [phase-02.md](phase-02.md) | Proposed |
+| 2 | Point the finding at the remedy, and close LESSON-022's own gap | [phase-02.md](phase-02.md) | Done |
 
 ## Affected Files
 - `src/core/harness/renumber.rs` (new) — locate-by-title, next-free-id,

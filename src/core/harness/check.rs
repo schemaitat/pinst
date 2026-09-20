@@ -458,8 +458,11 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
             findings.push(error(
                 format!("lesson.duplicate-id.{}", lesson.id),
                 format!("{shown} has more than one '### {}' heading", lesson.id),
-                "renumber the later one to the next free LESSON-NNN and grep \
-                 the corpus for citations of it",
+                format!(
+                    "run: pinst harness renumber-lesson --title \"{}\" (add --dry-run \
+                     first to see what it would move)",
+                    lesson.id
+                ),
             ));
         }
     }
@@ -974,6 +977,41 @@ mod tests {
         let fixture = Fixture::new();
         fixture.good_plan("260919-qwerty", "thing");
         assert!(run(&fixture.indexed()).is_empty());
+    }
+
+    /// The remedy is mechanized now too, so the finding has to name the
+    /// command rather than sending the reader back to grepping the corpus —
+    /// the half of LESSON-022 the detection alone left open.
+    #[test]
+    fn the_duplicate_id_remediation_names_the_command_that_fixes_it() {
+        let fixture = Fixture::new();
+        fixture.good_plan("260919-qwerty", "thing");
+        fixture.write(
+            ".ash/LEARNINGS.md",
+            "# Distilled learnings\n\n### LESSON-001: First\n**Status:** prose\n\n\
+             ### LESSON-001: Second\n**Status:** prose\n",
+        );
+
+        let findings = run(&fixture.indexed());
+        let duplicate = findings
+            .iter()
+            .find(|f| f.id == "lesson.duplicate-id.LESSON-001")
+            .expect("the collision is reported");
+
+        assert!(
+            duplicate
+                .remediation
+                .contains("pinst harness renumber-lesson"),
+            "{}",
+            duplicate.remediation
+        );
+        // ...naming the colliding id, so the reader does not have to work out
+        // which lesson the command is about.
+        assert!(
+            duplicate.remediation.contains("LESSON-001"),
+            "{}",
+            duplicate.remediation
+        );
     }
 
     /// The staleness checks are the ones that compare the corpus against a
