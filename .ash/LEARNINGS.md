@@ -185,7 +185,11 @@ that parses, a plan that carries its ADR sections, a run log with a matching
 none of them changes because you read it.
 **Status:** mechanized
 **Check:** skill.no-contract
-**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005)
+**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005); again in
+260920-impoxu-daily-distil-action (ISSUE-010), which found the missing half:
+the artifact has to be *attributable*. `create-pr` was graded on every merged
+pull request, three of which release-please had opened, so a skill running at
+7/8 reported 7/11 and looked like it was decaying.
 
 ### LESSON-013: Make the corpus the clock, not the calendar
 **Lesson:** When work needs doing "regularly", find the event in the record
@@ -248,3 +252,21 @@ visible in review, and misses the one that is not.
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-003, and again as
 ISSUE-008 two hours later, in the second place in the same plan that reads a
 diff — the lesson was already written when the repeat was introduced)
+
+### LESSON-017: Automating a step inherits every constraint the manual step had
+**Lesson:** Before writing automation for something a skill already covers,
+read that skill and satisfy it as written. Editing a workflow file does not
+feel like doing the thing the workflow does, and that is exactly when its
+rules get skipped.
+**Why:** The distillation workflow titled its pull request
+`[260920-impoxu] Distil the corpus`, following `plan-write`'s rule for PR
+titles. `create-pr` overrides that rule and explains why: this repo is
+squash-only, so a squashed PR title becomes the commit subject on `main`, and
+release-please reads those. An unparseable title produces no version bump and
+no changelog entry — and nothing fails. No red job, no error, just a repo that
+quietly stops releasing. The bug was caught only because an unrelated task
+required reading `create-pr` an hour later. Two skills contradicting each other
+is survivable; the one that owns the artifact wins, and the automation has to
+know which that is.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-009)

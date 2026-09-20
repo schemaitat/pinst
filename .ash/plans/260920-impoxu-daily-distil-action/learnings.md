@@ -3,7 +3,7 @@ id: 260920-impoxu
 slug: daily-distil-action
 updated: 2026-09-20
 areas: [ci, harness, agents]
-issue_count: 8
+issue_count: 11
 ---
 
 # Learnings — a daily, unattended distillation pass (260920-impoxu-daily-distil-action)
@@ -29,6 +29,11 @@ lints clean but is knowingly unverified: its first task was to settle
 ASSUMPTION-001 with a live run, and there is still no credential to run one
 with. The phase stays `In Progress` with that one task unticked rather than
 being called Done on the strength of a workflow nobody has executed.
+
+Phase 3 then landed complete, and the most valuable thing in it was a side
+effect: reading `create-pr`'s own instructions in order to change its
+measurement caught a release-breaking bug in the workflow written an hour
+earlier.
 
 ## Issues
 
@@ -197,3 +202,66 @@ remembering it.
 that produced the lesson.
 **Gap:** answered — not skill-shaped. A `git diff` default is a domain fact;
 LESSON-016 carries it and a check would carry it better.
+
+### ISSUE-009: automating a step inherits every constraint the manual one had
+**What happened:** the workflow's pull request title was
+`[260920-impoxu] Distil the corpus (<date>)`. This repo is squash-only
+(`gh repo view` confirms `mergeCommitAllowed:false`,
+`rebaseMergeAllowed:false`), so a squashed title becomes the commit subject on
+`main`, which release-please parses. That title produces no version bump and no
+changelog entry, silently.
+**Root cause:** the bracket prefix comes from `plan-write`, which mandates it
+for pull request titles. `create-pr` overrides it and says exactly why — and
+the workflow was written without reading `create-pr`, because writing YAML did
+not feel like opening a pull request. The constraint belongs to the artifact,
+not to who produces it.
+**Fix applied:** the title is `chore(harness): distil the corpus (<date>)`,
+the plan id moved to the body, and the reasoning sits in a comment on the line
+so the next person to edit it sees the trap.
+**Recommendation:** before automating a step a skill already owns, read that
+skill and satisfy it as written. The tell is the shape of the failure: this one
+would not have failed anything — no red job, no error — it would just have
+quietly stopped releasing.
+**Skill:** create-pr
+**Gap:** answered — a skill does own this work; `create-pr` already carried the
+rule, and the miss was not reading it.
+
+### ISSUE-010: the conformance metric was already measuring the wrong population
+**What happened:** narrowing `create-pr`'s evidence to exclude the robot
+revealed that release-please's three merged pull requests had been in the
+denominator all along. The rate was reported as 7/11, 63%; the eight human
+pull requests are 7/8, 87%.
+**Root cause:** the evidence command counted every merged pull request, on the
+assumption that every one came from this skill. Two robots open pull requests
+here, and neither is this skill being used.
+**Fix applied:** both halves of the evidence filter `author.login !=
+"app/github-actions"`, with a section in the skill explaining why the exclusion
+is of an author rather than of an inconvenient result.
+**Recommendation:** when a skill is graded by an artifact that something else
+also produces, name the population in the evidence command on the day it is
+written. A rate that silently counts a bot's output reads as a regression in
+the skill, and the natural response — pressure on whoever is "not following"
+it — is aimed at nobody.
+**Skill:** none
+**Distilled:** merged into LESSON-012 — grading by artifact is right, and this
+is the missing half of it: the artifact has to be attributable.
+**Gap:** answered — not skill-shaped. Which authors share an artifact is a
+property of this repo's automation, learned by adding to it.
+
+### ISSUE-011: `plan-implement` has no event for being unblocked inside one session
+**What happened:** this run logged `run_end` with `status: blocked` when
+Phase 2 stalled, and then continued — the user unblocked it in the same
+session — so Phase 3's events sit after a `run_end` in an append-only log.
+**Root cause:** the event vocabulary assumes a run maps to a session. Blocked
+and then resumed twenty minutes later by a conversation is neither a new run
+nor a continuation the format can express.
+**Fix applied:** an `issue` event explains the out-of-order `run_end` in place,
+rather than rewriting the log to look tidy.
+**Recommendation:** either log `run_end` only when the session ends, or add a
+`run_resume` event. The first is simpler and loses nothing — `blocked` is
+already recoverable from the last `issue`.
+**Skill:** plan-implement
+**Distilled:** declined — a small format gap in one skill, fixable in that
+skill rather than worth a lesson for every future plan to read.
+**Gap:** answered — `plan-implement` owns this; its event table is one line
+short, which is a change to that skill, not a missing skill.
