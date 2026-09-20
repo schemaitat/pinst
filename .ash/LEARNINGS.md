@@ -25,7 +25,11 @@ codebase, and getting one wrong blocks a whole phase on someone else's action.
 `gh api repos/<slug>/actions/permissions/workflow` would have shown up front
 that this repo cannot let Actions open a pull request.
 **Status:** prose
-**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-001, ISSUE-007)
+**Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-001,
+ISSUE-007); again in 260919-vldfei-self-improving-agent-harness (ISSUE-002,
+ISSUE-003), where the unchecked assumptions were about the repo's own scripts
+and its own corpus — closer to hand than GitHub, and for that reason trusted
+without a query.
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
 **Lesson:** When verification depends on landing on `main`, an admin action or
@@ -99,7 +103,10 @@ without having read the skill.
 **Status:** prose
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
 plans predated the format their own skills mandate); again in
-260919-zeuuaj-release-please-binary-artifacts (ISSUE-009).
+260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); and again in
+260919-vldfei-self-improving-agent-harness (ISSUE-004), where six SKILL.md
+files had never been valid YAML because only hand-written parsers had ever
+read them.
 
 ### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
 **Lesson:** A checker that compares a record only with itself will pass on a
@@ -138,3 +145,63 @@ enough to reuse: a release PR listing entries older than the previous release
 has lost its boundary, whatever version it proposes.
 **Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-010)
+
+### LESSON-011: A check that fires on a normal state is a check that gets switched off
+**Lesson:** Before adding a finding, name the states in which it fires and
+confirm none of them is a state the workflow *requires*. If the thing it
+reports is a mandatory intermediate step, gate it on the terminal event that
+ends that step rather than on the absence of the final artifact.
+**Why:** `plan.learnings-missing` fires from the moment a run writes its first
+log line, and `learnings.md` cannot exist until the run ends — so `just qc` is
+red for the entire duration of every implementation run, by design, on every
+plan. A gate that is always red during work is a gate people learn to skip,
+and then it is not a gate. The fix is the same shape as the cure: compare
+against the record written after the fact, here a `run_end` event in the log.
+**Status:** prose
+**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-001)
+
+### LESSON-012: Grade a tool by the artifact it leaves, not by whether it ran
+**Lesson:** When measuring whether some piece of automation is working, make
+it declare the artifact it is supposed to produce and check that artifact.
+Invocation counts are a second opinion at best: they are vendor-specific,
+they under-count every alternative entry point, and they move when you look
+at them.
+**Why:** Counting invocations would have graded the busiest lifecycle skill in
+this repo as dead — `plan-implement` recorded zero, from either record shape,
+while having written a complete run log. Slash commands log differently from
+tool calls, so `/cc` and `/pr` were invisible too. And the count is reflexive:
+implementing the measurement bumped `plan-implement` from 0 to 1. A commit
+that parses, a plan that carries its ADR sections, a run log with a matching
+`run_start` and `run_end` — these are durable, in-repo, vendor-neutral, and
+none of them changes because you read it.
+**Status:** mechanized
+**Check:** skill.no-contract
+**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005)
+
+### LESSON-013: Make the corpus the clock, not the calendar
+**Lesson:** When work needs doing "regularly", find the event in the record
+that should trigger it and fail on that, instead of scheduling it. A finding
+that fires when there is something to do beats a job that fires on Tuesdays.
+**Why:** A wall-clock cadence fires into silence on a quiet week and misses
+four plans on a busy one, and it lives in one person's account rather than in
+the repo, so a fresh clone does not inherit it. `learnings.untriaged` fires
+exactly when a plan has recorded something nobody has decided about, stays
+until someone decides, and everyone who runs `qc` sees it. The trigger is a
+plan closing, which is the thing that actually creates the work.
+**Status:** mechanized
+**Check:** learnings.untriaged
+**Seen in:** 260919-vldfei-self-improving-agent-harness
+
+### LESSON-014: A report that asks a question needs somewhere to record the answer
+**Lesson:** Add the "asked and answered" mechanism in the same change that
+adds the question. A recurring report with no way to retire an item will keep
+raising it after it has been settled.
+**Why:** The gap section asks whether a skill is missing for work no skill
+owns. The first review answered it — no, those four issues are domain
+surprises — and there was nowhere to put the answer, so it recomputes and asks
+again every time. Issues got three outcomes including an explicit decline;
+gap groups got none, and the omission reproduced, inside this plan's own last
+phase, exactly the decay this plan was written to prevent: a signal that is
+correct, repeated, and eventually ignored.
+**Status:** prose
+**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-006)
