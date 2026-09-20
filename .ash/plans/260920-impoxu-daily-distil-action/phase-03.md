@@ -2,7 +2,7 @@
 id: 260920-impoxu
 slug: daily-distil-action
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — Teach the harness about its own robot
@@ -27,38 +27,38 @@ workflow exists would be documenting a thing that is not there; doing it after
 Phase 2 is documenting exactly what shipped.
 
 ## Steps
-- [ ] TASK-019: `.agents/skills/create-pr/SKILL.md` — narrow the `evidence:`
+- [x] TASK-019: `.agents/skills/create-pr/SKILL.md` — narrow the `evidence:`
       command's window to exclude the robot author (`gh pr list --author` /
       a `select(.author.login != ...)` filter on the JSON it already asks for),
       and add a one-line comment in the skill body saying why the exclusion
       exists. Why: an unexplained filter in a measurement is indistinguishable
       from gaming it; the reason belongs next to it.
-- [ ] TASK-020: `scripts/ash.sh` — confirm the narrowed evidence command still
+- [x] TASK-020: `scripts/ash.sh` — confirm the narrowed evidence command still
       prints two integers and that `skills` reports `create-pr` at its true
       rate; adjust only if the new command needs a variable the runner does not
       set. Why: `skill.evidence-failed.create-pr` is a warning, not an error,
       so a broken evidence command degrades silently into a dash in the table.
-- [ ] TASK-021: `.claude/commands/distil.md` — add a short `## Unattended mode`
+- [x] TASK-021: `.claude/commands/distil.md` — add a short `## Unattended mode`
       section: the run may edit existing skills but never create one; proposals
       go in the pull request body; nothing outside `.ash/` and
       `.agents/skills/` may be touched; `LEARNINGS.md` is append-only. Why: the
       workflow passes `/distil` verbatim (CON-001), so this file *is* the
       robot's instruction set — the rules have to be in it, not in the YAML
       that calls it.
-- [ ] TASK-022: `.agents/skills/plan-learnings/SKILL.md` — extend Step 6's
+- [x] TASK-022: `.agents/skills/plan-learnings/SKILL.md` — extend Step 6's
       point 4 ("Propose, do not write") with the unattended destination: when
       there is no user in the loop, a proposal is a section in the pull request
       body, and the matching `**Gap:** answered — ...` line is still written on
       the issue. Why: LESSON-014 — the answer needs somewhere to live, or the
       gap section re-asks forever, and an unattended run has no conversation to
       answer into.
-- [ ] TASK-023: `.agents/README.md` — add the routing row ("distillation, on a
+- [x] TASK-023: `.agents/README.md` — add the routing row ("distillation, on a
       schedule" → `.github/workflows/distil.yml`) and one line under the
       lifecycle diagram naming the workflow as the unattended entry point to
       the same Step 6 pass. Why: the README is where someone looks to find out
       what runs this repo's harness; an entry point that only exists in
       `.github/` is one a reader has no reason to look for.
-- [ ] TASK-024: `just wire && just harness` — re-project the edited skills and
+- [x] TASK-024: `just wire && just harness` — re-project the edited skills and
       confirm the corpus is clean. Why: LESSON-007 — a skill edited in
       `.agents/` and not wired never loads, and the ironic failure mode here is
       that the robot would read the stale copy.

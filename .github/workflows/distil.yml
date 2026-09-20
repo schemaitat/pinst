@@ -233,7 +233,12 @@ jobs:
           gh label create needs-human-judgement \
             --description "Written unattended; the reasoning needs a human before merge" \
             --color d876e3 2>/dev/null || true
-          title="[260920-impoxu] Distil the corpus ($(date -u +%Y-%m-%d))"
+          # A Conventional Commit, and deliberately not "[260920-impoxu] ...".
+          # Squash merge is on for this repo, so under a squash the PR title
+          # becomes the commit subject on main, and release-please reads those.
+          # A title it cannot parse ships the work with no version bump and no
+          # changelog entry, silently. The plan id goes in the body.
+          title="chore(harness): distil the corpus ($(date -u +%Y-%m-%d))"
           if gh pr view harness/distil --json number >/dev/null 2>&1; then
             gh pr edit harness/distil --title "$title" --body-file pr-body.md
           else

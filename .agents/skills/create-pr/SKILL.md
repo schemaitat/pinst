@@ -2,7 +2,7 @@
 name: create-pr
 description: Open a pull request for the current branch, building its title and body from the plan the work was authorized by. Use whenever the user asks to open, create, raise, or put up a PR or pull request, to "ship this branch", or to get work reviewed — even if they don't name the skill. Also use it to fix up a PR description that has drifted from what the branch actually does.
 produces: 'every merged pull request carries the Plan: footer of the plan it implements'
-evidence: 'echo $(gh pr list --state merged --limit ${ASH_WINDOW:-100} --json body -q ''[.[]|select(.body|contains("Plan:"))]|length'') $(gh pr list --state merged --limit ${ASH_WINDOW:-100} --json number -q ''length'')'
+evidence: 'echo $(gh pr list --state merged --limit ${ASH_WINDOW:-100} --json body,author -q ''[.[]|select(.author.login!="app/github-actions")|select(.body|contains("Plan:"))]|length'') $(gh pr list --state merged --limit ${ASH_WINDOW:-100} --json author -q ''[.[]|select(.author.login!="app/github-actions")]|length'')'
 ---
 
 # Create PR
@@ -167,3 +167,22 @@ justfile or the workflow, not a flaky test to re-run.
 Opening the PR does not finish the plan. If this branch completed the plan's
 last phase and `plan-learnings` has not run yet, run it now — the reasoning is
 still in context, and it will not be after review.
+
+## What the conformance rate counts
+
+The `evidence:` line above excludes pull requests authored by
+`app/github-actions`, and the exclusion is narrow on purpose: it removes
+another author from the population, never an inconvenient result.
+
+Two robots open pull requests against this repo — release-please, and the
+unattended distillation in `.github/workflows/distil.yml`. Neither is this
+skill being used, so counting them measures a bot's discipline rather than
+whether a human carried the plan id into the PR they opened. It was already
+distorting the number before the second robot existed: with release-please's
+three merged pull requests in the denominator the rate read 7/11, 63%; the
+eight human ones are 7/8, 87%. A skill that was working looked like one that
+was not.
+
+The distillation pull request does carry a `Plan:` footer anyway — it
+implements `260920-impoxu-daily-distil-action` — so if the filter is ever
+dropped, the number moves for a defensible reason rather than collapsing.
