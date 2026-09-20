@@ -3,7 +3,7 @@ id: 260920-juwako
 slug: mechanize-lesson-renumbering
 updated: 2026-09-20
 areas: [harness, agents, learnings]
-issue_count: 4
+issue_count: 5
 ---
 
 # Learnings — mechanize the remedy for a colliding LESSON-NNN (260920-juwako-mechanize-lesson-renumbering)
@@ -26,6 +26,12 @@ to. Neither changed what the plan delivers, which is why implementation
 continued rather than going back to `plan-write`; the headline lesson is
 that a plan naming a *mechanism* buys precision at the cost of being the
 part most likely to be wrong.
+
+A fifth issue was found afterwards, on review, and is the most serious of
+the five: the remediation phase 2 added named the colliding *id* where the
+command expects a *title*, so following it failed every time — and the test
+written for it passed, because it matched the message's wording instead of
+running what the message said. `just qc` was green throughout.
 
 ## Issues
 
@@ -111,4 +117,35 @@ anything the repo keeps.
 **Gap:** answered — not skill-shaped. No instruction prevents a positional
 shell argument from shifting; the log format is already specified, and the
 fix is to write the line rather than to write a wrapper.
+**Skill:** none
+
+### ISSUE-005: The remediation named the one string the command cannot match
+**What happened:** `lesson.duplicate-id` remediated with `pinst harness
+renumber-lesson --title "LESSON-001"`. `renumber::locate` matches against a
+heading's *title* — everything after the id — which can never contain the id
+itself, so the suggested command failed with "no lesson heading's title
+contains 'lesson-001'" every single time it was followed. Caught by a human
+on review, not by `just qc`.
+**Root cause:** two causes, and the second is the one worth keeping. The
+finding had only the `Lesson` model to hand, which carried an `id` and no
+title, so the id is what it printed — the data available shaped the message
+rather than the consumer's requirement. And the test written alongside it
+asserted that the remediation string *contained* `pinst harness
+renumber-lesson` and `LESSON-001`; both were true of a command that did not
+work, so the test was green standing exactly where the bug was.
+**Fix applied:** `corpus::Lesson` gained a `title`, parsed by a single
+`split_lesson_heading` shared with `renumber::headings` so the two cannot
+drift about where an id ends. The finding now names every colliding heading
+by title and offers one command per heading, one finding per colliding id
+rather than one per extra heading. `locate` prefers an exact title match over
+a substring one, so a complete pasted title cannot come back ambiguous just
+because it is a prefix of a longer lesson. The test now parses the `--title`
+values back out of the remediation and runs `locate` with each — verified to
+fail against the old remediation with the reported error — and a corpus-wide
+test asserts every real lesson is reachable by its own title.
+**Recommendation:** execute the command a message suggests. Promoted as
+LESSON-034.
+**Gap:** answered — not skill-shaped. No instruction would have caught a
+remediation naming the wrong field; the test that runs the suggested command
+is the enforcement, and it now exists.
 **Skill:** none

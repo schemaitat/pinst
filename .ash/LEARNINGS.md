@@ -593,3 +593,21 @@ whose entries need a paragraph of justification is a filter whose second
 caller needs its own.
 **Status:** prose
 **Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-002)
+
+### LESSON-034: Test a suggested command by running it, not by matching its text
+**Lesson:** When a check, error or doc emits a command for someone to run,
+the test for it must execute that exact string — or at minimum feed it to the
+function that has to consume it. Asserting that the message *contains* the
+right words proves only that the words are there.
+**Why:** `lesson.duplicate-id` told the reader to run `renumber-lesson
+--title "<the shared id>"`, but `--title` matches a heading's title, which is
+everything *after* the id and so can never contain it. The command failed
+every time it was followed. The test asserted the remediation contained
+"pinst harness renumber-lesson" and "LESSON-001", and both were true of a
+string that did not work — a green test standing exactly where the bug was.
+The fix is cheap and the coverage is real: parse the `--title` value back out
+of the remediation and pass it to `locate`, which turns "the words are right"
+into "the reader's next command succeeds".
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-005), found on
+review rather than by `just qc`

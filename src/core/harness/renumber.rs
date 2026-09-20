@@ -56,19 +56,10 @@ pub fn headings(text: &str) -> Vec<Heading> {
     text.lines()
         .enumerate()
         .filter_map(|(index, line)| {
-            let rest = line.strip_prefix("### ")?.strip_prefix(PREFIX)?;
-            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-            if digits.is_empty() {
-                return None;
-            }
-            let title = rest[digits.len()..]
-                .trim_start()
-                .trim_start_matches(':')
-                .trim()
-                .to_string();
+            let (id, title) = super::corpus::split_lesson_heading(line)?;
             Some(Heading {
-                id: format!("{PREFIX}{digits}"),
-                number: digits.parse().ok()?,
+                number: id.strip_prefix(PREFIX)?.parse().ok()?,
+                id,
                 title,
                 line: index + 1,
             })
@@ -85,10 +76,31 @@ const PREFIX: &str = "LESSON-";
 /// wrong lesson" is the one failure mode that would be worse than not running.
 pub fn locate<'h>(headings: &'h [Heading], needle: &str) -> Result<&'h Heading> {
     let needle = needle.to_lowercase();
-    let matched: Vec<&Heading> = headings
-        .iter()
-        .filter(|heading| heading.title.to_lowercase().contains(&needle))
-        .collect();
+    let matching = |exact: bool| -> Vec<&Heading> {
+        headings
+            .iter()
+            .filter(|heading| {
+                let title = heading.title.to_lowercase();
+                if exact {
+                    title == needle
+                } else {
+                    title.contains(&needle)
+                }
+            })
+            .collect()
+    };
+
+    // A whole title beats a substring of a longer one. `lesson.duplicate-id`
+    // hands the caller a complete title to paste, and without this a title
+    // that happens to be a prefix of another lesson's would come back
+    // ambiguous — the remediation refusing to run for a reason the reader
+    // cannot see from the command they were given.
+    let exact = matching(true);
+    let matched = if exact.len() == 1 {
+        exact
+    } else {
+        matching(false)
+    };
 
     match matched.as_slice() {
         [one] => Ok(one),
