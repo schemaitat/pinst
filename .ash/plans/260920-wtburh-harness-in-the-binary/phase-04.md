@@ -2,7 +2,7 @@
 id: 260920-wtburh
 slug: harness-in-the-binary
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — `pinst harness skills` — the graded report
@@ -22,48 +22,48 @@ Landing them together would invite exactly one shared code path with a flag,
 which is how the two get confused.
 
 ## Steps
-- [ ] TASK-023: `src/core/harness/evidence.rs` (FILE-009) — run an `evidence:`
+- [x] TASK-023: `src/core/harness/evidence.rs` (FILE-009) — run an `evidence:`
       one-liner as `sh -c`, with `ASH_WINDOW` set to the bare number and
       `ASH_RANGE` to `-n <n>` or empty, a 30-second timeout, stderr
       discarded, and a result accepted only if stdout is exactly two integers.
       Why: anything else must report `unmeasured`, never `0` — a zero meaning
       "offline" is worse than a gap that admits it.
-- [ ] TASK-024: `src/cli/mod.rs` and `src/core/harness/evidence.rs` — a
+- [x] TASK-024: `src/cli/mod.rs` and `src/core/harness/evidence.rs` — a
       `--no-evidence` flag that skips execution and reports every rate as
       `unmeasured`. Why: SEC-001 — this is the one place the binary runs shell
       it took out of a file in the repo being checked, and a trusted installed
       binary is a wider blast radius than a script you had to clone. Document
       it in the module header, not only in `--help`.
-- [ ] TASK-025: `src/core/harness/skills.rs` (FILE-008) — read each
+- [x] TASK-025: `src/core/harness/skills.rs` (FILE-008) — read each
       `.agents/skills/*/SKILL.md` with phase 1's frontmatter parser, taking
       `produces`, `evidence` and `kind`, and note whether `.claude/skills/
       <name>` exists. Why: the single-quoted YAML scalar with doubled `''`
       escapes is exactly what the strict parser was specified for in TASK-003
       — this is its second consumer and the one that justifies the quoting
       rules.
-- [ ] TASK-026: `src/core/harness/skills.rs` — grade each skill: run
+- [x] TASK-026: `src/core/harness/skills.rs` — grade each skill: run
       `evidence:` twice (windowed at 20, then all-time), compute both rates,
       join the `**Skill:**` tally from every `learnings.md`, and emit
       `skill.no-contract.<name>` and `skill.evidence-failed.<name>` plus
       `skills.missing` — the only findings this action may produce.
-- [ ] TASK-027: `src/core/harness/skills.rs` — the gap rows: issues attributed
+- [x] TASK-027: `src/core/harness/skills.rs` — the gap rows: issues attributed
       to `none` and not marked `**Gap:** answered`, grouped by each area their
       plan declares, ordered by count. Why: one issue counts once per area, so
       an area accumulates everything unowned that touched it; that is the
       useful reading and the duplication is intentional.
-- [ ] TASK-028: `src/core/harness/skills.rs` — the agenda: untriaged issue
+- [x] TASK-028: `src/core/harness/skills.rs` — the agenda: untriaged issue
       count, skills whose windowed rate is below their all-time rate, the
       largest gap group, and `prose` lessons seen in more than one plan that
       are not marked `**Mechanize:** declined`. Close with `review.agenda`
       at `info` severity when the agenda is non-empty.
-- [ ] TASK-029: `src/core/harness/transcripts.rs` (FILE-010) — port the
+- [x] TASK-029: `src/core/harness/transcripts.rs` (FILE-010) — port the
       embedded `python3` scanner to `serde_json`: walk `<dir>/*/*.jsonl`,
       count `Skill` tool calls whose `input.skill` names a known skill, and
       `<command-name>` markers mapped to a skill through
       `.claude/commands/*.md`. Why: DEP-002 drops — `python3` stops being a
       dependency of the harness. Two record shapes, because counting only the
       tool call misses `/cc` and `/pr` entirely.
-- [ ] TASK-030: `src/core/harness/transcripts.rs` — make every failure in this
+- [x] TASK-030: `src/core/harness/transcripts.rs` — make every failure in this
       path non-fatal and emit derived counts only: an unreadable directory, a
       malformed line or an unknown schema degrades to `unmeasured` via
       `skills.transcripts-unreadable` and never changes the exit code, and a
@@ -71,7 +71,7 @@ which is how the two get confused.
       `.agents/skills`. Why: SEC-002, verbatim from `260919-vldfei` — nothing
       typed into a conversation may reach stdout, and nothing here writes into
       `.ash/`.
-- [ ] TASK-031: `src/cli/commands/harness.rs` and `src/cli/commands/schema.rs`
+- [x] TASK-031: `src/cli/commands/harness.rs` and `src/cli/commands/schema.rs`
       (FILE-015) — the `Skills` action with `--transcripts <dir>`, the human
       table, the `## Gaps` and `## Agenda` sections, an envelope carrying
       `skills` and `gaps` arrays and an `agenda_items` count, and a

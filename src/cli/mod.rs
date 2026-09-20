@@ -239,6 +239,8 @@ pub enum HarnessAction {
     Check,
     /// Regenerate .ash/INDEX.md from the plan frontmatter.
     Index(HarnessIndexArgs),
+    /// Grade each skill against the contract it declares.
+    Skills(HarnessSkillsArgs),
     /// Mint a plan id: <yymmdd>-<six letters>.
     NewId(HarnessNewIdArgs),
 }
@@ -248,6 +250,20 @@ pub struct HarnessIndexArgs {
     /// Report whether the index is up to date instead of rewriting it.
     #[arg(long)]
     pub check: bool,
+}
+
+/// The graded report. Deliberately not part of `just qc`: these are rates,
+/// and a rate that got interesting would fail the build.
+#[derive(Debug, Args, Clone)]
+pub struct HarnessSkillsArgs {
+    /// Skip the `evidence:` commands instead of running them. They are shell
+    /// taken from the repo being checked; see `pinst harness skills --help`.
+    #[arg(long)]
+    pub no_evidence: bool,
+    /// Also count invocations from a runtime's session transcripts. Opt-in,
+    /// and never depended on: it corroborates, it does not decide.
+    #[arg(long, value_name = "DIR")]
+    pub transcripts: Option<PathBuf>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -277,6 +293,8 @@ pub enum SchemaKind {
     Output,
     /// JSON Schema for a docs/tools/<name>.toml page.
     Docs,
+    /// JSON Schema for a `pinst harness skills` report row.
+    Harness,
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {

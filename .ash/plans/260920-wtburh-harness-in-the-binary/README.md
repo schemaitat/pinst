@@ -173,7 +173,7 @@ reproduce it (ALT-006, RISK-003).
 | 1 | The corpus model, and `pinst harness new-id` | [phase-01.md](phase-01.md) | Done |
 | 2 | `pinst harness index` | [phase-02.md](phase-02.md) | Done |
 | 3 | `pinst harness check` — every corpus invariant | [phase-03.md](phase-03.md) | Done |
-| 4 | `pinst harness skills` — the graded report | [phase-04.md](phase-04.md) | Proposed |
+| 4 | `pinst harness skills` — the graded report | [phase-04.md](phase-04.md) | Done |
 | 5 | Cutover: retire the script, rewire the callers | [phase-05.md](phase-05.md) | Proposed |
 
 ## Affected Files
