@@ -493,12 +493,24 @@ mod tests {
             .unwrap_or_else(|| panic!("no row for {name}"))
     }
 
-    /// The real report, against the corpus it will actually run on. Every
-    /// skill is wired and has a contract, so the only findings a healthy
-    /// repo produces here are the agenda's.
+    /// Every skill in this repo is wired and declares a usable contract.
+    ///
+    /// Deliberately `run_evidence: false`. What is asserted here is that each
+    /// skill *declares* a measure, which is a property of the repo; whether
+    /// the measure can run is a property of the machine. `create-pr` measures
+    /// itself with `gh pr list`, so on any unauthenticated or offline box —
+    /// CI, for one — it correctly degrades to `unmeasured` and reports
+    /// `skill.evidence-failed`. Asserting no findings while running the
+    /// measures made this test claim the network was part of the contract.
     #[test]
     fn every_skill_in_this_repo_declares_a_contract_and_is_wired() {
-        let report = run(&real(), &Options::default());
+        let report = run(
+            &real(),
+            &Options {
+                run_evidence: false,
+                ..Options::default()
+            },
+        );
         assert_eq!(report.skills.len(), 6, "expected six skills");
 
         for row in &report.skills {
@@ -529,7 +541,16 @@ mod tests {
     /// is written down in its frontmatter rather than inferred from silence.
     #[test]
     fn the_reference_skill_is_exempt_rather_than_zero() {
-        let report = run(&real(), &Options::default());
+        // Exemption is decided from frontmatter alone, so this needs no
+        // subprocess — and running them would drag `gh` and the network into
+        // a test about a YAML field.
+        let report = run(
+            &real(),
+            &Options {
+                run_evidence: false,
+                ..Options::default()
+            },
+        );
         let pinst = row(&report, "pinst");
         assert_eq!(pinst.windowed, Measure::Exempt);
         assert_eq!(pinst.all_time, Measure::NotApplicable);
