@@ -559,3 +559,37 @@ about either consumer. `just qc` was green, the PR check was green, and the
 pull request exercises. One `just distil-guard preflight` found all of it.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-012)
+
+### LESSON-032: A diff that locates an edit must be taken against the tree the edit lands in
+**Lesson:** When a diff's line numbers will be used to *write* — to rewrite,
+patch or annotate lines — diff against the working tree, not against `HEAD`.
+`merge-base..HEAD` correctly answers "what did this branch add"; it does not
+answer "where is that line now", and the two agree only while the tree is
+clean.
+**Why:** The tools that need this scoping are remedies, and a remedy is run
+in the middle of the mess it exists to clean up — the tree is dirty by
+definition at that moment. A stale line number does not fail: it writes
+successfully to the wrong line, which is the quietest possible outcome. The
+same reasoning argues for a second, cheap guard, since any number can go
+stale for reasons a diff cannot see: check that the line still contains what
+you expected before writing it, and drop it from the report rather than
+editing it if it does not.
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-001)
+
+### LESSON-033: A filter constant carries its first caller's intent, not a general rule
+**Lesson:** Before reusing a skip list, extension filter or exclusion set,
+read *why* each entry is in it. A second caller that matches the shape of the
+walk rarely matches the reason for the exclusions, and inheriting them
+silently narrows the new caller to the wrong set of files.
+**Why:** `check::NOT_SOURCE` skips `.ash` and every `.md` file so that a
+lesson cannot be satisfied by the prose describing it (LESSON-025). Reusing
+it to report where a `LESSON-NNN` citation appears would have excluded
+essentially every citation, since they are markdown inside `.ash` — a
+report that comes back almost empty and looks like good news. The exclusions
+are not "files not worth searching"; they are one finding's definition of
+what counts as enforcement, and that definition does not travel. A filter
+whose entries need a paragraph of justification is a filter whose second
+caller needs its own.
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-002)
