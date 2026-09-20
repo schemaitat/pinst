@@ -211,3 +211,35 @@ phase, exactly the decay this plan was written to prevent: a signal that is
 correct, repeated, and eventually ignored.
 **Status:** prose
 **Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-006)
+
+### LESSON-015: `set -euo pipefail` makes two everyday `grep` idioms lie
+**Lesson:** In a `set -euo pipefail` script, `var="$(... | grep ...)"` aborts
+the whole script when grep matches nothing, and `printf ... | grep -q` reports
+failure when it *does* match. Write `var="$(cmd || true)"` for the first, and
+feed an early-exiting reader a here-string (`grep -qx "$x" <<< "$list"`) rather
+than a pipe for the second.
+**Why:** Both failures point the wrong way. The first aborts with no output at
+all — `set -e` is silent — so an empty result from legitimate data reads as a
+crash with no clue attached. The second is worse: `grep -q` exits on its first
+match, the writer upstream dies of `SIGPIPE`, and `pipefail` promotes 141 to
+the pipeline's status, so a *successful* lookup comes back as a failure, on
+whichever item grep happened to stop at. It presents as an intermittent finding
+against correct input — flakiness in the data, apparently, rather than a bug in
+the checker. Every enforcement script in this repo is bash with this exact
+preamble, so both idioms are one careless line away at all times.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-001, ISSUE-002) — both
+inside one 200-line guard, in the same afternoon
+
+### LESSON-016: A check over a working tree must look at what was created, not only what changed
+**Lesson:** When a guard inspects a diff, union `git diff --name-only` with
+`git ls-files --others --exclude-standard` before deciding the tree is clean.
+Write the test for a brand-new file first; the version that only sees
+modifications passes every test built from edits.
+**Why:** `git diff` says nothing about untracked files, and the artifacts worth
+guarding against are usually created rather than modified — a new document, a
+new directory, a file dropped somewhere it does not belong. A path allowlist
+built on `git diff` alone therefore polices exactly the case that is already
+visible in review, and misses the one that is not.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-003)
