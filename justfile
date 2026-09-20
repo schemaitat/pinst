@@ -117,3 +117,13 @@ review:
     scripts/ash.sh check || rc=$?
     scripts/ash.sh skills || rc=$?
     exit $rc
+
+# The rails around the unattended distillation in .github/workflows/distil.yml.
+# Same name here and in CI, so a maintainer debugging a scheduled run
+# reproduces it exactly rather than approximating it.
+#
+#   just distil-guard preflight   0 there is work, 1 corpus clean
+#   just distil-guard verify      0 safe to publish, 3 findings to act on
+[doc("Gate and guard for the scheduled distillation (preflight | verify)")]
+distil-guard *ARGS:
+    scripts/distil-guard.sh {{ ARGS }}
