@@ -2,7 +2,7 @@
 id: 260920-wtburh
 slug: harness-in-the-binary
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — `pinst harness index`
@@ -23,30 +23,30 @@ diffed against the incumbent rather than reviewed by eye — and `check`'s
 it out.
 
 ## Steps
-- [ ] TASK-009: `src/core/harness/index.rs` (FILE-006) — `render_index(&Corpus)
+- [x] TASK-009: `src/core/harness/index.rs` (FILE-006) — `render_index(&Corpus)
       -> String`, reproducing the bash `render_index`: the `# Plan index`
       heading, the HTML attribution comment, the six-column table, one row per
       plan directory whose name matches `^[0-9]{6}-[a-z]{6}-`, in plain name
       order. Why: plan ids start `yymmdd`, so name order is already
       chronological and no sort key is needed — the same reason the bash
       version has none.
-- [ ] TASK-010: `src/core/harness/index.rs` — take `areas` from frontmatter as
+- [x] TASK-010: `src/core/harness/index.rs` — take `areas` from frontmatter as
       a list and render it `a, b, c`, matching `delist()`. Why: the bash
       version strips the brackets off the raw string; the Rust version has a
       parsed list, and must join it the same way or every row in the regenerated
       index differs.
-- [ ] TASK-011: `src/cli/mod.rs` and `src/cli/commands/harness.rs` — add the
+- [x] TASK-011: `src/cli/mod.rs` and `src/cli/commands/harness.rs` — add the
       `Index` action with a `--check` flag. Without it, write
       `<root>/.ash/INDEX.md` via a temporary file and a rename; with it,
       compare and emit `index.stale` or `index.missing` without touching the
       file. Why: the write-then-rename is what `ash.sh` does, and a truncated
       index on a crashed run is worse than a stale one.
-- [ ] TASK-012: `src/cli/commands/harness.rs` — honour the global `--dry-run`
+- [x] TASK-012: `src/cli/commands/harness.rs` — honour the global `--dry-run`
       on the writing path, reporting what would change and setting
       `dry_run: true` in the envelope. Why: CON-001 — every pinst command
       supports `--dry-run`, and this is the first harness action that mutates
       anything.
-- [ ] TASK-013: `src/core/harness/index.rs` — a test that renders the real
+- [x] TASK-013: `src/core/harness/index.rs` — a test that renders the real
       corpus and asserts the output equals the committed `.ash/INDEX.md` with
       only the attribution line differing. Why: this is the oracle the phase
       exists for, and it keeps working after the cutover as a regression test

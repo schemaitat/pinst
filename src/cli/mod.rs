@@ -235,8 +235,17 @@ pub struct HarnessArgs {
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum HarnessAction {
+    /// Regenerate .ash/INDEX.md from the plan frontmatter.
+    Index(HarnessIndexArgs),
     /// Mint a plan id: <yymmdd>-<six letters>.
     NewId(HarnessNewIdArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessIndexArgs {
+    /// Report whether the index is up to date instead of rewriting it.
+    #[arg(long)]
+    pub check: bool,
 }
 
 #[derive(Debug, Args, Clone)]

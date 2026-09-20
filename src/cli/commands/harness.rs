@@ -14,8 +14,12 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
-use crate::cli::{HarnessAction, HarnessArgs, HarnessNewIdArgs};
+use crate::cli::{HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs};
+use crate::core::doctor::{Finding, Severity};
+use crate::core::harness::corpus::Corpus;
 use crate::core::harness::id;
+use crate::core::harness::index::{self, IndexState};
+use crate::core::harness::root::CorpusRoot;
 
 /// What `new-id` returns. One field, but an envelope item all the same: an
 /// agent that has learned to read `items[0]` from every other command should
@@ -27,8 +31,28 @@ pub struct MintedId {
 
 pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
     match &args.action {
+        // `new-id` comes first because it is the one action that needs no
+        // corpus: minting an id is what you do *before* there is a plan
+        // directory to put it in.
         HarnessAction::NewId(new_id) => mint(ctx, new_id),
+        HarnessAction::Index(index) => self::index(ctx, &load(ctx, args)?, index),
     }
+}
+
+/// Discovers the corpus and reads it, announcing where it landed.
+///
+/// The note is not decoration: "checked the wrong repo" is the failure this
+/// subsystem is most likely to have, and the working directory is the only
+/// thing that decides.
+fn load(ctx: &Ctx, args: &HarnessArgs) -> Result<Corpus> {
+    let root = CorpusRoot::resolve(args.root.as_deref())?;
+    let corpus = Corpus::load(root)?;
+    ctx.note(format!(
+        "harness: {} ({} plans)",
+        corpus.root.path().display(),
+        corpus.len()
+    ));
+    Ok(corpus)
 }
 
 /// Prints the bare id on stdout in human mode.
@@ -47,4 +71,78 @@ fn mint(ctx: &Ctx, args: &HarnessNewIdArgs) -> Result<ExitCode> {
         Status::Ok,
         vec![MintedId { id }],
     ))
+}
+
+/// Rewrites `.ash/INDEX.md`, or with `--check` reports whether it is current.
+///
+/// A stale index is a `warning` rather than an `error` for the same reason it
+/// is in `check`: the corpus is still correct, only its routing table has
+/// fallen behind, and one command puts it right.
+fn index(ctx: &Ctx, corpus: &Corpus, args: &HarnessIndexArgs) -> Result<ExitCode> {
+    let state = index::state(corpus);
+    let path = corpus.root.index_file();
+    let shown = corpus.relative(&path);
+
+    if args.check || ctx.dry_run {
+        let finding = match state {
+            IndexState::Fresh => None,
+            IndexState::Stale => Some(Finding {
+                id: "index.stale".to_string(),
+                severity: Severity::Warning,
+                message: format!("{shown} does not match the plan frontmatter"),
+                remediation: "run: pinst harness index".to_string(),
+                fixable: true,
+            }),
+            IndexState::Missing => Some(Finding {
+                id: "index.missing".to_string(),
+                severity: Severity::Warning,
+                message: format!("{shown} does not exist"),
+                remediation: "run: pinst harness index".to_string(),
+                fixable: true,
+            }),
+        };
+        return report(
+            ctx,
+            "harness index",
+            finding.into_iter().collect(),
+            &format!("{shown} is up to date"),
+        );
+    }
+
+    index::write(corpus)?;
+    report(ctx, "harness index", Vec::new(), &format!("wrote {shown}"))
+}
+
+/// The shared rendering for every action that produces findings.
+///
+/// Human mode prints them in the same shape as `pinst doctor`, because an
+/// operator reading both should not have to learn two layouts; JSON mode puts
+/// them in `items` and lets `ctx.finish` pick the exit code.
+fn report(ctx: &Ctx, command: &str, findings: Vec<Finding>, clean: &str) -> Result<ExitCode> {
+    if !ctx.json {
+        for finding in &findings {
+            let mark = match finding.severity {
+                Severity::Error => "[error]",
+                Severity::Warning => "[warn ]",
+                Severity::Info => "[info ]",
+            };
+            println!("{mark} {} {}", finding.id, finding.message);
+            println!("         fix: {}", finding.remediation);
+        }
+        if findings.is_empty() {
+            ctx.note(format!("harness: {clean}"));
+        }
+    }
+
+    let summary = crate::core::doctor::summarize(&findings);
+    let status = if findings.is_empty() {
+        Status::Ok
+    } else {
+        Status::Issues
+    };
+    ctx.finish(
+        Envelope::new(command, status, findings)
+            .dry_run(ctx.dry_run)
+            .summary(serde_json::to_value(&summary)?),
+    )
 }
