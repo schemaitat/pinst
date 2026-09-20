@@ -1,0 +1,33 @@
+# Every top-level key must come before the first [[recipes]] table: in TOML a
+# bare key after an array-of-tables belongs to that table, not to the page.
+what = "Recursive regex search across a directory tree, respecting .gitignore."
+when = "Any search for content in a repo. Reach for it instead of `grep -r`: it is faster, skips ignored files by default, and its output is already file:line."
+keywords = ["grep", "search", "find text", "regex", "code search", "rg"]
+status = "authored"
+verified_with = "15.1.0"
+see_also = ["fd"]
+gotchas = """
+Ignored, hidden and binary files are skipped by default: pass -u to include
+ignored files, -uu to also include hidden ones, and -uuu to search binaries
+too. A pattern starting with `-` needs `-e` or `--` before it.
+"""
+
+[[recipes]]
+cmd = "rg -n 'pattern' path/"
+does = "Search a path, printing file:line for every match."
+
+[[recipes]]
+cmd = "rg -l 'pattern'"
+does = "List only the files that match — the fast way to scope a follow-up read."
+
+[[recipes]]
+cmd = "rg -n --glob '*.rs' 'fn main'"
+does = "Restrict the search to files matching a glob."
+
+[[recipes]]
+cmd = "rg -i -C 3 'pattern'"
+does = "Case-insensitive, with three lines of context either side."
+
+[[recipes]]
+cmd = "rg --files | rg 'config'"
+does = "List every file ripgrep would search, then filter it — a find(1) substitute when fd is absent."

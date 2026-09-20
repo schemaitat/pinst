@@ -161,6 +161,8 @@ pub enum SchemaKind {
     Manifest,
     /// JSON Schema for the --json output envelope.
     Output,
+    /// JSON Schema for a docs/tools/<name>.toml page.
+    Docs,
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
