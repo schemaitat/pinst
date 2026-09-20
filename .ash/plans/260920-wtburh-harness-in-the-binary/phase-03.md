@@ -2,7 +2,7 @@
 id: 260920-wtburh
 slug: harness-in-the-binary
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — `pinst harness check` — every corpus invariant
@@ -22,7 +22,7 @@ and before `skills` because `skills` reuses this phase's issue and lesson
 readers without adding invariants of its own.
 
 ## Steps
-- [ ] TASK-014: `src/core/harness/check.rs` (FILE-007) — the plan-directory
+- [x] TASK-014: `src/core/harness/check.rs` (FILE-007) — the plan-directory
       and README findings: `corpus.missing`, `plan.malformed-dir.<name>`,
       `plan.duplicate-id.<id>`, `plan.readme-missing.<name>`,
       `plan.frontmatter-missing.<name>`, `plan.frontmatter-key.<name>.<key>`,
@@ -31,13 +31,13 @@ readers without adding invariants of its own.
       match keys for agents — they carry the corpus-relative path, never the
       absolute one, so a finding id does not change with the checkout
       location.
-- [ ] TASK-015: `src/core/harness/check.rs` — add `plan.frontmatter-unparsed.
+- [x] TASK-015: `src/core/harness/check.rs` — add `plan.frontmatter-unparsed.
       <name>` for a document phase 1's strict parser rejects, carrying the
       line number in its message. Why: the one finding this port adds, and it
       exists because a refusing parser needs somewhere to put the refusal
       (RISK-003). It is not a new *invariant* — it is the reporting channel
       for a class of malformed document the awk reader silently tolerated.
-- [ ] TASK-016: `src/core/harness/check.rs` — the phase-chain findings:
+- [x] TASK-016: `src/core/harness/check.rs` — the phase-chain findings:
       `phase.malformed-name.<rel>`, `phase.chain-gap.<name>`,
       `phase.frontmatter-missing.<rel>`, `phase.frontmatter-key.<rel>.<key>`,
       `phase.id-mismatch.<rel>`, `phase.number-mismatch.<rel>`,
@@ -46,7 +46,7 @@ readers without adding invariants of its own.
       Why: the mirror check parses the README's `## Phases` markdown table by
       column; keep that a small dedicated function rather than a regex, since
       it is the one place the checker reads prose rather than frontmatter.
-- [ ] TASK-017: `src/core/harness/check.rs` — the staleness findings against
+- [x] TASK-017: `src/core/harness/check.rs` — the staleness findings against
       `.ash/CHANGELOG.log`: `plan.unlogged.<name>`,
       `phase.logged-missing.<name>.<n>`, `phase.logged-not-done.<name>.<n>`,
       and `plan.learnings-missing.<name>` (warning when the plan is `Done`,
@@ -54,7 +54,7 @@ readers without adding invariants of its own.
       are the checks that compare the corpus against a record written after
       the fact, and `phase.logged-not-done` is LESSON-009's named enforcement,
       so its id must survive the port letter-for-letter (RISK-005).
-- [ ] TASK-018: `src/core/harness/corpus.rs` — the distillation readers:
+- [x] TASK-018: `src/core/harness/corpus.rs` — the distillation readers:
       `issue_states` (`ISSUE-NNN` plus `**Distilled:** declined`),
       `issue_skills` (plus `**Skill:**` and `**Gap:** answered`), `seen_pairs`
       and `lesson_states` over `.ash/LEARNINGS.md`. Why: `seen_pairs` buffers a
@@ -62,20 +62,20 @@ readers without adding invariants of its own.
       ids and issue ids it finds — deliberately over-generous, because a
       spurious pair can only *silence* a finding and a check that cries wolf
       gets deleted. Preserve that, do not tighten it.
-- [ ] TASK-019: `src/core/harness/check.rs` — `learnings.untriaged.<name>.
+- [x] TASK-019: `src/core/harness/check.rs` — `learnings.untriaged.<name>.
       <issue>` and `lesson.unenforced.<lesson>` on top of TASK-018's readers.
-- [ ] TASK-020: `src/core/harness/check.rs` — widen `lesson.unenforced`'s
+- [x] TASK-020: `src/core/harness/check.rs` — widen `lesson.unenforced`'s
       search for a `**Check:**` id from `scripts/` to `scripts/` **and**
       `src/`. Why: RISK-004 — three of the four mechanized lessons name checks
       that land in `src/` in this very phase, so without this the check
       reports its own migration as three errors.
-- [ ] TASK-021: `src/cli/commands/harness.rs` — the `Check` action: run
+- [x] TASK-021: `src/cli/commands/harness.rs` — the `Check` action: run
       everything, render findings to stdout in the `doctor` style in human
       mode, and finish an `Envelope<Finding>` with a `summary` carrying
       `plans`, `lessons`, `issues`, `findings`, `error`, `warning`, `info`.
       Why: matching `ash.sh report()`'s summary keys keeps any agent already
       parsing that envelope working.
-- [ ] TASK-022: a test comparing `pinst harness check --json` against
+- [x] TASK-022: a test comparing `pinst harness check --json` against
       `scripts/ash.sh check --json` on the real corpus, asserting the two sets
       of finding ids are equal. Why: this is the phase's whole claim, and it
       is only runnable while both implementations exist — which is exactly the

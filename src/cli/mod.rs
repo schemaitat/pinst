@@ -235,6 +235,8 @@ pub struct HarnessArgs {
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum HarnessAction {
+    /// Validate every corpus invariant.
+    Check,
     /// Regenerate .ash/INDEX.md from the plan frontmatter.
     Index(HarnessIndexArgs),
     /// Mint a plan id: <yymmdd>-<six letters>.

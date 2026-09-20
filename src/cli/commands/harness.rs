@@ -16,6 +16,7 @@ use serde::Serialize;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs};
 use crate::core::doctor::{Finding, Severity};
+use crate::core::harness::check;
 use crate::core::harness::corpus::Corpus;
 use crate::core::harness::id;
 use crate::core::harness::index::{self, IndexState};
@@ -36,6 +37,7 @@ pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
         // directory to put it in.
         HarnessAction::NewId(new_id) => mint(ctx, new_id),
         HarnessAction::Index(index) => self::index(ctx, &load(ctx, args)?, index),
+        HarnessAction::Check => self::check(ctx, &load(ctx, args)?),
     }
 }
 
@@ -104,13 +106,31 @@ fn index(ctx: &Ctx, corpus: &Corpus, args: &HarnessIndexArgs) -> Result<ExitCode
         return report(
             ctx,
             "harness index",
+            corpus,
             finding.into_iter().collect(),
             &format!("{shown} is up to date"),
         );
     }
 
     index::write(corpus)?;
-    report(ctx, "harness index", Vec::new(), &format!("wrote {shown}"))
+    report(
+        ctx,
+        "harness index",
+        corpus,
+        Vec::new(),
+        &format!("wrote {shown}"),
+    )
+}
+
+/// Every corpus invariant, in one pass.
+///
+/// Silent on a clean corpus beyond the one-line note, because any finding of
+/// any severity exits 3 — so a check that speaks when nothing is wrong would
+/// fail `just qc` on a healthy repo, and would be switched off within a week.
+fn check(ctx: &Ctx, corpus: &Corpus) -> Result<ExitCode> {
+    let findings = check::run(corpus);
+    let clean = format!("corpus clean ({} plans)", corpus.len());
+    report(ctx, "harness check", corpus, findings, &clean)
 }
 
 /// The shared rendering for every action that produces findings.
@@ -118,7 +138,13 @@ fn index(ctx: &Ctx, corpus: &Corpus, args: &HarnessIndexArgs) -> Result<ExitCode
 /// Human mode prints them in the same shape as `pinst doctor`, because an
 /// operator reading both should not have to learn two layouts; JSON mode puts
 /// them in `items` and lets `ctx.finish` pick the exit code.
-fn report(ctx: &Ctx, command: &str, findings: Vec<Finding>, clean: &str) -> Result<ExitCode> {
+fn report(
+    ctx: &Ctx,
+    command: &str,
+    corpus: &Corpus,
+    findings: Vec<Finding>,
+    clean: &str,
+) -> Result<ExitCode> {
     if !ctx.json {
         for finding in &findings {
             let mark = match finding.severity {
@@ -134,15 +160,15 @@ fn report(ctx: &Ctx, command: &str, findings: Vec<Finding>, clean: &str) -> Resu
         }
     }
 
-    let summary = crate::core::doctor::summarize(&findings);
     let status = if findings.is_empty() {
         Status::Ok
     } else {
         Status::Issues
     };
+    let summary = check::summary(corpus, &findings);
     ctx.finish(
         Envelope::new(command, status, findings)
             .dry_run(ctx.dry_run)
-            .summary(serde_json::to_value(&summary)?),
+            .summary(summary),
     )
 }

@@ -16,6 +16,7 @@
 //! the wrong one. What makes the command self-contained is that the logic is
 //! in the binary — see `root` for why discovery is its own thing.
 
+pub mod check;
 pub mod corpus;
 pub mod frontmatter;
 pub mod id;

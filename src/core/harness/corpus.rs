@@ -259,6 +259,259 @@ fn has_finished_run(logs: &Path) -> bool {
         })
 }
 
+// --- the distillation record ------------------------------------------------
+// Two documents carry it. A plan's `learnings.md` records `ISSUE-NNN`
+// entries, each optionally naming the skill it implicates and optionally
+// carrying a one-line answer that retires it. `.ash/LEARNINGS.md` records
+// `LESSON-NNN` entries with a lifecycle and a `Seen in:` line citing the
+// plans and issues they came from.
+//
+// Every recurring question here can be told it has been answered, in one
+// permanent line — `**Distilled:** declined`, `**Gap:** answered`,
+// `**Mechanize:** declined`. A report that asks something on every run with
+// no way to record the reply decays into noise at exactly the rate people
+// read it (LESSON-014), so the readers below all look for the answer as well
+// as the question.
+
+/// One `### ISSUE-NNN` entry in a plan's `learnings.md`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Issue {
+    pub id: String,
+    /// The skill whose *instructions* would have had to change to prevent it,
+    /// or `none`. `None` here means the entry says nothing at all.
+    pub skill: Option<String>,
+    /// `**Distilled:** declined — <reason>`: triage has happened, the answer
+    /// was "no", and `learnings.untriaged` stays quiet about it for good.
+    pub distilled_declined: bool,
+    /// `**Gap:** answered — <reason>`: the gap report has been told this one
+    /// needs no skill of its own.
+    pub gap_answered: bool,
+}
+
+/// Reads the `ISSUE-NNN` entries out of one `learnings.md`.
+///
+/// A `## ` heading closes the current entry, the way the awk version did: the
+/// markers belong to the issue they sit under, and a new top-level section
+/// means that issue is over.
+pub fn read_issues(path: &Path) -> Vec<Issue> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut issues = Vec::new();
+    let mut current: Option<Issue> = None;
+
+    for line in text.lines() {
+        if let Some(id) = heading_id(line, "### ", "ISSUE-") {
+            issues.extend(current.take());
+            current = Some(Issue {
+                id,
+                skill: None,
+                distilled_declined: false,
+                gap_answered: false,
+            });
+            continue;
+        }
+        if line.starts_with("## ") {
+            issues.extend(current.take());
+            continue;
+        }
+        let Some(issue) = current.as_mut() else {
+            continue;
+        };
+        if let Some(rest) = line.strip_prefix("**Skill:**") {
+            issue.skill = rest.split_whitespace().next().map(str::to_string);
+        } else if marker(line, "**Distilled:**", "declined") {
+            issue.distilled_declined = true;
+        } else if marker(line, "**Gap:**", "answered") {
+            issue.gap_answered = true;
+        }
+    }
+    issues.extend(current);
+    issues
+}
+
+/// One `### LESSON-NNN` entry in `.ash/LEARNINGS.md`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lesson {
+    pub id: String,
+    /// `prose`, `mechanized` or `retired`.
+    pub status: Option<String>,
+    /// The finding id that enforces it, on a `mechanized` lesson.
+    pub check: Option<String>,
+    /// `**Mechanize:** declined — <reason>`: this one is judgement no exit
+    /// code can carry, and saying so once is enough.
+    pub mechanize_declined: bool,
+    /// Every plan id its `Seen in:` line cites.
+    pub plans: Vec<String>,
+    /// Every issue id its `Seen in:` line cites.
+    pub issues: Vec<String>,
+}
+
+/// Reads `.ash/LEARNINGS.md`.
+///
+/// The `Seen in:` line is free prose and routinely wraps over several lines,
+/// so the whole tail of the block is buffered and both kinds of id are pulled
+/// out of it. A buffer naming two plans yields the cross-product, which can
+/// only ever *silence* a finding — the safe direction, given that a check
+/// which cries wolf is a check that gets deleted.
+pub fn read_lessons(path: &Path) -> Vec<Lesson> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut lessons: Vec<Lesson> = Vec::new();
+    let mut current: Option<Lesson> = None;
+    let mut buffer = String::new();
+    let mut in_seen = false;
+
+    fn flush(current: &mut Option<Lesson>, buffer: &mut String, in_seen: &mut bool) {
+        if let Some(lesson) = current.as_mut() {
+            lesson.plans.extend(plan_ids(buffer));
+            lesson.issues.extend(issue_ids(buffer));
+        }
+        buffer.clear();
+        *in_seen = false;
+    }
+
+    for line in text.lines() {
+        if let Some(id) = heading_id(line, "### ", "LESSON-") {
+            flush(&mut current, &mut buffer, &mut in_seen);
+            lessons.extend(current.take());
+            current = Some(Lesson {
+                id,
+                status: None,
+                check: None,
+                mechanize_declined: false,
+                plans: Vec::new(),
+                issues: Vec::new(),
+            });
+            continue;
+        }
+        if line.starts_with("**Seen in:**") {
+            in_seen = true;
+        } else if line.trim().is_empty() && in_seen {
+            flush(&mut current, &mut buffer, &mut in_seen);
+            continue;
+        }
+        if in_seen {
+            buffer.push(' ');
+            buffer.push_str(line);
+        }
+        let Some(lesson) = current.as_mut() else {
+            continue;
+        };
+        if let Some(rest) = line.strip_prefix("**Status:**") {
+            lesson.status = rest.split_whitespace().next().map(str::to_string);
+        } else if let Some(rest) = line.strip_prefix("**Check:**") {
+            lesson.check = rest.split_whitespace().next().map(str::to_string);
+        } else if marker(line, "**Mechanize:**", "declined") {
+            lesson.mechanize_declined = true;
+        }
+    }
+    flush(&mut current, &mut buffer, &mut in_seen);
+    lessons.extend(current);
+    lessons
+}
+
+/// `### ISSUE-001: Something` -> `ISSUE-001`.
+fn heading_id(line: &str, prefix: &str, kind: &str) -> Option<String> {
+    let rest = line.strip_prefix(prefix)?;
+    if !rest.starts_with(kind) {
+        return None;
+    }
+    let word = rest.split_whitespace().next()?;
+    Some(word.trim_end_matches(':').to_string())
+}
+
+/// `**Distilled:** declined — ...`, allowing for the whitespace to vary.
+fn marker(line: &str, prefix: &str, word: &str) -> bool {
+    line.strip_prefix(prefix)
+        .map(|rest| rest.trim_start().starts_with(word))
+        .unwrap_or(false)
+}
+
+/// Every `<yymmdd>-<six letters>` in a string.
+fn plan_ids(text: &str) -> Vec<String> {
+    let bytes: Vec<char> = text.chars().collect();
+    let mut found = Vec::new();
+    for start in 0..bytes.len().saturating_sub(12) {
+        let window = &bytes[start..start + 13];
+        let shaped = window[..6].iter().all(char::is_ascii_digit)
+            && window[6] == '-'
+            && window[7..].iter().all(|c| c.is_ascii_lowercase());
+        // A `Seen in:` line cites plans by *directory* name, so the id is
+        // nearly always followed by `-<slug>` and that must still match.
+        // What must not match is a longer token — `260919-qwertyy` yielding a
+        // six-letter id that never existed, or a date with a seventh digit.
+        let bounded = (start == 0 || !bytes[start - 1].is_ascii_digit())
+            && (start + 13 == bytes.len() || !bytes[start + 13].is_ascii_lowercase());
+        if shaped && bounded {
+            found.push(window.iter().collect());
+        }
+    }
+    found
+}
+
+/// Every `ISSUE-<digits>` in a string.
+fn issue_ids(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("ISSUE-") {
+        let tail = &rest[at + 6..];
+        let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() {
+            found.push(format!("ISSUE-{digits}"));
+        }
+        rest = &rest[at + 6..];
+    }
+    found
+}
+
+/// One `.ash/CHANGELOG.log` line: the append-only record of what actually
+/// shipped.
+///
+/// This is the only part of the corpus written *after* the fact, which makes
+/// it the one thing a stale plan can be checked against without asking GitHub
+/// anything (LESSON-009).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogEntry {
+    pub id: String,
+    pub phase: Option<u32>,
+}
+
+pub fn read_changelog(path: &Path) -> Vec<LogEntry> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| {
+            let id = logfmt(line, "id")?;
+            Some(LogEntry {
+                id,
+                phase: logfmt(line, "phase").and_then(|v| v.parse().ok()),
+            })
+        })
+        .collect()
+}
+
+/// Pulls one unquoted logfmt field out of a line. Every field this reads —
+/// `id`, `phase` — is a bare token, so quoting never arises.
+fn logfmt(line: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=");
+    for (at, _) in line.match_indices(&needle) {
+        if at > 0 && !line.as_bytes()[at - 1].is_ascii_whitespace() {
+            continue;
+        }
+        let value: String = line[at + needle.len()..]
+            .chars()
+            .take_while(|c| !c.is_whitespace())
+            .collect();
+        if !value.is_empty() {
+            return Some(value);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
