@@ -43,6 +43,9 @@ is a command substitution over `grep`, `find` or `git` needs `|| true` unless
 an empty result really is fatal. The tell is a script that exits with no
 output: `set -e` aborts silently, so the absence of a message is the message.
 **Skill:** none
+**Gap:** answered — not skill-shaped. No instruction prevents a `set -e`
+assignment swallowing grep's exit status; LESSON-015 is the durable form, and a
+linter (`shellcheck SC2312`-class) would beat prose if this recurs.
 
 ### ISSUE-002: `printf | grep -q` reported a lesson that was present as removed
 **What happened:** `verify` raised `distil.lesson-removed.LESSON-013` against
@@ -61,6 +64,9 @@ check that fails intermittently on correct input — reads as flakiness in the
 data rather than a bug in the checker, and that is the most expensive kind of
 wrong answer a guard can give.
 **Skill:** none
+**Gap:** answered — not skill-shaped, same reason as ISSUE-001. The two
+together are, however, the strongest argument yet for a skill covering how this
+repo writes its shell checkers; raised as a proposal, not written.
 
 ### ISSUE-003: the plan's `git diff` could not see the files a distillation actually creates
 **What happened:** TASK-003 specified the path allowlist over `git diff
@@ -79,6 +85,8 @@ whether the thing being guarded against arrives as a modification or as a new
 file, and write the test for the second case before the first. The version that
 only sees modifications passes every test built from edits.
 **Skill:** none
+**Gap:** answered — not skill-shaped. This is a property of `git diff`,
+learned by writing the wrong test first; LESSON-016 carries it.
 
 ### ISSUE-004: the gate wakes the model on findings that are not distillation work
 **What happened:** flipping `phase-01`'s status to `In Progress` made
@@ -99,6 +107,8 @@ false wakeup is a real model call.
 **Skill:** none
 **Distilled:** declined — an open design decision inside this plan's own Phase
 2, not a lesson: which findings the gate reads is still being chosen.
+**Gap:** answered — not skill-shaped. A design decision deferred to the
+phase that pays its cost, which is judgement no instruction encodes.
 
 ### ISSUE-005: Phase 2 stops at its first task, on a precondition only a human can satisfy
 **What happened:** TASK-008 requires a live workflow run to settle
@@ -118,3 +128,7 @@ written against a premise that might not hold.
 **Skill:** none
 **Distilled:** declined — LESSON-002 and LESSON-003 already say this; the run
 is those two lessons working as intended, which is not itself a new lesson.
+**Gap:** answered — not skill-shaped. A GitHub secret only a repo admin
+can set is the archetype of a domain surprise, and LESSON-002 already tells a
+plan to check for it up front, which this one did.
+
