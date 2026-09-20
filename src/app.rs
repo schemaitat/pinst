@@ -8,6 +8,9 @@ use crossterm::event::{Event, KeyCode, KeyEventKind};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::core::configs::{ConfigSet, FileStatus};
+use crate::core::docs::Catalogue;
+use crate::core::docs::page::ToolDoc;
+use crate::core::docs::search as find;
 use crate::core::doctor::{self, Finding};
 use crate::core::manifest::{Manifest, Tool};
 use crate::core::probe::{self, ProbeResult};
@@ -19,16 +22,18 @@ pub enum Tab {
     Overview,
     Health,
     Upgrades,
+    Docs,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 3] = [Tab::Overview, Tab::Health, Tab::Upgrades];
+    pub const ALL: [Tab; 4] = [Tab::Overview, Tab::Health, Tab::Upgrades, Tab::Docs];
 
     pub fn title(self) -> &'static str {
         match self {
             Tab::Overview => "Overview",
             Tab::Health => "Health",
             Tab::Upgrades => "Upgrades",
+            Tab::Docs => "Docs",
         }
     }
 }
@@ -61,6 +66,11 @@ pub struct App {
     pub upgrades_ever_run: bool,
 
     pub overview_selected: usize,
+    pub docs_selected: usize,
+
+    /// The tool catalogue, loaded once at startup. An unreadable catalogue is
+    /// an empty Docs tab, not a dashboard that refuses to open.
+    pub catalogue: Catalogue,
 
     pub search_query: String,
     pub search_mode: bool,
@@ -74,7 +84,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(tx: UnboundedSender<AppEvent>, manifest: Manifest, home_dir: PathBuf) -> Self {
+    pub fn new(
+        tx: UnboundedSender<AppEvent>,
+        manifest: Manifest,
+        home_dir: PathBuf,
+        catalogue: Catalogue,
+    ) -> Self {
         let registry = manifest.tools.clone();
         let probes_expected = registry.len();
         Self {
@@ -94,6 +109,8 @@ impl App {
             upgrades_loading: false,
             upgrades_ever_run: false,
             overview_selected: 0,
+            docs_selected: 0,
+            catalogue,
             search_query: String::new(),
             search_mode: false,
             picker_open: false,
@@ -195,6 +212,37 @@ impl App {
         }
     }
 
+    /// The Docs tab's list: ranked by the same search the CLI uses, so the
+    /// two surfaces cannot disagree about what matches. With no query it is
+    /// the manifest's own order, which is grouped by purpose.
+    pub fn filtered_docs(&self) -> Vec<&Tool> {
+        match self.query_lower() {
+            None => self.registry.iter().collect(),
+            Some(query) => {
+                let entries: Vec<find::Entry<'_>> = self
+                    .registry
+                    .iter()
+                    .map(|tool| find::Entry {
+                        tool,
+                        page: self.catalogue.get(&tool.name),
+                    })
+                    .collect();
+                find::search(&entries, &query)
+                    .into_iter()
+                    .map(|hit| hit.tool)
+                    .collect()
+            }
+        }
+    }
+
+    /// The page shown in the Docs tab's reading pane.
+    pub fn selected_doc(&self) -> Option<(&Tool, Option<&ToolDoc>)> {
+        let tools = self.filtered_docs();
+        let index = self.docs_selected.min(tools.len().saturating_sub(1));
+        let tool = *tools.get(index)?;
+        Some((tool, self.catalogue.get(&tool.name)))
+    }
+
     pub fn filtered_findings(&self) -> Vec<&Finding> {
         match self.query_lower() {
             None => self.findings.iter().collect(),
@@ -264,7 +312,7 @@ impl App {
                     // First Esc clears an active filter instead of quitting,
                     // so a search doesn't trap the user into an extra quit.
                     self.search_query.clear();
-                    self.overview_selected = 0;
+                    self.reset_selections();
                 }
             }
             KeyCode::Char('/') => self.search_mode = true,
@@ -273,8 +321,9 @@ impl App {
             KeyCode::Char('1') => self.tab = Tab::Overview,
             KeyCode::Char('2') => self.tab = Tab::Health,
             KeyCode::Char('3') => self.tab = Tab::Upgrades,
-            KeyCode::Down | KeyCode::Char('j') => self.move_overview_selection(1),
-            KeyCode::Up | KeyCode::Char('k') => self.move_overview_selection(-1),
+            KeyCode::Char('4') => self.tab = Tab::Docs,
+            KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
+            KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('e') => {
                 self.picker_open = true;
                 self.picker_selected = 0;
@@ -291,19 +340,26 @@ impl App {
             KeyCode::Esc => {
                 self.search_mode = false;
                 self.search_query.clear();
-                self.overview_selected = 0;
+                self.reset_selections();
             }
             KeyCode::Enter => self.search_mode = false,
             KeyCode::Backspace => {
                 self.search_query.pop();
-                self.overview_selected = 0;
+                self.reset_selections();
             }
             KeyCode::Char(c) => {
                 self.search_query.push(c);
-                self.overview_selected = 0;
+                self.reset_selections();
             }
             _ => {}
         }
+    }
+
+    /// A new query is a new result set, so a selection into the old one means
+    /// nothing.
+    fn reset_selections(&mut self) {
+        self.overview_selected = 0;
+        self.docs_selected = 0;
     }
 
     fn next_tab(&mut self) {
@@ -316,15 +372,25 @@ impl App {
         self.tab = Tab::ALL[(idx + Tab::ALL.len() - 1) % Tab::ALL.len()];
     }
 
-    fn move_overview_selection(&mut self, delta: i32) {
-        if self.tab != Tab::Overview {
-            return;
+    /// Moves the selection on whichever tab owns one.
+    fn move_selection(&mut self, delta: i32) {
+        match self.tab {
+            Tab::Overview => {
+                let len = self.filtered_registry().len() as i32;
+                if len > 0 {
+                    self.overview_selected =
+                        (self.overview_selected as i32 + delta).rem_euclid(len) as usize;
+                }
+            }
+            Tab::Docs => {
+                let len = self.filtered_docs().len() as i32;
+                if len > 0 {
+                    self.docs_selected =
+                        (self.docs_selected as i32 + delta).rem_euclid(len) as usize;
+                }
+            }
+            _ => {}
         }
-        let len = self.filtered_registry().len() as i32;
-        if len == 0 {
-            return;
-        }
-        self.overview_selected = (self.overview_selected as i32 + delta).rem_euclid(len) as usize;
     }
 
     fn handle_picker_key(&mut self, code: KeyCode) {
@@ -351,5 +417,173 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::manifest;
+    use crate::core::source::Source;
+    use crossterm::event::{KeyEvent, KeyModifiers};
+
+    /// The tempdir comes back too: dropping it would delete the catalogue the
+    /// app is holding.
+    fn app(pages: &[(&str, &str)]) -> (tempfile::TempDir, App) {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, body) in pages {
+            std::fs::write(dir.path().join(format!("{name}.toml")), body).unwrap();
+        }
+        let catalogue = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let manifest = manifest::load(None).unwrap().manifest;
+        (
+            dir,
+            App::new(tx, manifest, PathBuf::from("/home/test"), catalogue),
+        )
+    }
+
+    fn press(app: &mut App, code: KeyCode) {
+        app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            code,
+            KeyModifiers::NONE,
+        ))));
+    }
+
+    fn typed(app: &mut App, query: &str) {
+        press(app, KeyCode::Char('/'));
+        for c in query.chars() {
+            press(app, KeyCode::Char(c));
+        }
+        press(app, KeyCode::Enter);
+    }
+
+    const RIPGREP: &str = r#"
+what = "Recursive regex search across a tree."
+keywords = ["grep", "search"]
+status = "authored"
+verified_with = "15.1.0"
+
+[[recipes]]
+cmd = "rg -n 'pattern' path/"
+does = "Search a path."
+"#;
+
+    #[test]
+    fn the_docs_tab_is_reachable_by_number_and_by_cycling() {
+        let (_dir, mut app) = app(&[]);
+        press(&mut app, KeyCode::Char('4'));
+        assert_eq!(app.tab, Tab::Docs);
+
+        // Cycling past the last tab wraps to the first.
+        press(&mut app, KeyCode::Tab);
+        assert_eq!(app.tab, Tab::Overview);
+        press(&mut app, KeyCode::BackTab);
+        assert_eq!(app.tab, Tab::Docs);
+    }
+
+    #[test]
+    fn with_no_query_the_docs_list_is_the_whole_manifest_in_its_own_order() {
+        let (_dir, app) = app(&[]);
+        let listed: Vec<&str> = app
+            .filtered_docs()
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect();
+        let declared: Vec<&str> = app.registry.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(listed, declared);
+    }
+
+    #[test]
+    fn the_docs_list_is_ranked_by_the_same_search_the_cli_uses() {
+        // The fixture is the CLI ranking tests' fixture: a keyword hit on
+        // ripgrep's page must come first, exactly as `pinst docs search` puts
+        // it first.
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        press(&mut app, KeyCode::Char('4'));
+        typed(&mut app, "grep");
+        assert_eq!(app.filtered_docs()[0].name, "ripgrep");
+    }
+
+    #[test]
+    fn the_selected_tool_carries_its_page_when_it_has_one() {
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        press(&mut app, KeyCode::Char('4'));
+        typed(&mut app, "grep");
+
+        let (tool, page) = app.selected_doc().unwrap();
+        assert_eq!(tool.name, "ripgrep");
+        assert_eq!(page.unwrap().recipes.len(), 1);
+    }
+
+    #[test]
+    fn a_tool_with_no_page_still_selects_and_reports_the_gap() {
+        let (_dir, mut app) = app(&[]);
+        press(&mut app, KeyCode::Char('4'));
+        let (tool, page) = app.selected_doc().unwrap();
+        assert!(!tool.name.is_empty());
+        assert!(page.is_none());
+    }
+
+    #[test]
+    fn a_search_that_matches_nothing_leaves_the_reading_pane_empty() {
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        press(&mut app, KeyCode::Char('4'));
+        typed(&mut app, "kubernetes");
+        assert!(app.filtered_docs().is_empty());
+        assert!(app.selected_doc().is_none());
+    }
+
+    #[test]
+    fn moving_the_selection_only_touches_the_tab_that_owns_one() {
+        let (_dir, mut app) = app(&[]);
+        press(&mut app, KeyCode::Char('4'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.docs_selected, 1);
+        assert_eq!(
+            app.overview_selected, 0,
+            "the Overview cursor must not move"
+        );
+
+        press(&mut app, KeyCode::Char('1'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.overview_selected, 1);
+        assert_eq!(app.docs_selected, 1, "the Docs cursor must not move");
+    }
+
+    #[test]
+    fn a_new_query_puts_both_cursors_back_at_the_top() {
+        // A selection into the previous result set means nothing once the set
+        // changes underneath it.
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        press(&mut app, KeyCode::Char('4'));
+        press(&mut app, KeyCode::Char('j'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.docs_selected, 2);
+
+        typed(&mut app, "grep");
+        assert_eq!(app.docs_selected, 0);
+    }
+
+    #[test]
+    fn the_docs_tab_renders_the_selected_page() {
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        press(&mut app, KeyCode::Char('4'));
+        typed(&mut app, "grep");
+
+        let backend = ratatui::backend::TestBackend::new(100, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("ripgrep"), "{rendered}");
+        assert!(rendered.contains("rg -n"), "the recipe must be on screen");
+        assert!(rendered.contains("authored"), "the page's status is shown");
     }
 }

@@ -15,13 +15,14 @@ pub async fn run(ctx: &Ctx) -> Result<ExitCode> {
 
     let loaded = super::load_manifest(ctx)?;
     let home_dir = core::home_dir()?;
+    let catalogue = core::docs::Catalogue::load()?;
 
     // Call ratatui::init() only after color_eyre is installed so the
     // terminal-restoring panic hook runs before color_eyre's pretty printer.
     let mut terminal = ratatui::init();
 
     let (tx, mut rx) = event::start_event_loop();
-    let mut app = App::new(tx, loaded.manifest, home_dir);
+    let mut app = App::new(tx, loaded.manifest, home_dir, catalogue);
     app.start_probing();
 
     let result = event_loop(&mut terminal, &mut app, &mut rx).await;

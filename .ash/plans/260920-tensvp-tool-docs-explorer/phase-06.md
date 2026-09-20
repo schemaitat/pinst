@@ -2,7 +2,7 @@
 id: 260920-tensvp
 slug: tool-docs-explorer
 phase: 6
-status: Proposed
+status: Done
 ---
 
 # Phase 6 — Publish the contract and make it browsable
@@ -23,25 +23,25 @@ and LESSON-009 is specifically about records that describe a world which has
 moved on.
 
 ## Steps
-- [ ] TASK-033: `.agents/skills/pinst/SKILL.md` — a `docs` section in the
+- [x] TASK-033: `.agents/skills/pinst/SKILL.md` — a `docs` section in the
       commands table plus the per-action `items[]` shapes, the exit codes
       (`show`'s 0/2/3, `search`'s always-0, `adopt`'s refusals), and one line
       on *when* to reach for it: before running an unfamiliar tool, and before
       assuming a tool is absent.
-- [ ] TASK-034: `README.md` — `pinst docs search|show|dump|status|adopt` in
+- [x] TASK-034: `README.md` — `pinst docs search|show|dump|status|adopt` in
       the commands table, and a short section on the catalogue: where pages
       live, that they are embedded, and how a draft becomes authored.
-- [ ] TASK-035: `src/app.rs` — `Tab::Docs` plus the catalogue state it needs,
+- [x] TASK-035: `src/app.rs` — `Tab::Docs` plus the catalogue state it needs,
       alongside `Overview`, `Health` and `Upgrades`.
-- [ ] TASK-036: `src/ui/docs.rs` (new) and `src/ui/mod.rs` — render the
+- [x] TASK-036: `src/ui/docs.rs` (new) and `src/ui/mod.rs` — render the
       selected tool's page: `what`, `when`, recipes, gotchas, with `draft`
       marked. Why in the TUI at all: the dashboard is already the human's
       answer to "what is on this machine", and "what is it for" is the next
       question every time.
-- [ ] TASK-037: `src/event.rs` — the existing `/` search filters the Docs tab
+- [x] TASK-037: `src/event.rs` — the existing `/` search filters the Docs tab
       by the same ranking phase 4 built, so the TUI and the CLI cannot
       disagree about what matches.
-- [ ] TASK-038: `just wire` then `just review` — the skill changed, and the
+- [x] TASK-038: `just wire` then `just review` — the skill changed, and the
       harness checks that a changed skill is projected into `.claude/skills/`
       (LESSON-007) and that its `produces`/`evidence` contract still holds.
 

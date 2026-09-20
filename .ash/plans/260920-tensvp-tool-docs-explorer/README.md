@@ -1,7 +1,7 @@
 ---
 id: 260920-tensvp
 slug: tool-docs-explorer
-status: In Progress
+status: Done
 created: 2026-09-20
 updated: 2026-09-20
 areas: [cli, docs, manifest, tui]
@@ -144,7 +144,7 @@ every search result carries install status and version for free.
 | 3 | Capture what is not written yet, and adopt it | [phase-03.md](phase-03.md) | Done |
 | 4 | The one-call surface: `docs search` and `docs dump` | [phase-04.md](phase-04.md) | Done |
 | 5 | Author the catalogue | [phase-05.md](phase-05.md) | Done |
-| 6 | Publish the contract and make it browsable | [phase-06.md](phase-06.md) | Proposed |
+| 6 | Publish the contract and make it browsable | [phase-06.md](phase-06.md) | Done |
 
 ## Affected Files
 - **FILE-001** `src/core/source.rs` (new) — `Source` plus the tree-resolution
