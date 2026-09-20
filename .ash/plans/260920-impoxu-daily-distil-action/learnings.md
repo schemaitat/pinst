@@ -3,7 +3,7 @@ id: 260920-impoxu
 slug: daily-distil-action
 updated: 2026-09-20
 areas: [ci, harness, agents]
-issue_count: 5
+issue_count: 8
 ---
 
 # Learnings — a daily, unattended distillation pass (260920-impoxu-daily-distil-action)
@@ -23,6 +23,12 @@ The headline lesson is not about CI at all: two of the four defects in this
 phase were `set -euo pipefail` turning an ordinary `grep` idiom into a silent
 abort and a phantom finding, in a repo whose entire enforcement layer is bash
 written exactly that way.
+
+A second run wrote the workflow itself (Phase 2, TASK-009 to TASK-018), which
+lints clean but is knowingly unverified: its first task was to settle
+ASSUMPTION-001 with a live run, and there is still no credential to run one
+with. The phase stays `In Progress` with that one task unticked rather than
+being called Done on the strength of a workflow nobody has executed.
 
 ## Issues
 
@@ -132,3 +138,62 @@ is those two lessons working as intended, which is not itself a new lesson.
 can set is the archetype of a domain surprise, and LESSON-002 already tells a
 plan to check for it up front, which this one did.
 
+### ISSUE-006: the task that was meant to de-risk the phase is the one that could not run
+**What happened:** TASK-008 exists to settle ASSUMPTION-001 — whether the
+action expands `/distil` as a prompt — before the rest of Phase 2 is built on
+it. It needs a live workflow run, and `actions/secrets` still reports zero, so
+TASK-009 to TASK-018 were written ahead of it on the user's direction.
+**Root cause:** the task's dependency is a person, not a predecessor. The plan
+correctly put it first and correctly named DEP-002, but a linear chain has no
+way to express "this link is held by someone outside the room".
+**Fix applied:** unresolved — the workflow ships unproven. TASK-008 is left
+unticked, the phase stays `In Progress`, and the mitigations that make the
+first real run cheap (`dry_run`, `display_report`, `show_full_output`) are all
+in the file.
+**Recommendation:** when a phase's de-risking task is gated on an external
+actor, say so in the task text and give the phase an explicit fallback order,
+so building ahead is a decision the plan anticipated rather than one taken
+under pressure at the boundary. The alternative — stopping the phase dead — is
+right only when the assumption's falsity would invalidate more than it costs to
+rewrite.
+**Skill:** none
+**Distilled:** merged into LESSON-003 — work complete in the tree but blocked
+on someone else's action is exactly the split that lesson exists for.
+**Gap:** answered — not skill-shaped. A GitHub secret only an admin can set is
+a domain surprise; LESSON-002 and LESSON-003 already carry the response.
+
+### ISSUE-007: an unquoted tool allowlist would have become two broken entries
+**What happened:** `claude_args` was first written with
+`--allowedTools Read,...,Bash(just review),...` unquoted. `claude_args` is
+split shell-style, so `Bash(just review)` would have arrived as `Bash(just`
+and `review)`.
+**Root cause:** a value containing spaces was written into a blob that is
+parsed as a command line, not as YAML strings.
+**Fix applied:** the whole allowlist is one double-quoted argument, with a
+comment in the workflow saying why the quoting is load-bearing.
+**Recommendation:** treat any multi-line `*_args` input to a third-party action
+as a command line and quote accordingly. The failure mode is not an error — it
+is a permission entry that silently does not match, which on an allowlist means
+the tool is denied and the run stalls rather than anything failing loudly.
+**Skill:** none
+**Distilled:** declined — specific to this action's `claude_args`, and recorded
+where it is actionable: a comment on the line itself.
+**Gap:** answered — not skill-shaped. Third-party input parsing is a property
+of someone else's action, not of how this repo works.
+
+### ISSUE-008: the dry-run patch had the same blind spot the path allowlist did
+**What happened:** the `dry_run` artifact was built from `git diff`, which
+omits untracked files — most of what a distillation produces.
+**Root cause:** the identical mistake as ISSUE-003, made again two hours later
+in the same plan, in the second place that reads a diff.
+**Fix applied:** `git add -N .` before `git diff`, so created files appear in
+the patch.
+**Recommendation:** grep for every `git diff` in a change once one of them has
+been caught by this. The lesson was already written down when this instance was
+introduced, which is the whole argument for mechanizing it rather than
+remembering it.
+**Skill:** none
+**Distilled:** merged into LESSON-016 — a second occurrence, inside the plan
+that produced the lesson.
+**Gap:** answered — not skill-shaped. A `git diff` default is a domain fact;
+LESSON-016 carries it and a check would carry it better.

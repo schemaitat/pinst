@@ -44,7 +44,10 @@ merge" is lost exactly when someone picks the work back up.
 **Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005,
 ISSUE-008, and again as ISSUE-009 — the lesson was written during that plan
-and still not applied to its own phases, which is what let them go stale)
+and still not applied to its own phases, which is what let them go stale);
+again in 260920-impoxu-daily-distil-action (ISSUE-006), where the blocked half
+was a phase's first task rather than its last, and the credential it waits on
+belongs to a person rather than to a merge
 
 ### LESSON-004: A manifest value that reaches a shell is read twice
 **Lesson:** Manifest fields interpolated into shell commands (paths,
@@ -242,4 +245,6 @@ new directory, a file dropped somewhere it does not belong. A path allowlist
 built on `git diff` alone therefore polices exactly the case that is already
 visible in review, and misses the one that is not.
 **Status:** prose
-**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-003)
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-003, and again as
+ISSUE-008 two hours later, in the second place in the same plan that reads a
+diff — the lesson was already written when the repeat was introduced)
