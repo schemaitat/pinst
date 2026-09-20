@@ -2,7 +2,7 @@
 id: 260920-juwako
 slug: mechanize-lesson-renumbering
 phase: 1
-status: Proposed
+status: Done
 ---
 
 # Phase 1 — Build `pinst harness renumber-lesson`
@@ -24,7 +24,7 @@ remediation text, `LEARNINGS.md`'s own prose) that only make sense to touch
 once the command they refer to actually exists.
 
 ## Steps
-- [ ] TASK-001: `src/core/harness/renumber.rs` (new) — read
+- [x] TASK-001: `src/core/harness/renumber.rs` (new) — read
       `.ash/LEARNINGS.md`, find every `### LESSON-NNN: <title>` heading,
       and locate the one whose title contains a given substring
       (case-insensitive). Zero or more than one match is an error naming
@@ -37,7 +37,7 @@ once the command they refer to actually exists.
       Why: this is the part of the tool that needs no git at all, so it is
       the cheapest slice to get right first, and TASK-002 builds directly on
       the `(old_id, new_id)` pair it produces.
-- [ ] TASK-002: `src/core/harness/renumber.rs` — add merge-base resolution
+- [x] TASK-002: `src/core/harness/renumber.rs` — add merge-base resolution
       (`git merge-base HEAD <against>` via `std::process::Command`, DEP-001)
       and unified-diff hunk parsing (`git diff --unified=0 <merge-base>
       HEAD`) that extracts, per changed file, the *added* lines and their
@@ -53,7 +53,7 @@ once the command they refer to actually exists.
       Why: depends on TASK-001's id pair; this is the part of the tool that
       makes the rewrite *safe*, which is the whole reason this plan exists
       rather than a five-line blind `sed`.
-- [ ] TASK-003: `src/core/harness/renumber.rs` — when `git merge-base`
+- [x] TASK-003: `src/core/harness/renumber.rs` — when `git merge-base`
       fails (bad `--against`, no git repo, no `git` on `PATH`), degrade to
       renaming only the located heading and returning every other literal
       occurrence of `old_id` in the repo as a report instead of rewriting
@@ -65,7 +65,7 @@ once the command they refer to actually exists.
       Why: depends on TASK-002's scoped path existing, so the degrade can be
       written as "the same report type, minus the write" rather than a
       second thing to keep in sync.
-- [ ] TASK-004: `src/core/harness/mod.rs` — add `pub mod renumber;`.
+- [x] TASK-004: `src/core/harness/mod.rs` — add `pub mod renumber;`.
       `src/cli/mod.rs` — add `HarnessAction::RenumberLesson
       (HarnessRenumberLessonArgs)` with fields `title: String`, `to:
       Option<String>`, `against: Option<String>` (default `"main"` applied
@@ -79,7 +79,7 @@ once the command they refer to actually exists.
       shape in the same file.
       Why: depends on TASK-001–003 existing as a callable library function;
       this is only wiring.
-- [ ] TASK-005: Run `just qc` and fix anything red (TEST-006).
+- [x] TASK-005: Run `just qc` and fix anything red (TEST-006).
       Why: depends on TASK-004 — nothing compiles as a whole until the CLI
       wiring lands.
 
@@ -91,18 +91,18 @@ they are actually implemented (the degrade path in TASK-003 *is* the
 mitigation for RISK-002).
 
 ## Done criteria
-- [ ] TEST-001: locating a heading by title substring succeeds when exactly
+- [x] TEST-001: locating a heading by title substring succeeds when exactly
       one matches, and fails naming the candidates when zero or more than
       one do.
-- [ ] TEST-002: the next free id is one past the current maximum, at the
+- [x] TEST-002: the next free id is one past the current maximum, at the
       same zero-padded width; a caller-supplied `--to` that already names an
       existing heading is rejected.
-- [ ] TEST-003: in a fixture git repo, a citation added by the current
+- [x] TEST-003: in a fixture git repo, a citation added by the current
       branch's own diff is rewritten; a citation of the same old number that
       predates the branch's divergence from `main` is left untouched.
-- [ ] TEST-004: an unresolvable `--against` (or no git repo) still renames
+- [x] TEST-004: an unresolvable `--against` (or no git repo) still renames
       the located heading, writes nothing else, and reports every other
       literal occurrence of the old id found in the repo.
-- [ ] TEST-005: with dry-run set, the command returns the same report as a
+- [x] TEST-005: with dry-run set, the command returns the same report as a
       real run and the working tree is unchanged.
-- [ ] TEST-006: `just qc` is green (fmt, clippy, tests, harness).
+- [x] TEST-006: `just qc` is green (fmt, clippy, tests, harness).

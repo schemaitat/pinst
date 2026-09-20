@@ -94,7 +94,7 @@ so far.
 ## Phases
 | # | Phase | File | Status |
 |---|-------|------|--------|
-| 1 | Build `pinst harness renumber-lesson` | [phase-01.md](phase-01.md) | Proposed |
+| 1 | Build `pinst harness renumber-lesson` | [phase-01.md](phase-01.md) | Done |
 | 2 | Point the finding at the remedy, and close LESSON-022's own gap | [phase-02.md](phase-02.md) | Proposed |
 
 ## Affected Files

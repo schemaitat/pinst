@@ -15,14 +15,15 @@ use serde::Serialize;
 
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
-    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs, HarnessSkillsArgs,
+    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs, HarnessRenumberLessonArgs,
+    HarnessSkillsArgs,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
 use crate::core::harness::corpus::Corpus;
 use crate::core::harness::index::{self, IndexState};
 use crate::core::harness::root::CorpusRoot;
-use crate::core::harness::{evidence, id, skills};
+use crate::core::harness::{evidence, id, renumber, skills};
 
 /// What `new-id` returns. One field, but an envelope item all the same: an
 /// agent that has learned to read `items[0]` from every other command should
@@ -41,8 +42,18 @@ pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
         HarnessAction::Index(index) => self::index(ctx, &load(ctx, args)?, index),
         HarnessAction::Check => self::check(ctx, &load(ctx, args)?),
         HarnessAction::Skills(skills) => self::skills(ctx, &load(ctx, args)?, skills),
+        HarnessAction::RenumberLesson(renumber) => {
+            self::renumber_lesson(ctx, &load(ctx, args)?, renumber)
+        }
     }
 }
+
+/// The ref a merge-base is taken against when the caller names none.
+///
+/// Defaulted here rather than in `clap` so `--json` reports the ref that was
+/// actually used: a report saying `against: null` leaves the one thing that
+/// decided the rewrite's scope unrecorded.
+const DEFAULT_AGAINST: &str = "main";
 
 /// Discovers the corpus and reads it, announcing where it landed.
 ///
@@ -134,6 +145,88 @@ fn check(ctx: &Ctx, corpus: &Corpus) -> Result<ExitCode> {
     let findings = check::run(corpus);
     let clean = format!("corpus clean ({} plans)", corpus.len());
     report(ctx, "harness check", corpus, findings, &clean)
+}
+
+/// Moves one lesson to a free id and takes this branch's citations with it.
+///
+/// Not a `report()` caller, because it produces no findings: this is the
+/// *remedy* for `lesson.duplicate-id`, so its exit codes are the plain ones —
+/// `0` when it renamed something, `2` when the title matched no heading or
+/// several (which `renumber` raises as a `UsageError` and `main` maps).
+/// Exiting `3` here would tell a caller there is still something to act on
+/// immediately after the thing was acted on.
+fn renumber_lesson(
+    ctx: &Ctx,
+    corpus: &Corpus,
+    args: &HarnessRenumberLessonArgs,
+) -> Result<ExitCode> {
+    let report = renumber::run(
+        &corpus.root,
+        &renumber::Options {
+            title: args.title.clone(),
+            to: args.to.clone(),
+            against: args
+                .against
+                .clone()
+                .unwrap_or_else(|| DEFAULT_AGAINST.to_string()),
+            dry_run: ctx.dry_run,
+        },
+    )?;
+
+    if !ctx.json {
+        print_renumber(&report);
+    }
+    ctx.finish(
+        Envelope::new("harness renumber-lesson", Status::Ok, vec![&report]).dry_run(ctx.dry_run),
+    )
+}
+
+/// The human report.
+///
+/// Every line it did not rewrite is printed as loudly as every line it did:
+/// in degrade mode the unrewritten hits *are* the output, and a tool that
+/// buried them would have quietly reinstated the manual grep it replaced.
+fn print_renumber(report: &renumber::Report) {
+    let verb = if report.dry_run {
+        "would move"
+    } else {
+        "moved"
+    };
+    println!(
+        "{verb} {} -> {} ({})",
+        report.old_id, report.new_id, report.title
+    );
+    println!(
+        "  {}:{}  {}",
+        report.heading.file, report.heading.line, report.heading.text
+    );
+    for citation in &report.rewritten {
+        println!("  {}:{}  {}", citation.file, citation.line, citation.text);
+    }
+
+    match &report.scope {
+        renumber::Scope::Scoped {
+            against,
+            merge_base,
+        } => println!(
+            "\nscope: {} citation(s) this branch added since {against} ({})",
+            report.rewritten.len(),
+            &merge_base[..merge_base.len().min(12)]
+        ),
+        renumber::Scope::Degraded { against, reason } => {
+            println!("\nscope: unknown — no merge-base against {against}: {reason}");
+            println!(
+                "the heading was renamed; these {} occurrence(s) were NOT touched, because",
+                report.unrewritten.len()
+            );
+            println!("nothing could tell which of them mean the lesson that moved:");
+            for citation in &report.unrewritten {
+                println!("  {}:{}  {}", citation.file, citation.line, citation.text);
+            }
+        }
+    }
+    println!("\nreview the diff before committing: no tool can tell whether a");
+    println!("rewritten citation was the one you meant.");
 }
 
 /// The shared rendering for every action that produces findings.
