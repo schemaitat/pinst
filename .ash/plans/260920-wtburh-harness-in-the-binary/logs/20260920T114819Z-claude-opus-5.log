@@ -1,0 +1,2 @@
+{"ts":"2026-09-20T11:48:19Z","event":"run_start","plan":"260920-wtburh-harness-in-the-binary","phase":null,"task":null,"message":"first run; resuming at phase 1 TASK-001 (all phases Proposed)","detail":{"head":"0cc43ca7c415cd3562304f87764984639a5465cf","branch":"feat/harness-in-pinst","resume":"phase-01 TASK-001"}}
+{"ts":"2026-09-20T11:48:19Z","event":"phase_start","plan":"260920-wtburh-harness-in-the-binary","phase":1,"task":null,"message":"the corpus model, and pinst harness new-id","detail":{}}
