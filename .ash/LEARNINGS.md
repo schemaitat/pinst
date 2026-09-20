@@ -45,6 +45,18 @@ the working tree, and what can only be confirmed afterwards.
 unfinished, and the distinction between "not written" and "written, awaiting a
 merge" is lost exactly when someone picks the work back up.
 **Status:** prose
+**Mechanize:** declined — the only half a script can see is hollow. A check can
+require the two headings to exist; it cannot read a criterion and know which
+side of the line it belongs on, so it would have passed every phase that
+produced this lesson — each would have written its merge-gated criterion under
+"provable in the tree" and satisfied the check. Mandating the split across all
+29 existing phase files would also make `None.` the answer in most of them, and
+a check whose satisfying answer is boilerplate measures the boilerplate.
+Enforced as prose instead, in the skill that writes Done criteria: `plan-write`
+now carries the rule, the blocked-task corollary from 260920-impoxu (ISSUE-006)
+and the step that returns the outcome to the phase afterwards.
+`phase.logged-not-done` (LESSON-009) stays the mechanical backstop for the half
+that goes stale.
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005,
 ISSUE-008, and again as ISSUE-009 — the lesson was written during that plan
 and still not applied to its own phases, which is what let them go stale);

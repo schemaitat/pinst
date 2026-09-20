@@ -234,7 +234,8 @@ and why. Note any shortcuts taken and what would be needed to address them later
 
 ## Done criteria
 <TEST-NNN items that apply to this phase. What must be true before this phase is
-considered complete.>
+considered complete. Split into two halves if any of it cannot be proved in the
+working tree — see "Done-criteria rules" below.>
 ```
 
 **Mapping Step 1 labels → ADR:**
@@ -302,7 +303,8 @@ Steps start unchecked; tick them off as work progresses and flip `## Status` to 
 <Unresolved ASSUMPTION identifiers, or "None.">
 
 ## Done criteria
-<TEST-NNN items>
+<TEST-NNN items, split into two halves if any of them cannot be proved in the
+working tree — see "Done-criteria rules" below.>
 ```
 
 ### Frontmatter rules
@@ -324,6 +326,48 @@ of prose, so it has to stay trustworthy:
   index can be regenerated from the files without re-deriving it.
 - `areas` and `files_touched` are search keys, not documentation — keep
   them short and literal (real paths, real subsystem names).
+
+### Done-criteria rules
+
+- **Split `## Done criteria` in two whenever part of it cannot be proved in
+  the working tree** — a merge to `main`, a release, a deploy, an admin
+  action, a credential only a person can set:
+
+  ```markdown
+  ## Done criteria
+  **Provable in the tree:**
+  - TEST-006: `actionlint` accepts the workflow; `just qc` is green.
+
+  **Confirmed after landing (needs DEP-002, set by an admin):**
+  - TEST-009: a scheduled run on a clean corpus ends at the gate and opens
+    nothing.
+  ```
+
+  Write the second half only when there is something to put in it. A phase
+  that is entirely local has one list and no headings — a mandatory empty
+  half would be boilerplate, and boilerplate is not a decision.
+
+- **Say so in the task text when a task waits on someone outside the room**,
+  and give the phase an explicit fallback order. A linear task chain has no
+  other way to express "this link is held by a person", and without it,
+  building past the blocked task is a decision taken under pressure at the
+  boundary rather than one the plan anticipated.
+
+- **When the wait ends, return the outcome to the phase.** Add a
+  `## Confirmed after the merge` section recording what actually happened,
+  then flip the status. The handover is not finished until the record knows.
+
+**Why:** a phase whose code is written, committed and correct still reads as
+unfinished while one criterion waits on somebody else — and "not written" and
+"written, awaiting a merge" are exactly the two states a returning reader has
+to tell apart. Split, the local half closes honestly and the remainder is a
+short handover instead of a phase stalled at 90%.
+
+This one is on you, like linearity. No check can read a criterion and know
+which side of the line it belongs on, so nothing will catch a merge-gated
+criterion filed under "provable in the tree" (LESSON-003). The nearest
+mechanical backstop is `phase.logged-not-done`, and it only fires once
+`.ash/CHANGELOG.log` already says the work shipped.
 
 ______________________________________________________________________
 
