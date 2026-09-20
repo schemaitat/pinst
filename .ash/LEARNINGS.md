@@ -248,7 +248,17 @@ written ahead of their callers here, one was deleted and re-added with a
 different signature, one turned out to be unnecessary, and one only earned its
 place by finding a use nobody had planned (reporting orphan pages).
 **Status:** prose
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003)
+**Mechanize:** declined — the mechanical half already exists and is what
+forces the issue: `clippy --all-targets -D warnings` is exactly the build
+failure this lesson is about surviving. What the lesson adds is the judgement
+of *how to respond* — omit the API, or mark it and date the mark — and no
+exit code can distinguish a well-placed allow from a lazy one.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003); again in
+260920-wtburh-harness-in-the-binary (ISSUE-001), which showed the remedy is
+only half of one: `just qc` lints with `--all-targets`, so the test cfg is on
+and the attribute disables itself. The binary build and the test build are two
+separate warning sets — the attribute settles the first, and the second has to
+be settled by tests that actually exercise the new API.
 
 ### LESSON-017: Reject unknown fields in any format a human writes by hand
 **Lesson:** Put `#[serde(deny_unknown_fields)]` on hand-authored config types.
@@ -275,4 +285,77 @@ parameter version is shorter, needs no lock, and removes the possibility of a
 test reaching the developer's real `~/.cache` at all. The awkward test was a
 design problem one level up, not a testing problem.
 **Status:** prose
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
+**Mechanize:** declined — the trigger is "this test feels awkward", which is
+not a property of the source. A check could flag `set_var` in tests, but both
+sightings so far were something else: a process-wide default in one, a plain
+`const` read inside a function in the other. The pattern is recognisable and
+not detectable.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
+260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
+environment variable but a plain `const` read inside the function — a
+30-second timeout that made the test proving it works take 30 seconds. Same
+tell: the test is awkward because the value is ambient.
+
+### LESSON-019: Compare a port against the incumbent on broken input, not on healthy input
+**Lesson:** When reimplementing something that already works, keep both
+versions runnable and diff them on deliberately broken input for as long as
+the old one exists. Agreement on the happy path is nearly free and proves
+nearly nothing. Write the comparison to be *deleted* with the incumbent, not
+adapted.
+**Why:** Both implementations of the corpus checker agreed on the real corpus
+and on five of six broken fixtures. The sixth disagreement was a scanner for
+plan ids that required a non-id character after the match — but a lesson cites
+plans by directory name, so every real citation is followed by `-<slug>`, the
+scanner matched nothing, and all 23 recorded issues came out as "untriaged"
+against a bash run of "clean". Nothing in the healthy corpus could have shown
+that, because the bug's whole effect was to make a set come out empty, and an
+empty set is what a clean corpus looks like.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-003)
+
+### LESSON-020: Two implementations that write one file must agree byte for byte
+**Lesson:** During a changeover where old and new both generate the same
+artifact, treat byte-identical output as a hard constraint of every phase
+before the cutover — attribution lines, comments and all. Change the bytes in
+the commit that deletes the loser, and check the per-phase Done criteria are
+mutually satisfiable before writing them.
+**Why:** Each generator checks whether the file on disk matches what it would
+produce, so a one-character difference has each declaring the other's output
+stale — and one of them runs inside `qc`. Phase 2 of this plan wrote two
+criteria that could not both hold: `harness index --check` exits 0, and
+`just qc` (still running the script) stays green. The plan's own trade-off
+note said byte-identity was the constraint, one paragraph from the criteria
+that broke it, so this is not something more care at writing time would catch
+— it needs to be a question asked of the finished criteria.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-002)
+
+### LESSON-021: A check that searches text can be satisfied by the text describing it
+**Lesson:** Any check that proves something exists by grepping the tree can be
+satisfied by documentation *about* that check. Exclude prose from the search,
+and prove the check works the only way that counts: delete what it is supposed
+to find and watch it fire.
+**Why:** `lesson.unenforced` confirms a lesson's claimed enforcement by
+searching the source for the finding id it names. Widening that search from
+one directory to the whole repo brought doc comments into range, and the first
+thing in range was a comment — written in the same change — using a real
+finding id as an example. The lesson resolved against that sentence rather
+than against the script that emits it, and deleting the script left the check
+silent. A passing check is not evidence until it has been seen to fail.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007)
+
+### LESSON-022: A deletion that still compiles has not been verified
+**Lesson:** After removing code programmatically, compare the test count
+before and after. Locate the bounds with a unique anchor and assert on the
+lines about to go, rather than slicing from the first match of a generic
+pattern.
+**Why:** Cutting one test helper out of a Rust file with a string-index slice
+whose end marker was `"    }\n}\n"` matched the close of the enclosing impl
+block instead of the method, deleting six of the file's eight tests. The
+result compiled, `cargo test` passed, and the only visible symptom was the
+count dropping from 8 to 2 in output nobody has to read. Balanced braces make
+a truncated Rust file indistinguishable from an intact one to the compiler,
+which is exactly the class of edit where "it builds" is worth nothing.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-008)
