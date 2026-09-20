@@ -92,6 +92,13 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # claude-code-action@v1 requests an OIDC token during setup and fails
+      # before calling the model without this — even when the credential is a
+      # CLAUDE_CODE_OAUTH_TOKEN and no cloud provider federation is in use.
+      # The failure is "Could not fetch an OIDC token", after the token has
+      # been accepted and the dependencies installed, which reads like an auth
+      # problem and is not one.
+      id-token: write
     env:
       # `create-pr`'s evidence command shells out to `gh pr list`. Without a
       # token it fails, and the review the model is about to read carries a
