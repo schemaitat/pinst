@@ -466,6 +466,25 @@ fn issue_ids(text: &str) -> Vec<String> {
     found
 }
 
+/// Every `LESSON-<digits>` in a string, including a lesson's own heading.
+///
+/// Mirrors `issue_ids`: a lesson number is referenced in prose far more often
+/// than the six-letter plan id is, since lessons cross-cite each other
+/// directly (LESSON-022).
+pub(crate) fn lesson_ids(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("LESSON-") {
+        let tail = &rest[at + 7..];
+        let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() {
+            found.push(format!("LESSON-{digits}"));
+        }
+        rest = &rest[at + 7..];
+    }
+    found
+}
+
 /// One `.ash/CHANGELOG.log` line: the append-only record of what actually
 /// shipped.
 ///

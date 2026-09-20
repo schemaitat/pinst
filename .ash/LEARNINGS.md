@@ -308,7 +308,16 @@ parameter version is shorter, needs no lock, and removes the possibility of a
 test reaching the developer's real `~/.cache` at all. The awkward test was a
 design problem one level up, not a testing problem.
 **Status:** prose
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
+**Mechanize:** declined — the trigger is "this test feels awkward", which is
+not a property of the source. A check could flag `set_var` in tests, but both
+sightings so far were something else: a process-wide default in one, a plain
+`const` read inside a function in the other. The pattern is recognisable and
+not detectable.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
+260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
+environment variable but a plain `const` read inside the function — a
+30-second timeout that made the test proving it works take 30 seconds. Same
+tell: the test is awkward because the value is ambient.
 
 ### LESSON-019: `set -euo pipefail` makes two everyday `grep` idioms lie
 **Lesson:** In a `set -euo pipefail` script, `var="$(... | grep ...)"` aborts
@@ -378,24 +387,19 @@ plans were distilled on the same day: `260920-impoxu` and `260920-tensvp` both
 minted 015, 016 and 017 for different lessons. The renumbering is manual and
 silent, which is the part worth fixing — nothing checks that every lesson id is
 unique or that a reference to one still resolves.
-**Status:** prose
+**Status:** mechanized
+**Check:** lesson.duplicate-id
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012); again the same day
 in 260920-wtburh-harness-in-the-binary, where `main` and an open branch had
 both minted LESSON-019 through LESSON-022 for different lessons. Resolved by
 this lesson's own rule — main's four kept their numbers, the branch's eight
 shifted to 023..030, and a grep of the corpus found four cross-references to
-renumber. Third sighting, and still nothing checks that a lesson id is unique
-or that a reference to one resolves.
-**Mechanize:** declined — the trigger is "this test feels awkward", which is
-not a property of the source. A check could flag `set_var` in tests, but both
-sightings so far were something else: a process-wide default in one, a plain
-`const` read inside a function in the other. The pattern is recognisable and
-not detectable.
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
-260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
-environment variable but a plain `const` read inside the function — a
-30-second timeout that made the test proving it works take 30 seconds. Same
-tell: the test is awkward because the value is ambient.
+renumber. Third sighting became the trigger to mechanize it: `harness check`
+now reports `lesson.duplicate-id.<id>` for two headings sharing a number, and
+`lesson.dangling-reference.<id>` for a citation nothing defines — the second
+half this lesson also named ("or that a reference to one resolves") and
+`LESSON-NNN` itself is still what mints the number, so a collision is caught
+at the next `just qc` rather than at the next merge.
 
 ### LESSON-023: Compare a port against the incumbent on broken input, not on healthy input
 **Lesson:** When reimplementing something that already works, keep both

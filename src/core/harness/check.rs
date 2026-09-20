@@ -447,8 +447,39 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
         return;
     }
     let shown = corpus.relative(&file);
+    let lessons = model::read_lessons(&file);
 
-    for lesson in model::read_lessons(&file) {
+    // LESSON-022: a shared counter minted by hand collides across parallel
+    // branches, and nothing used to notice — the renumbering that followed
+    // was manual and silent both times it happened.
+    let mut defined: BTreeSet<&str> = BTreeSet::new();
+    for lesson in &lessons {
+        if !defined.insert(lesson.id.as_str()) {
+            findings.push(error(
+                format!("lesson.duplicate-id.{}", lesson.id),
+                format!("{shown} has more than one '### {}' heading", lesson.id),
+                "renumber the later one to the next free LESSON-NNN and grep \
+                 the corpus for citations of it",
+            ));
+        }
+    }
+
+    if let Ok(text) = std::fs::read_to_string(&file) {
+        let mut cited: BTreeSet<String> = BTreeSet::new();
+        for reference in model::lesson_ids(&text) {
+            if cited.insert(reference.clone()) && !defined.contains(reference.as_str()) {
+                findings.push(error(
+                    format!("lesson.dangling-reference.{reference}"),
+                    format!(
+                        "{shown} cites {reference}, which no '### {reference}' heading defines"
+                    ),
+                    "fix the typo, or write the lesson it was meant to cite",
+                ));
+            }
+        }
+    }
+
+    for lesson in &lessons {
         if lesson.status.as_deref() != Some("mechanized") {
             continue;
         }
@@ -888,6 +919,30 @@ mod tests {
                         ".ash/LEARNINGS.md",
                         "# Distilled learnings\n\n### LESSON-001: A thing\n\
                          **Status:** mechanized\n**Check:** nothing.emits.this\n",
+                    );
+                },
+            ),
+            case(
+                "lesson.duplicate-id.LESSON-001",
+                "two lessons minted the same number, as happens across parallel branches",
+                |f: &Fixture| {
+                    f.good_plan("260919-qwerty", "thing");
+                    f.write(
+                        ".ash/LEARNINGS.md",
+                        "# Distilled learnings\n\n### LESSON-001: First\n**Status:** prose\n\n\
+                         ### LESSON-001: Second\n**Status:** prose\n",
+                    );
+                },
+            ),
+            case(
+                "lesson.dangling-reference.LESSON-999",
+                "a 'Seen in:' line citing a lesson number nothing defines",
+                |f: &Fixture| {
+                    f.good_plan("260919-qwerty", "thing");
+                    f.write(
+                        ".ash/LEARNINGS.md",
+                        "# Distilled learnings\n\n### LESSON-001: A thing\n**Status:** prose\n\
+                         **Seen in:** also see LESSON-999\n",
                     );
                 },
             ),
