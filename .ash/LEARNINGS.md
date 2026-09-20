@@ -132,7 +132,11 @@ plans predated the format their own skills mandate); again in
 files had never been valid YAML because only hand-written parsers had ever
 read them; and again in 260920-tensvp-tool-docs-explorer (ISSUE-008), where a
 Done criterion narrowed during implementation and became a test in the same
-change rather than a corrected sentence in the plan.
+change rather than a corrected sentence in the plan; and again in
+260920-wtburh-harness-in-the-binary (ISSUE-013), where a plan said the JSON
+envelope's contract was preserved, every check of it was a manual `jq` at a
+terminal, and the command shipped exiting 3 with its findings absent from the
+document.
 
 ### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
 **Lesson:** A checker that compares a record only with itself will pass on a
@@ -141,7 +145,7 @@ handed off to someone else — a merge, an admin action, a deploy — the last
 item in the handover is returning the outcome to the record, and something
 mechanical has to notice when that did not happen. Point the check at
 whatever local artifact is written *after* the fact; in this repo that is the
-append-only `.ash/CHANGELOG.log`, which is why `ash.sh check` now compares it
+append-only `.ash/CHANGELOG.log`, which is why `pinst harness check` now compares it
 against every phase's status.
 **Why:** The corpus reported `corpus clean (3 plans)` for a full day while it
 told its next reader to merge two already-merged PRs and to expect a version
@@ -267,7 +271,17 @@ written ahead of their callers here, one was deleted and re-added with a
 different signature, one turned out to be unnecessary, and one only earned its
 place by finding a use nobody had planned (reporting orphan pages).
 **Status:** prose
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003)
+**Mechanize:** declined — the mechanical half already exists and is what
+forces the issue: `clippy --all-targets -D warnings` is exactly the build
+failure this lesson is about surviving. What the lesson adds is the judgement
+of *how to respond* — omit the API, or mark it and date the mark — and no
+exit code can distinguish a well-placed allow from a lazy one.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003); again in
+260920-wtburh-harness-in-the-binary (ISSUE-001), which showed the remedy is
+only half of one: `just qc` lints with `--all-targets`, so the test cfg is on
+and the attribute disables itself. The binary build and the test build are two
+separate warning sets — the attribute settles the first, and the second has to
+be settled by tests that actually exercise the new API.
 
 ### LESSON-017: Reject unknown fields in any format a human writes by hand
 **Lesson:** Put `#[serde(deny_unknown_fields)]` on hand-authored config types.
@@ -365,4 +379,167 @@ minted 015, 016 and 017 for different lessons. The renumbering is manual and
 silent, which is the part worth fixing — nothing checks that every lesson id is
 unique or that a reference to one still resolves.
 **Status:** prose
-**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012)
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012); again the same day
+in 260920-wtburh-harness-in-the-binary, where `main` and an open branch had
+both minted LESSON-019 through LESSON-022 for different lessons. Resolved by
+this lesson's own rule — main's four kept their numbers, the branch's eight
+shifted to 023..030, and a grep of the corpus found four cross-references to
+renumber. Third sighting, and still nothing checks that a lesson id is unique
+or that a reference to one resolves.
+**Mechanize:** declined — the trigger is "this test feels awkward", which is
+not a property of the source. A check could flag `set_var` in tests, but both
+sightings so far were something else: a process-wide default in one, a plain
+`const` read inside a function in the other. The pattern is recognisable and
+not detectable.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
+260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
+environment variable but a plain `const` read inside the function — a
+30-second timeout that made the test proving it works take 30 seconds. Same
+tell: the test is awkward because the value is ambient.
+
+### LESSON-023: Compare a port against the incumbent on broken input, not on healthy input
+**Lesson:** When reimplementing something that already works, keep both
+versions runnable and diff them on deliberately broken input for as long as
+the old one exists. Agreement on the happy path is nearly free and proves
+nearly nothing. Write the comparison to be *deleted* with the incumbent, not
+adapted.
+**Why:** Both implementations of the corpus checker agreed on the real corpus
+and on five of six broken fixtures. The sixth disagreement was a scanner for
+plan ids that required a non-id character after the match — but a lesson cites
+plans by directory name, so every real citation is followed by `-<slug>`, the
+scanner matched nothing, and all 23 recorded issues came out as "untriaged"
+against a bash run of "clean". Nothing in the healthy corpus could have shown
+that, because the bug's whole effect was to make a set come out empty, and an
+empty set is what a clean corpus looks like.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-003)
+
+### LESSON-024: Two implementations that write one file must agree byte for byte
+**Lesson:** During a changeover where old and new both generate the same
+artifact, treat byte-identical output as a hard constraint of every phase
+before the cutover — attribution lines, comments and all. Change the bytes in
+the commit that deletes the loser, and check the per-phase Done criteria are
+mutually satisfiable before writing them.
+**Why:** Each generator checks whether the file on disk matches what it would
+produce, so a one-character difference has each declaring the other's output
+stale — and one of them runs inside `qc`. Phase 2 of this plan wrote two
+criteria that could not both hold: `harness index --check` exits 0, and
+`just qc` (still running the script) stays green. The plan's own trade-off
+note said byte-identity was the constraint, one paragraph from the criteria
+that broke it, so this is not something more care at writing time would catch
+— it needs to be a question asked of the finished criteria.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-002)
+
+### LESSON-025: A check that searches text can be satisfied by the text describing it
+**Lesson:** Any check that proves something exists by grepping the tree can be
+satisfied by documentation *about* that check. Exclude prose from the search,
+and prove the check works the only way that counts: delete what it is supposed
+to find and watch it fire.
+**Why:** `lesson.unenforced` confirms a lesson's claimed enforcement by
+searching the source for the finding id it names. Widening that search from
+one directory to the whole repo brought doc comments into range, and the first
+thing in range was a comment — written in the same change — using a real
+finding id as an example. The lesson resolved against that sentence rather
+than against the script that emits it, and deleting the script left the check
+silent. A passing check is not evidence until it has been seen to fail.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007)
+
+### LESSON-026: A deletion that still compiles has not been verified
+**Lesson:** After removing code programmatically, compare the test count
+before and after. Locate the bounds with a unique anchor and assert on the
+lines about to go, rather than slicing from the first match of a generic
+pattern.
+**Why:** Cutting one test helper out of a Rust file with a string-index slice
+whose end marker was `"    }\n}\n"` matched the close of the enclosing impl
+block instead of the method, deleting six of the file's eight tests. The
+result compiled, `cargo test` passed, and the only visible symptom was the
+count dropping from 8 to 2 in output nobody has to read. Balanced braces make
+a truncated Rust file indistinguishable from an intact one to the compiler,
+which is exactly the class of edit where "it builds" is worth nothing.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-008)
+
+### LESSON-027: A sweep filtered by file type only finds the callers you remembered
+**Lesson:** When deleting or renaming something other files invoke, grep the
+whole tree with no `--include` filter and read every hit. Write the *check*
+for leftovers the same way — a Done criterion that greps `*.md` and the
+justfile is a criterion that passes while CI is broken.
+**Why:** Retiring `scripts/ash.sh` swept the justfile, both plan skills, two
+slash commands and both READMEs, and left `.github/workflows/ci.yml` calling
+it — because the phase's own verification step filtered on `*.md` and
+`justfile`. The filter was written from the same memory that did the sweep, so
+it could only confirm what had already been thought of. CI found it two pushes
+later, which is the cheapest place it could still have gone wrong and the most
+annoying place to notice.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
+
+### LESSON-028: CI that restates the gate instead of calling it will drift from it
+**Lesson:** When a workflow duplicates the steps of a local quality gate, that
+duplication is an unenforced claim that the two are identical. Either call the
+gate (`just qc`) or accept that every change to it is a two-file change, and
+say so in the file where the copy lives.
+**Why:** `ci.yml` opens by stating that its steps mirror `qc` "so a green CI
+and a green `just qc` mean the same thing", and then restates them by hand to
+avoid depending on `just`. That is a reasonable trade, but it made the claim
+false the moment the justfile's harness recipe changed, and nothing local
+could detect it: `just qc` was green on the very commit CI could not run. The
+same shape as LESSON-008 — an invariant asserted in prose — except the second
+copy here is executable, which makes it look maintained.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
+
+### LESSON-029: A documented degradation is a test specification
+**Lesson:** When a plan writes down that something degrades in a hostile
+environment — no network, no auth, a missing binary — that sentence is
+telling you what a test must arrange or avoid depending on. Reproduce the
+hostile case locally by shadowing the binary with a stub that exits non-zero;
+it is two lines and it catches the class before CI does.
+**Why:** This plan's DEP-003 said the `create-pr` conformance measure
+"degrades to `unmeasured` when it is absent or the network is" — and a test
+was then written asserting the real corpus produces no findings *while
+running that measure*. It passed locally only because `gh` happened to be
+authenticated, and failed on the first CI run. The risk was not unforeseen;
+it was foreseen, written down, and then not carried into the test that
+depended on it, which is the more common failure and the harder one to
+notice.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-009)
+
+### LESSON-030: A write to an external system is verified by reading it back
+**Lesson:** Never pipe a command through `tail` or `head` when its exit code
+is what you are checking — `$?` becomes the pipe's last stage and is almost
+always 0. Capture the output to a file, or test `${PIPESTATUS[0]}`. And for
+anything that writes to a system you do not control — a PR body, a release, a
+remote file — the exit code is not the check anyway: fetch it back and assert
+on what is actually there.
+**Why:** `gh pr edit --body-file` failed against this repo because it fetches
+project cards as part of its update and GitHub now rejects that query — a
+deprecation with nothing to do with the body being written. It reports the
+failure properly, exiting **1**. But the command was run as `... 2>&1 | tail
+-2`, so the exit code belonged to `tail`, the error line read like a routine
+deprecation notice, and the PR body silently stayed as it was. What caught it
+was fetching the body back and finding the new section absent; what would have
+caught it sooner was not discarding the status of the thing being checked. The
+same pipe habit was used on `just qc` throughout that session and got away
+with it only because its failures happen to print a recognisable line near the
+end.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-011)
+
+### LESSON-031: After merging into a branch that deleted something, grep for the old name
+**Lesson:** Git conflicts are computed from files both sides edited, so the
+deletion half of a rename cannot conflict with code written against the old
+name. After any merge into a branch that removed or renamed a file, grep the
+merged tree for the old name and run whatever the other side added — not just
+the test suite.
+**Why:** This branch deleted `scripts/ash.sh`; while it was open, `main` grew
+two consumers of it, a guard script and a scheduled workflow. The merge
+reported two conflicts, both in append-only prose files, and said nothing
+about either consumer. `just qc` was green, the PR check was green, and the
+06:17 UTC distillation would have failed the next morning on a workflow no
+pull request exercises. One `just distil-guard preflight` found all of it.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-012)

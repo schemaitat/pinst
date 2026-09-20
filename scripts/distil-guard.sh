@@ -19,7 +19,12 @@
 # workflow branches on that string rather than on the code.
 set -euo pipefail
 
-ASH="${ASH_BIN:-scripts/ash.sh}"
+# The corpus checker is a pinst subcommand, so the command is two words and
+# has to be an array — `"$ASH" check` with a two-word ASH would look for a
+# binary literally named "cargo run". `cargo run` rather than `pinst` so this
+# works from a checkout with nothing installed, which is what CI has; set
+# ASH_BIN="pinst harness" on a machine that has the release binary.
+read -r -a ASH <<< "${ASH_BIN:-cargo run --quiet -- harness}"
 WIRE="${WIRE_BIN:-scripts/agents-wire.sh}"
 
 # What an unattended distillation is allowed to touch. Everything it produces
@@ -42,7 +47,7 @@ find_indices() { [ "${#FIND_ID[@]}" -gt 0 ] && printf '%s\n' "${!FIND_ID[@]}"; r
 
 usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-# Mirrors ash.sh's report(): findings to stderr in a fixed shape, exit 3 if
+# Mirrors the harness's report(): findings to stderr in a fixed shape, exit 3 if
 # there were any. Same output whichever guard produced them.
 report() {
   local clean_msg="${1:-}" total=0 i
@@ -60,8 +65,8 @@ report() {
 }
 
 # --- preflight --------------------------------------------------------------
-# The model-free half of the gate. `ash.sh` already computes both numbers that
-# matter — `summary.findings` from check, `agenda_items` from skills — so this
+# The model-free half of the gate. `pinst harness` already computes both
+# numbers that matter — `summary.findings` from check, `agenda_items` from skills — so this
 # asks the corpus rather than forming its own opinion about what needs doing.
 #
 # Both subcommands exit 3 when they have something to say, which is the normal
@@ -87,17 +92,20 @@ print(int(doc))
 cmd_preflight() {
   local check_json skills_json findings agenda
 
-  check_json="$("$ASH" check --json 2>/dev/null || true)"
-  skills_json="$("$ASH" skills --json 2>/dev/null || true)"
+  check_json="$("${ASH[@]}" check --json 2>/dev/null || true)"
+  skills_json="$("${ASH[@]}" skills --json 2>/dev/null || true)"
 
   findings="$(printf '%s' "$check_json" | json_field summary.findings || true)"
-  agenda="$(printf '%s' "$skills_json" | json_field agenda_items || true)"
+  # `summary.agenda_items`, not top level: pinst's envelope keeps
+  # command-specific counts under `summary`, where `summary.findings` above
+  # also lives. The bash harness spliced them in at the top.
+  agenda="$(printf '%s' "$skills_json" | json_field summary.agenda_items || true)"
 
   if [ -z "$findings" ] || [ -z "$agenda" ]; then
     printf 'work=false\n'
     finding "distil.preflight-failed" error \
-      "could not read summary.findings or agenda_items from $ASH --json" \
-      "run '$ASH check --json' and '$ASH skills --json' by hand and look at what they print"
+      "could not read summary.findings or agenda_items from ${ASH[*]} --json" \
+      "run '${ASH[*]} check --json' and '${ASH[*]} skills --json' by hand and look at what they print"
     report
     return
   fi
@@ -216,10 +224,10 @@ cmd_verify() {
       "$WIRE --check fails on the distilled tree" \
       "run '$WIRE --check' to see it, then 'just wire' if a skill was edited but not re-projected"
   fi
-  if ! "$ASH" check >/dev/null 2>&1; then
+  if ! "${ASH[@]}" check >/dev/null 2>&1; then
     finding "distil.harness-failed.corpus" error \
-      "$ASH check fails on the distilled tree" \
-      "run '$ASH check' to see the findings; the distillation must leave the corpus clean"
+      "${ASH[*]} check fails on the distilled tree" \
+      "run '${ASH[*]} check' to see the findings; the distillation must leave the corpus clean"
   fi
 
   report "$count_lines line(s) across $count_files file(s), all within the corpus"

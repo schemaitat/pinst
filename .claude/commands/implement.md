@@ -9,7 +9,7 @@ description: Implement a plan from .ash/plans/, phase by phase, with a run log
 - Working tree: !`git status --short || echo "(clean)"`
 - Plan corpus: !`cat .ash/INDEX.md 2>/dev/null || echo "(no plans yet — use /plan first)"`
 - Phase status across all plans: !`grep -H '^status:' .ash/plans/*/phase-*.md 2>/dev/null | sed 's|\.ash/plans/||' | sort | grep . || echo "(no phase files)"`
-- Harness state: !`scripts/ash.sh check 2>&1 || true`
+- Harness state: !`pinst harness check 2>&1 || true`
 
 ## Your task
 

@@ -45,7 +45,7 @@ jobs:
     outputs:
       work: ${{ steps.preflight.outputs.work }}
     steps:
-      # fetch-depth: 0 is not optional. `ash.sh skills` grades
+      # fetch-depth: 0 is not optional. `pinst harness skills` grades
       # conventional-commits by reading `git log`, and a depth-1 clone would
       # report 100% conformance across one commit.
       - uses: actions/checkout@v4
@@ -53,6 +53,14 @@ jobs:
           fetch-depth: 0
 
       - uses: extractions/setup-just@v3
+
+      # The corpus checker is a pinst subcommand now, so every `just harness`,
+      # `just review`, `just index` and `distil-guard` call in this workflow
+      # goes through cargo. Installed explicitly rather than relying on
+      # whatever the runner image preinstalls, exactly as ci.yml does.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       # Fail closed, loudly. An unset secret otherwise surfaces as a model step
       # failing obscurely — or worse, as a job that looks skipped, which is
@@ -130,6 +138,14 @@ jobs:
 
       - uses: extractions/setup-just@v3
 
+      # The corpus checker is a pinst subcommand now, so every `just harness`,
+      # `just review`, `just index` and `distil-guard` call in this workflow
+      # goes through cargo. Installed explicitly rather than relying on
+      # whatever the runner image preinstalls, exactly as ci.yml does.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
       # `prompt: /distil` runs the repo's own slash command — the same one a
       # human types — rather than a copy of its instructions living here. A
       # second copy would drift from .claude/commands/distil.md and from
@@ -161,7 +177,7 @@ jobs:
           claude_args: |
             --max-turns 40
             --model claude-opus-5
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just review),Bash(just harness),Bash(just index),Bash(just distil-guard:*),Bash(scripts/ash.sh:*),Bash(scripts/agents-wire.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just review),Bash(just harness),Bash(just index),Bash(just distil-guard:*),Bash(scripts/agents-wire.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
 
       # The rail. A failure here ends the run with no branch and no pull
       # request, and the finding in the log says which way the pass went wrong.

@@ -3,6 +3,7 @@ pub mod bootstrap;
 pub mod config;
 pub mod docs;
 pub mod doctor;
+pub mod harness;
 pub mod install;
 pub mod list;
 pub mod plan;

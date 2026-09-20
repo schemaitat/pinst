@@ -75,6 +75,8 @@ pub enum Commands {
     Docs(DocsArgs),
     /// Check tools and configs, reporting actionable findings.
     Doctor(DoctorArgs),
+    /// Validate and measure the agent harness: the .ash/ plan corpus.
+    Harness(HarnessArgs),
     /// Converge this machine: install tools, apply configs, then report.
     Apply(SelectArgs),
     /// One-shot provisioning for a fresh machine.
@@ -95,6 +97,7 @@ impl Commands {
             Commands::Config(_) => "config",
             Commands::Docs(_) => "docs",
             Commands::Doctor(_) => "doctor",
+            Commands::Harness(_) => "harness",
             Commands::Apply(_) => "apply",
             Commands::Bootstrap(_) => "bootstrap",
             Commands::Schema(_) => "schema",
@@ -214,6 +217,61 @@ pub struct DocsAdoptArgs {
     pub refresh: bool,
 }
 
+/// The agent harness: the checks over `.ash/` and `.agents/skills/`.
+///
+/// Unlike every other family here, this one reads the repo the caller is
+/// standing in rather than the machine — so it loads no manifest, and its
+/// corpus is discovered by walking up for `.ash/` rather than by looking
+/// beside a `manifest.toml`.
+#[derive(Debug, Args, Clone)]
+pub struct HarnessArgs {
+    /// The repo whose corpus to read. Defaults to $PINST_ASH_DIR, else the
+    /// nearest ancestor of the working directory holding a `.ash/`.
+    #[arg(long, value_name = "DIR")]
+    pub root: Option<PathBuf>,
+    #[command(subcommand)]
+    pub action: HarnessAction,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum HarnessAction {
+    /// Validate every corpus invariant.
+    Check,
+    /// Regenerate .ash/INDEX.md from the plan frontmatter.
+    Index(HarnessIndexArgs),
+    /// Grade each skill against the contract it declares.
+    Skills(HarnessSkillsArgs),
+    /// Mint a plan id: <yymmdd>-<six letters>.
+    NewId(HarnessNewIdArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessIndexArgs {
+    /// Report whether the index is up to date instead of rewriting it.
+    #[arg(long)]
+    pub check: bool,
+}
+
+/// The graded report. Deliberately not part of `just qc`: these are rates,
+/// and a rate that got interesting would fail the build.
+#[derive(Debug, Args, Clone)]
+pub struct HarnessSkillsArgs {
+    /// Skip the `evidence:` commands instead of running them. They are shell
+    /// taken from the repo being checked; see `pinst harness skills --help`.
+    #[arg(long)]
+    pub no_evidence: bool,
+    /// Also count invocations from a runtime's session transcripts. Opt-in,
+    /// and never depended on: it corroborates, it does not decide.
+    #[arg(long, value_name = "DIR")]
+    pub transcripts: Option<PathBuf>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessNewIdArgs {
+    /// Use this date (YYYY-MM-DD) instead of today.
+    pub date: Option<String>,
+}
+
 #[derive(Debug, Args, Clone)]
 pub struct DoctorArgs {
     /// Apply the fixable subset of findings.
@@ -235,6 +293,8 @@ pub enum SchemaKind {
     Output,
     /// JSON Schema for a docs/tools/<name>.toml page.
     Docs,
+    /// JSON Schema for a `pinst harness skills` report row.
+    Harness,
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
@@ -247,6 +307,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
         Commands::Config(args) => commands::config::run(&ctx, args).await,
         Commands::Docs(args) => commands::docs::run(&ctx, args).await,
         Commands::Doctor(args) => commands::doctor::run(&ctx, args).await,
+        Commands::Harness(args) => commands::harness::run(&ctx, args),
         Commands::Apply(args) => commands::apply::run(&ctx, args).await,
         Commands::Bootstrap(args) => commands::bootstrap::run(&ctx, args).await,
         Commands::Schema(args) => commands::schema::run(&ctx, args),

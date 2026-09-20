@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
 
+use crate::cli::commands::harness::SkillReportItem;
 use crate::cli::output::{Ctx, ExitCode};
 use crate::cli::{SchemaArgs, SchemaKind};
 use crate::core::docs::page::ToolDoc;
@@ -13,6 +14,7 @@ pub fn run(ctx: &Ctx, args: &SchemaArgs) -> Result<ExitCode> {
         SchemaKind::Manifest => schemars::schema_for!(Manifest),
         SchemaKind::Output => schemars::schema_for!(OutputEnvelopeSchema),
         SchemaKind::Docs => schemars::schema_for!(ToolDoc),
+        SchemaKind::Harness => schemars::schema_for!(SkillReportItem),
     };
     // The schema is the payload, so it goes to stdout in both modes rather
     // than being wrapped in the envelope.
