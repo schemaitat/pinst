@@ -42,6 +42,12 @@ pub struct Tool {
     #[serde(default)]
     pub requires: Vec<String>,
     pub detect: Detect,
+    /// How to ask the tool to describe itself, when `<bin> --help` is not it.
+    /// Run with `sh -c`, like `detect.command`. A tool with neither this nor
+    /// `detect.bin` has no help to capture, which `pinst docs` reports rather
+    /// than treating as an error.
+    #[serde(default)]
+    pub help_cmd: Option<String>,
     pub install: Install,
     /// Overrides the upgrade check derived from `install`.
     #[serde(default)]

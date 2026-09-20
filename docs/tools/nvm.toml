@@ -1,0 +1,27 @@
+what = "Node version manager: installs Node versions and switches between them."
+when = "Only to change which Node is active. Day to day you use `node` itself; the manifest installs Node through nvm so the version is per-user rather than system-wide."
+keywords = ["node", "version", "node version", "install node", "switch node", "nodejs", "version manager", "lts"]
+status = "draft"
+see_also = ["node"]
+gotchas = """
+nvm is a shell function, not a binary: it exists only after ~/.nvm/nvm.sh is
+sourced, so `command -v nvm` finds nothing and a plain `sh -c 'nvm ls'` fails.
+Every scripted call has to source it first — that is exactly what this tool's
+help_cmd in the manifest does.
+"""
+
+[[recipes]]
+cmd = "bash -c '. \"$HOME/.nvm/nvm.sh\" && nvm ls'"
+does = "List installed Node versions from a non-interactive shell."
+
+[[recipes]]
+cmd = "nvm ls"
+does = "The same, from an interactive shell that already sourced nvm."
+
+[[recipes]]
+cmd = "nvm install --lts"
+does = "Install the current LTS Node. (unrun here)"
+
+[[recipes]]
+cmd = "nvm use 24"
+does = "Switch the current shell to a version. (unrun here)"

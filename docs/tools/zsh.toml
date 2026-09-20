@@ -1,0 +1,23 @@
+what = "The login shell these configs target, and the one that reads the .zshrc pinst carries."
+when = "Interactive use. For scripts, prefer `sh`/`bash` — pinst itself runs every manifest command with `sh -c`, so a zsh-ism in the manifest will not work."
+keywords = ["shell", "zsh", "zshrc", "prompt", "login shell", "interactive"]
+status = "authored"
+verified_with = "5.9"
+see_also = ["oh-my-zsh", "zsh-autosuggestions", "oh-my-posh", "direnv"]
+gotchas = """
+Changing the login shell needs `chsh`, which is why pinst gates that step
+behind --yes. A new shell only takes effect on the next login, not in the
+running session.
+"""
+
+[[recipes]]
+cmd = "zsh -c 'print hi'"
+does = "Run one command under zsh — useful when a config only exists there."
+
+[[recipes]]
+cmd = "zsh -ic 'which some-alias'"
+does = "Resolve something defined by an interactive rc file (aliases, functions)."
+
+[[recipes]]
+cmd = "exec zsh"
+does = "Reload the shell in place after editing .zshrc."

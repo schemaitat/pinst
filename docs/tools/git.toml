@@ -1,0 +1,36 @@
+what = "Version control: history, branches, and the commits this repo's whole workflow is built on."
+when = "Always, in this repo. Note that work here happens in git worktrees, so the stash stack is shared and `git stash` is the one command to avoid."
+keywords = ["vcs", "version control", "commit", "branch", "diff", "history", "blame", "worktree"]
+status = "authored"
+verified_with = "2.53.0"
+see_also = ["delta", "gh", "git-credential-manager"]
+gotchas = """
+`git stash` / `git stash pop` share one stack across every worktree of this
+repo, so popping can restore someone else's work. Prefer a temporary WIP
+commit; if you must stash, use `git stash push -u -m "<tag>"` and recover it
+by SHA with `git stash apply`.
+"""
+
+[[recipes]]
+cmd = "git status --short"
+does = "The working tree in one line per file."
+
+[[recipes]]
+cmd = "git log --oneline -10"
+does = "The last ten commits, one line each."
+
+[[recipes]]
+cmd = "git diff --stat"
+does = "Which files changed and by how much, without the diff itself."
+
+[[recipes]]
+cmd = "git rev-parse --abbrev-ref HEAD"
+does = "The current branch name, for a script."
+
+[[recipes]]
+cmd = "git switch -c feat/thing"
+does = "Start a branch. Never commit straight to main here."
+
+[[recipes]]
+cmd = "git add -A && git commit -m 'feat(scope): subject'"
+does = "Stage everything and commit. This repo's history is entirely Conventional Commits."

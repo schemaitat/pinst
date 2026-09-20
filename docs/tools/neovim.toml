@@ -1,0 +1,28 @@
+what = "The editor, and the one this repo carries a full Lua config for."
+when = "Editing interactively. The headless form is the useful one for a script: it runs commands and exits without a UI."
+keywords = ["nvim", "editor", "vim", "lua", "treesitter", "telescope", "lazy"]
+status = "authored"
+verified_with = "0.12.5"
+see_also = ["ripgrep", "fd", "tree-sitter-cli"]
+gotchas = """
+`nvim` with no --headless takes over the terminal and waits for a human —
+never run it from an agent without +q. The config here depends on ripgrep and
+fd for telescope, and on a compiler for treesitter parsers, which is why all
+three are manifest dependencies.
+"""
+
+[[recipes]]
+cmd = "nvim --headless '+echo 1+1' +q"
+does = "Run an ex command and exit — the shape every scripted nvim call takes."
+
+[[recipes]]
+cmd = "nvim --headless '+Lazy! sync' +qa"
+does = "Install and update plugins non-interactively."
+
+[[recipes]]
+cmd = "nvim --headless '+checkhealth' '+w /dev/stdout' +qa"
+does = "Dump the health report to stdout."
+
+[[recipes]]
+cmd = "nvim -u NONE file"
+does = "Open with no config at all, to tell a config problem from an editor problem."

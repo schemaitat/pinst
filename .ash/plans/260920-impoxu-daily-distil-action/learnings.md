@@ -3,7 +3,7 @@ id: 260920-impoxu
 slug: daily-distil-action
 updated: 2026-09-20
 areas: [ci, harness, agents]
-issue_count: 11
+issue_count: 13
 ---
 
 # Learnings — a daily, unattended distillation pass (260920-impoxu-daily-distil-action)
@@ -55,7 +55,7 @@ an empty result really is fatal. The tell is a script that exits with no
 output: `set -e` aborts silently, so the absence of a message is the message.
 **Skill:** none
 **Gap:** answered — not skill-shaped. No instruction prevents a `set -e`
-assignment swallowing grep's exit status; LESSON-015 is the durable form, and a
+assignment swallowing grep's exit status; LESSON-019 is the durable form, and a
 linter (`shellcheck SC2312`-class) would beat prose if this recurs.
 
 ### ISSUE-002: `printf | grep -q` reported a lesson that was present as removed
@@ -97,7 +97,7 @@ file, and write the test for the second case before the first. The version that
 only sees modifications passes every test built from edits.
 **Skill:** none
 **Gap:** answered — not skill-shaped. This is a property of `git diff`,
-learned by writing the wrong test first; LESSON-016 carries it.
+learned by writing the wrong test first; LESSON-020 carries it.
 
 ### ISSUE-004: the gate wakes the model on findings that are not distillation work
 **What happened:** flipping `phase-01`'s status to `In Progress` made
@@ -198,10 +198,10 @@ been caught by this. The lesson was already written down when this instance was
 introduced, which is the whole argument for mechanizing it rather than
 remembering it.
 **Skill:** none
-**Distilled:** merged into LESSON-016 — a second occurrence, inside the plan
+**Distilled:** merged into LESSON-020 — a second occurrence, inside the plan
 that produced the lesson.
 **Gap:** answered — not skill-shaped. A `git diff` default is a domain fact;
-LESSON-016 carries it and a check would carry it better.
+LESSON-020 carries it and a check would carry it better.
 
 ### ISSUE-009: automating a step inherits every constraint the manual one had
 **What happened:** the workflow's pull request title was
@@ -265,3 +265,41 @@ already recoverable from the last `issue`.
 skill rather than worth a lesson for every future plan to read.
 **Gap:** answered — `plan-implement` owns this; its event table is one line
 short, which is a change to that skill, not a missing skill.
+
+### ISSUE-012: `LESSON-NNN` collides across branches, which plan ids are designed not to
+**What happened:** merging `main` before opening the pull request produced a
+conflict in `.ash/LEARNINGS.md` where both branches had minted `LESSON-015`,
+`LESSON-016` and `LESSON-017` for entirely different lessons.
+**Root cause:** a plan id is `<yymmdd>-<six random letters>` specifically so
+that two sessions in parallel worktrees cannot compute the same value —
+`.agents/README.md` explains this at length. `LESSON-NNN` is a plain counter in
+an append-only file that every branch appends to, so it reproduces the exact
+collision the plan scheme exists to prevent, one directory away.
+**Fix applied:** `main` landed first and kept 015–018; this branch's three were
+renumbered to 019–021, and the references to them in its own `learnings.md` and
+in one `CHANGELOG.log` entry were updated by hand.
+**Recommendation:** renumbering works but is manual and silent — nothing would
+have caught a missed reference. Either mint lesson ids the way plan ids are
+minted, or add a check that every `LESSON-NNN` is unique and every reference
+resolves. The second is cheap and would have caught this at `just qc`.
+**Skill:** plan-learnings
+**Gap:** answered — `plan-learnings` owns lesson numbering; this is a change to
+that skill and a check beside it, not a missing skill.
+
+### ISSUE-013: a conflict-marker regex written for the wrong merge style
+**What happened:** the resolution script matched
+`<<<<<<< / ======= / >>>>>>>` and silently swept a `||||||| 0cc43ca` line into
+the "mine" side of both `.ash/LEARNINGS.md` and `.ash/CHANGELOG.log`.
+**Root cause:** this repo's merges produce diff3-style markers, which carry a
+fourth marker and a base section the three-marker form does not have.
+**Fix applied:** the stray lines were found by grepping for all four markers
+and deleted; the base content deduplicated away on its own because this branch
+only ever appended.
+**Recommendation:** grep for `^|||||||` as well as the other three before
+declaring a conflict resolved, and grep the whole directory rather than the
+files you think you touched.
+**Skill:** none
+**Distilled:** declined — a one-off scripting slip, caught within a minute by
+the check that should follow any scripted resolution.
+**Gap:** answered — not skill-shaped; no instruction prevents a regex that is
+one alternative short.

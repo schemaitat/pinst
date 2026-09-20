@@ -1,0 +1,29 @@
+what = "Terminal workspace manager for AI coding agents: persistent sessions, tabs, panes and worktrees, all controllable over a socket API."
+when = "Running or inspecting agents in a terminal workspace. The subcommands under `herdr <noun>` speak the socket API and answer in JSON, which is what makes it drivable by another agent rather than only by a human."
+keywords = ["terminal", "multiplexer", "panes", "tabs", "sessions", "workspace", "agents", "tmux", "worktree"]
+status = "authored"
+verified_with = "0.9.1"
+see_also = ["claude", "opencode", "git"]
+gotchas = """
+Bare `herdr` launches or attaches to the persistent session and takes over
+the terminal — never run it from an agent. Every API subcommand needs a
+running server; without one they fail rather than starting it. `herdr --skill`
+prints the agent-facing skill file, which is the authoritative description of
+what an agent may drive.
+"""
+
+[[recipes]]
+cmd = "herdr status client"
+does = "Version and state of the local client, without touching the server."
+
+[[recipes]]
+cmd = "herdr pane list"
+does = "Every pane, as JSON, including which agent is running in it."
+
+[[recipes]]
+cmd = "herdr --skill"
+does = "Print the agent skill file — read this before driving herdr from an agent."
+
+[[recipes]]
+cmd = "herdr workspace --help"
+does = "The workspace helpers; the same shape exists for tab, worktree, pane, agent and session."

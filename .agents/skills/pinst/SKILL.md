@@ -63,10 +63,15 @@ Every command emits this shape (`pinst schema output` for the formal schema):
 | `pinst install [tools...]` | Installs missing tools | step reports |
 | `pinst update [tools...]` | Upgrades tools with a newer version available | step reports |
 | `pinst config status\|diff\|apply\|adopt` | Inspects and applies the configs | file statuses / step reports |
+| `pinst docs search <query>` | **Which tool does this, and what do I type** | ranked hits with recipes inline |
+| `pinst docs show <tool>` | One tool's page, or its captured `--help` | one page object |
+| `pinst docs dump` | The whole catalogue in one call | every page |
+| `pinst docs status` | Which tools have a page | coverage per tool |
+| `pinst docs adopt <tool>` | Seeds a draft page from the tool's own help | the file written |
 | `pinst doctor [--fix]` | Diagnoses tools + configs | findings |
 | `pinst apply` | Converges everything: install, configs, then diagnose | step reports |
 | `pinst bootstrap` | `apply` with the `default` profile, for a fresh machine | step reports |
-| `pinst schema manifest\|output` | JSON Schemas | (raw schema on stdout) |
+| `pinst schema manifest\|output\|docs` | JSON Schemas | (raw schema on stdout) |
 | `pinst tui` | Interactive dashboard (refuses `--json`) | — |
 
 ### Selecting tools
@@ -81,6 +86,71 @@ selection arguments:
 Naming a tool always pulls in its `requires` closure, so `pinst install node`
 also plans `nvm` and `curl`, in dependency order. With no selection, the whole
 manifest is used.
+
+## The tool catalogue
+
+`pinst docs` answers the question that comes *before* running an unfamiliar
+tool: which one does this, and what is the exact invocation on this machine.
+It is the cheapest call in this contract — no network, no mutation — so reach
+for it before guessing at flags, and before concluding a tool is absent.
+
+- **`pinst docs search "<what you are trying to do>" --json`** is the entry
+  point. Query it with an intention ("search a tree", "open a PR"), not a tool
+  name. Each hit carries `name`, `score`, `matched` (which field matched),
+  `what`, `page`, `installed`, `version`, and **the matching `recipes` inline**
+  — one call is usually enough to act on. `--tag`, `--installed` and `--limit`
+  narrow it. **No hits is exit 0 with an empty `items[]`**, not exit 3: an
+  empty result is a correct answer, so do not retry it.
+- **`pinst docs show <tool> --json`** returns one page. `source` says where the
+  answer came from: `page` is prose someone wrote and verified, `captured` is
+  the tool's own `--help`, run on this machine and cached against its version.
+  Exit `0` for either, `2` for a tool the manifest does not declare, `3` when
+  there is no page *and* nothing to capture — with the remediation in
+  `errors[]`.
+- **`pinst docs dump --json`** emits every page at once, for loading into
+  context instead of calling again. It never runs a subprocess.
+- **`pinst docs status --json`** reports coverage: `page` is `authored`,
+  `draft` or `none` per tool, plus `stale` when a page names an older version
+  than the one installed. **Always exit 0** — an unwritten page is a normal
+  state, not a finding.
+
+`status` on a page is the trust signal and it travels everywhere:
+`authored` means a person wrote it and ran every recipe in it on this machine;
+`draft` means nobody has. Treat a draft recipe the way you would treat a
+suggestion, and a captured `--help` as raw material.
+
+### Writing a page
+
+Pages live at `docs/tools/<tool>.toml`, one per manifest tool, and are
+compiled into the binary — so they answer on a machine with no checkout. Run
+`pinst schema docs` for the authoritative field list.
+
+```toml
+# Every top-level key must come BEFORE the first [[recipes]] table: in TOML a
+# bare key after an array-of-tables belongs to that table, not to the page.
+what = "One line: what the tool is."
+when = "When to reach for this one rather than the obvious alternative."
+keywords = ["the words someone would use without knowing the tool's name"]
+status = "authored"          # or "draft"
+verified_with = "1.2.3"
+see_also = ["another-tool"]
+gotchas = """The trap worth knowing before the first surprise."""
+
+[[recipes]]
+cmd = "the literal command line"
+does = "what it does, in one clause"
+```
+
+Unknown fields are rejected rather than ignored, and `cargo test` fails on a
+page that does not parse, names no manifest tool, has an empty `what`, links
+`see_also` at a tool that does not exist, or claims `authored` with recipes
+but no `verified_with`. Coverage is *not* enforced: a missing page is a line
+in `docs status`, never a failing build.
+
+Start from the machine rather than from memory: `pinst docs adopt <tool>`
+captures the tool's own help into a `draft` page for you to rewrite. It
+refuses to overwrite an `authored` page, needs `--yes` to replace an existing
+draft, and needs a checkout to write into.
 
 ## Step outcomes
 

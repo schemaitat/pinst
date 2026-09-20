@@ -17,6 +17,7 @@ pinst bootstrap --dry-run   # exactly what would happen, nothing touched
 pinst bootstrap -y          # provision a fresh machine
 pinst doctor                # what is off right now
 pinst apply                 # converge an existing machine
+pinst docs search "open a PR"   # which tool, and what to type
 pinst tui                   # interactive dashboard
 ```
 
@@ -32,6 +33,7 @@ binary — so they answer on a machine with no checkout.
 - [Install](#install) · [Commands](#commands) · [How it works](#how-it-works)
 - [Managing tools](#managing-tools) — add, select, order, upgrade, remove
 - [Managing configs](#managing-configs) — edit, add, drift, machine-specific values
+- [The tool catalogue](#the-tool-catalogue) — what each tool is for, and what to type
 - [What pinst will and will not do on its own](#what-pinst-will-and-will-not-do-on-its-own)
 - [Migrating off `~/dotfiles`](#migrating-off-dotfiles) · [Development](#development)
 
@@ -78,11 +80,12 @@ pinst update pinst
 | `pinst install [tools...]` | Install what is missing |
 | `pinst update [tools...]` | Upgrade what has a newer version |
 | `pinst config status\|diff\|apply\|adopt` | Inspect and apply the configs |
+| `pinst docs search\|show\|dump\|status\|adopt` | What each tool is for, and what to type |
 | `pinst doctor [--fix]` | Diagnose tools and configs; `--fix` repairs the safe subset |
 | `pinst apply` | Converge everything, then diagnose |
 | `pinst bootstrap` | `apply` for a fresh machine (the `default` profile) |
-| `pinst schema manifest\|output` | JSON Schemas, derived from the code |
-| `pinst tui` | Dashboard: tools, findings, upgrades; `/` searches, `e` edits a config |
+| `pinst schema manifest\|output\|docs` | JSON Schemas, derived from the code |
+| `pinst tui` | Dashboard: tools, findings, upgrades, docs; `/` searches, `e` edits a config |
 
 Global flags: `--json`, `--dry-run`, `--yes`/`-y`, `--quiet`/`-q`,
 `--manifest <path>`.
@@ -447,6 +450,54 @@ exists, and that file is entirely outside pinst. A test fails if a secret-shaped
 filename ever lands in the config tree.
 
 ---
+
+## The tool catalogue
+
+The manifest says what is on this machine. `pinst docs` says what each entry
+is *for* — so an agent, or a person who has not used a tool in six months, can
+find the right one and its exact invocation without running anything first:
+
+```sh
+pinst docs search "search a tree"     # -> ripgrep, with the matching recipes inline
+pinst docs show fd                    # one tool's page in full
+pinst docs dump --json                # the whole catalogue, for loading into context
+pinst docs status                     # which tools have a page, and which are drafts
+```
+
+Pages live at `docs/tools/<tool>.toml`, one per manifest tool, and are
+compiled into the binary beside the configs — so a machine provisioned from a
+downloaded binary answers just as well as a checkout. A page leads with intent
+and pays off in command lines:
+
+```toml
+what = "Recursive regex search across a directory tree, respecting .gitignore."
+when = "Any search for content in a repo. Reach for it instead of `grep -r`."
+keywords = ["grep", "search", "find text", "regex"]
+status = "authored"
+verified_with = "15.1.0"
+see_also = ["fd"]
+
+[[recipes]]
+cmd = "rg -n 'pattern' path/"
+does = "Search a path, printing file:line for every match."
+```
+
+Every top-level key must come before the first `[[recipes]]` table — in TOML a
+bare key after an array-of-tables belongs to that table. `pinst schema docs`
+prints the full field list, derived from the parser.
+
+`status` is the trust signal. **`authored`** means someone wrote the page and
+ran every recipe in it on this machine, against the version in
+`verified_with`; **`draft`** means nobody has. A tool with no page at all
+still answers — `docs show` falls back to capturing the tool's own `--help`,
+cached against its installed version — and `pinst docs adopt <tool>` writes
+that capture into `docs/tools/` as a draft to rewrite. It will not overwrite
+an authored page.
+
+Coverage is reported, never enforced: a missing page is a line in
+`docs status`, not a failing build. What *is* enforced by `just qc` is that
+every page parses, names a real tool, links `see_also` at tools that exist,
+and does not claim to be authored without saying what it was verified against.
 
 ## What pinst will and will not do on its own
 

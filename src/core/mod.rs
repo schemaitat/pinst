@@ -3,6 +3,7 @@
 //! logic of their own.
 
 pub mod configs;
+pub mod docs;
 pub mod doctor;
 pub mod engine;
 pub mod exec;
@@ -10,6 +11,7 @@ pub mod graph;
 pub mod manifest;
 pub mod plan;
 pub mod probe;
+pub mod source;
 pub mod template;
 pub mod upgrade;
 

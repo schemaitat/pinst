@@ -1,0 +1,31 @@
+what = "The Rust toolchain: cargo, rustc, clippy and rustfmt, managed by rustup."
+when = "Anything in this repo — pinst is a Rust binary. `just qc` is the gate; the cargo commands underneath it are what you run while iterating."
+keywords = ["cargo", "rustc", "rustup", "clippy", "rustfmt", "crate", "build", "test"]
+status = "authored"
+verified_with = "1.98.1"
+see_also = ["just", "build-essential", "pinst"]
+gotchas = """
+rustup manages its own updates, so the manifest opts this tool out of pinst's
+upgrade check. Use --locked in anything that mirrors CI: without it a stale
+Cargo.lock passes locally and gets silently rewritten, while CI fails.
+"""
+
+[[recipes]]
+cmd = "cargo build"
+does = "Compile the crate."
+
+[[recipes]]
+cmd = "cargo test --locked"
+does = "Run the tests exactly as CI does."
+
+[[recipes]]
+cmd = "cargo clippy --all-targets --locked -- -D warnings"
+does = "Lint with warnings as errors, which is what this repo's gate requires."
+
+[[recipes]]
+cmd = "cargo fmt --check"
+does = "Fail if the tree is not formatted; drop --check to fix it in place."
+
+[[recipes]]
+cmd = "cargo tree --depth 1"
+does = "The crate's direct dependencies."

@@ -1,0 +1,22 @@
+what = "The C toolchain — gcc, make and the standard headers — that other things compile against."
+when = "Rarely invoked directly. It is here because tree-sitter parsers and native Rust crates need a compiler and a linker present."
+keywords = ["gcc", "make", "compiler", "cc", "linker", "build", "native", "toolchain"]
+status = "authored"
+verified_with = "15.2.0"
+see_also = ["rust", "tree-sitter-cli"]
+gotchas = """
+This is a metapackage: `build-essential --version` does not exist. pinst
+detects it through gcc, which is why `pinst list` reports gcc's version here.
+"""
+
+[[recipes]]
+cmd = "gcc --version"
+does = "Confirm a compiler is present, and which one."
+
+[[recipes]]
+cmd = "gcc -O2 -o out main.c"
+does = "Compile a single C file to an executable."
+
+[[recipes]]
+cmd = "make --version"
+does = "Confirm make is present — most native build scripts shell out to it."

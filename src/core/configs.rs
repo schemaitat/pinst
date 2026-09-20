@@ -21,86 +21,13 @@ use super::template::{self, Values};
 
 static EMBEDDED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/configs");
 
-/// Where config content is read from for this run.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Source {
-    /// A `configs/` directory on disk. Targets are symlinked at it so edits
-    /// in either direction are immediately live.
-    Tree(PathBuf),
-    /// The copy compiled into the binary. Targets are written as real files.
-    Embedded,
-}
+pub use super::source::Source;
 
-impl Source {
-    pub fn describe(&self) -> String {
-        match self {
-            Source::Tree(path) => format!("source tree ({})", path.display()),
-            Source::Embedded => "embedded in binary".to_string(),
-        }
-    }
-
-    pub fn is_tree(&self) -> bool {
-        matches!(self, Source::Tree(_))
-    }
-}
-
-/// Resolves the config source: an explicit `$PINST_SOURCE`, else a `configs/`
-/// directory next to the working directory or above the running binary
-/// (cargo puts it at `target/<profile>/pinst`), else the embedded copy.
+/// Resolves the config source. The rule — an explicit `$PINST_SOURCE`, else a
+/// checkout at the working directory or above the binary, else the embedded
+/// copy — lives in `source` so the docs catalogue resolves identically.
 pub fn resolve_source() -> Source {
-    if let Some(explicit) = std::env::var_os("PINST_SOURCE") {
-        let path = PathBuf::from(explicit);
-        let candidate = if path.ends_with("configs") {
-            path
-        } else {
-            path.join("configs")
-        };
-        // An explicit override is trusted as a location, but still has to be
-        // absolute before we point symlinks at it.
-        if let Some(tree) = absolute_tree(&candidate) {
-            return Source::Tree(tree);
-        }
-    }
-
-    if let Some(tree) = checkout_tree(Path::new("configs")) {
-        return Source::Tree(tree);
-    }
-
-    if let Ok(exe) = std::env::current_exe() {
-        for ancestor in exe.ancestors().skip(1).take(4) {
-            if let Some(tree) = checkout_tree(&ancestor.join("configs")) {
-                return Source::Tree(tree);
-            }
-        }
-    }
-
-    Source::Embedded
-}
-
-/// Canonicalizes a candidate tree.
-///
-/// Absolute is not optional: `source_path` becomes the target of the symlinks
-/// written into `$HOME`, and a relative path like `configs/zsh/.zshrc` would
-/// be resolved by the kernel against `$HOME`, producing a dangling link.
-fn absolute_tree(candidate: &Path) -> Option<PathBuf> {
-    candidate.is_dir().then(|| candidate.canonicalize().ok())?
-}
-
-/// Accepts a candidate only if it really is this project's checkout — a
-/// `configs/` directory sitting beside a `manifest.toml`.
-///
-/// Without that check, an unrelated `~/configs` directory would be picked up
-/// when pinst runs from `~/.local/bin` and every config command would fail
-/// against it instead of falling back to the embedded copy.
-fn checkout_tree(candidate: &Path) -> Option<PathBuf> {
-    let beside_manifest = candidate
-        .parent()
-        .map(|parent| parent.join("manifest.toml").is_file())
-        .unwrap_or(false);
-    if !beside_manifest {
-        return None;
-    }
-    absolute_tree(candidate)
+    super::source::resolve("configs", "PINST_SOURCE")
 }
 
 /// One file pinst manages, and where it belongs in `$HOME`.
@@ -810,10 +737,10 @@ mod tests {
         // this project's tree.
         let stray = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(stray.path().join("configs/unrelated")).unwrap();
-        assert!(checkout_tree(&stray.path().join("configs")).is_none());
+        assert!(super::super::source::checkout_tree(stray.path(), "configs").is_none());
 
         let real = fake_checkout();
-        assert!(checkout_tree(&real.path().join("configs")).is_some());
+        assert!(super::super::source::checkout_tree(real.path(), "configs").is_some());
     }
 
     #[test]

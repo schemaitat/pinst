@@ -1,0 +1,23 @@
+what = "Loads and unloads environment variables per directory, from a .envrc file."
+when = "Any project that needs its own PATH, virtualenv or credentials without polluting the shell. The zsh config here enables the omz direnv plugin, so the hook is already in place."
+keywords = ["envrc", "environment", "env vars", "per directory", "dotenv", "virtualenv"]
+status = "authored"
+verified_with = "2.37.1"
+see_also = ["zsh", "uv"]
+gotchas = """
+A new or edited .envrc is blocked until `direnv allow` is run in that
+directory — this is the security model, not a bug. In a non-interactive
+context the hook never fires at all; use `direnv exec <dir> <cmd>` instead.
+"""
+
+[[recipes]]
+cmd = "direnv status"
+does = "Show whether the hook is loaded and which .envrc is in effect."
+
+[[recipes]]
+cmd = "direnv allow"
+does = "Approve the .envrc in this directory, after reading it."
+
+[[recipes]]
+cmd = "direnv exec . env"
+does = "Run a command with the directory's environment applied, without a shell hook."

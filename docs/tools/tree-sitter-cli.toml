@@ -1,0 +1,23 @@
+what = "Generates and tests tree-sitter grammars, and compiles the parsers nvim-treesitter uses."
+when = "Rarely direct: nvim-treesitter shells out to it to build parsers. Reach for it yourself when a parser fails to compile, or when working on a grammar."
+keywords = ["treesitter", "parser", "grammar", "syntax", "ast", "highlight"]
+status = "authored"
+verified_with = "0.27.0"
+see_also = ["neovim", "build-essential"]
+gotchas = """
+Parser compilation needs a C compiler on PATH, which is why build-essential
+is a dependency — a missing gcc shows up as a treesitter error inside nvim
+rather than as a missing tool.
+"""
+
+[[recipes]]
+cmd = "tree-sitter parse file.rs"
+does = "Print the syntax tree for a file — the quickest way to see what a grammar produces."
+
+[[recipes]]
+cmd = "tree-sitter parse --quiet --stat file.rs"
+does = "Parse without printing the tree, reporting timings and whether it errored."
+
+[[recipes]]
+cmd = "tree-sitter --version"
+does = "Which CLI version is installed; nvim-treesitter is sensitive to it."

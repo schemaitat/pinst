@@ -1,0 +1,23 @@
+what = "Prompt engine: renders the shell prompt from a theme file."
+when = "Configuring or debugging the prompt. The .zshrc initializes it with the catppuccin theme, so it runs on every new shell."
+keywords = ["prompt", "theme", "powerline", "shell prompt", "catppuccin"]
+status = "authored"
+verified_with = "31.3.0"
+see_also = ["zsh", "oh-my-zsh"]
+gotchas = """
+Themes need a Nerd Font in the terminal, or every glyph renders as a box.
+`oh-my-posh init zsh` prints shell code meant to be eval'd from .zshrc —
+running it on its own does nothing visible.
+"""
+
+[[recipes]]
+cmd = "oh-my-posh init zsh"
+does = "Print the shell init snippet .zshrc evaluates."
+
+[[recipes]]
+cmd = "oh-my-posh print primary --config ~/.config/ohmyposh/theme.omp.json"
+does = "Render the prompt once, to see a theme change without opening a new shell."
+
+[[recipes]]
+cmd = "oh-my-posh --version"
+does = "Which version is installed — pinst upgrades it from GitHub releases."

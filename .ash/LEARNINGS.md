@@ -32,7 +32,10 @@ query happens before anything a script can see.
 ISSUE-007); again in 260919-vldfei-self-improving-agent-harness (ISSUE-002,
 ISSUE-003), where the unchecked assumptions were about the repo's own scripts
 and its own corpus — closer to hand than GitHub, and for that reason trusted
-without a query.
+without a query; and again in 260920-tensvp-tool-docs-explorer (ISSUE-002,
+ISSUE-006), where the plan asserted which of 26 local binaries answer
+`--help` without running any of them, and named a verification method no
+dependency in the tree can perform. Both were one loop away from being facts.
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
 **Lesson:** When verification depends on landing on `main`, an admin action or
@@ -112,10 +115,12 @@ check can express. `lesson.unenforced` mechanizes its narrow half: a claim of
 enforcement must name something real.
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
 plans predated the format their own skills mandate); again in
-260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); and again in
+260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); again in
 260919-vldfei-self-improving-agent-harness (ISSUE-004), where six SKILL.md
 files had never been valid YAML because only hand-written parsers had ever
-read them.
+read them; and again in 260920-tensvp-tool-docs-explorer (ISSUE-008), where a
+Done criterion narrowed during implementation and became a test in the same
+change rather than a corrected sentence in the plan.
 
 ### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
 **Lesson:** A checker that compares a record only with itself will pass on a
@@ -219,7 +224,67 @@ correct, repeated, and eventually ignored.
 **Status:** prose
 **Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-006)
 
-### LESSON-015: `set -euo pipefail` makes two everyday `grep` idioms lie
+### LESSON-015: A macro that reads files at compile time must declare them as build inputs
+**Lesson:** When a macro embeds a directory or file into the binary
+(`include_dir!`, `include_str!` over generated content), add a `build.rs`
+emitting `cargo:rerun-if-changed` for those paths in the same change. Treat
+"the data is in the repo" as saying nothing about whether the compiled
+artifact contains it.
+**Why:** Cargo cannot see through a macro, so files read during expansion are
+not tracked inputs: edit only data files and nothing is recompiled, and the
+previous build's embedded copy keeps shipping. The failure is invisible where
+you would notice it and visible where you cannot debug it — a dev machine
+reads the source tree directly and looks correct, while a machine running the
+downloaded binary silently serves a stale copy. In this repo it had been
+latent since `configs/` was first embedded, and only surfaced because a test
+compared the checkout tree against the embedded catalogue, written for an
+unrelated reason.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-004)
+
+### LESSON-016: Add an API in the phase that consumes it
+**Lesson:** In a phased plan, do not land a function, a method or a module
+before the code that calls it. Where a module genuinely has to arrive first,
+make the gap loud and self-deleting — an `#[cfg_attr(not(test),
+allow(dead_code))]` whose comment names the phase that removes it — rather
+than a quiet allow.
+**Why:** Phase boundaries are slices of design, but `just qc` enforces a
+property of the whole tree at every commit, and `-D warnings` makes dead code
+a build failure. Speculative API also tends to be wrong: of three items
+written ahead of their callers here, one was deleted and re-added with a
+different signature, one turned out to be unnecessary, and one only earned its
+place by finding a use nobody had planned (reporting orphan pages).
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003)
+
+### LESSON-017: Reject unknown fields in any format a human writes by hand
+**Lesson:** Put `#[serde(deny_unknown_fields)]` on hand-authored config types.
+The cost is one attribute; the alternative is a file that loads clean and
+means something other than what it says.
+**Why:** Serde ignores unknown fields by default, so a typo, a
+singular/plural slip, or a key that landed in the wrong TOML table silently
+disappears — and the result is not an error but a document that lies. The
+first page authored in this repo put a top-level key below an
+array-of-tables, where TOML binds it to that table; the guard turned a page
+that would have quietly lost its content into a parse failure naming the
+field.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-001)
+
+### LESSON-018: A test that wants to override ambient state is telling you to make it a parameter
+**Lesson:** When isolating a test means setting an environment variable, a
+global, or a process-wide default, change the code to take the value as an
+argument instead of building machinery around the environment.
+**Why:** Process-wide state forces a lock, the lock has to be held for the
+duration of the call, and `clippy::await_holding_lock` rejects holding one
+across an `.await` — so the workaround does not even work in async code. The
+parameter version is shorter, needs no lock, and removes the possibility of a
+test reaching the developer's real `~/.cache` at all. The awkward test was a
+design problem one level up, not a testing problem.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
+
+### LESSON-019: `set -euo pipefail` makes two everyday `grep` idioms lie
 **Lesson:** In a `set -euo pipefail` script, `var="$(... | grep ...)"` aborts
 the whole script when grep matches nothing, and `printf ... | grep -q` reports
 failure when it *does* match. Write `var="$(cmd || true)"` for the first, and
@@ -238,7 +303,7 @@ preamble, so both idioms are one careless line away at all times.
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-001, ISSUE-002) — both
 inside one 200-line guard, in the same afternoon
 
-### LESSON-016: A check over a working tree must look at what was created, not only what changed
+### LESSON-020: A check over a working tree must look at what was created, not only what changed
 **Lesson:** When a guard inspects a diff, union `git diff --name-only` with
 `git ls-files --others --exclude-standard` before deciding the tree is clean.
 Write the test for a brand-new file first; the version that only sees
@@ -253,7 +318,7 @@ visible in review, and misses the one that is not.
 ISSUE-008 two hours later, in the second place in the same plan that reads a
 diff — the lesson was already written when the repeat was introduced)
 
-### LESSON-017: Automating a step inherits every constraint the manual step had
+### LESSON-021: Automating a step inherits every constraint the manual step had
 **Lesson:** Before writing automation for something a skill already covers,
 read that skill and satisfy it as written. Editing a workflow file does not
 feel like doing the thing the workflow does, and that is exactly when its
@@ -270,3 +335,22 @@ is survivable; the one that owns the artifact wins, and the automation has to
 know which that is.
 **Status:** prose
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-009)
+
+### LESSON-022: A shared counter collides wherever a random id would not
+**Lesson:** Any identifier minted by "highest existing number plus one" in a
+file that parallel branches all append to will collide. `LESSON-NNN` in this
+file is the remaining instance. Until it is minted like a plan id, resolve a
+collision by letting whichever side reached `main` first keep its numbers, and
+grep the whole corpus for references to the ones you renumber.
+**Why:** The plan id carries six random letters for exactly this reason, and
+`.agents/README.md` argues it at length: two sessions in parallel worktrees
+compute the same "next" value, both use it, and the collision only surfaces at
+merge — by which point the identifier is already written into commit footers
+and cross-references. `LESSON-NNN` reproduces that failure one directory away
+from the explanation of why it was avoided. It surfaced the first time two
+plans were distilled on the same day: `260920-impoxu` and `260920-tensvp` both
+minted 015, 016 and 017 for different lessons. The renumbering is manual and
+silent, which is the part worth fixing — nothing checks that every lesson id is
+unique or that a reference to one still resolves.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012)

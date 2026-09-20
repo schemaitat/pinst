@@ -1,0 +1,28 @@
+what = "Claude Code: Anthropic's coding agent in the terminal, interactive by default and scriptable with -p."
+when = "Delegating work to Claude from a shell, or wiring it into a pipeline. `-p/--print` is what makes it non-interactive; everything else assumes a human is watching."
+keywords = ["claude", "agent", "coding agent", "ai", "llm", "anthropic", "assistant"]
+status = "draft"
+verified_with = "2.1.278"
+see_also = ["opencode", "herdr", "aven"]
+gotchas = """
+Without -p it starts an interactive session and waits — never run it bare
+from a script. --allow-dangerously-skip-permissions disables every permission
+check and is for sandboxes with no network, not for a working machine. Model
+ids move; ask the tool rather than hardcoding one from memory.
+"""
+
+[[recipes]]
+cmd = "claude --version"
+does = "Which version is installed."
+
+[[recipes]]
+cmd = "claude -p 'summarize this diff'"
+does = "One non-interactive prompt, printed to stdout. (unrun here — costs a model call)"
+
+[[recipes]]
+cmd = "claude --bg -p 'run the tests and report'"
+does = "Start in the background and print the id that attach, logs and stop take. (unrun here)"
+
+[[recipes]]
+cmd = "claude --help"
+does = "The full flag list, which is long and changes often."
