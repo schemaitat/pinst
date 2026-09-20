@@ -132,7 +132,11 @@ plans predated the format their own skills mandate); again in
 files had never been valid YAML because only hand-written parsers had ever
 read them; and again in 260920-tensvp-tool-docs-explorer (ISSUE-008), where a
 Done criterion narrowed during implementation and became a test in the same
-change rather than a corrected sentence in the plan.
+change rather than a corrected sentence in the plan; and again in
+260920-wtburh-harness-in-the-binary (ISSUE-013), where a plan said the JSON
+envelope's contract was preserved, every check of it was a manual `jq` at a
+terminal, and the command shipped exiting 3 with its findings absent from the
+document.
 
 ### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
 **Lesson:** A checker that compares a record only with itself will pass on a
@@ -375,7 +379,13 @@ minted 015, 016 and 017 for different lessons. The renumbering is manual and
 silent, which is the part worth fixing — nothing checks that every lesson id is
 unique or that a reference to one still resolves.
 **Status:** prose
-**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012)
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012); again the same day
+in 260920-wtburh-harness-in-the-binary, where `main` and an open branch had
+both minted LESSON-019 through LESSON-022 for different lessons. Resolved by
+this lesson's own rule — main's four kept their numbers, the branch's eight
+shifted to 023..030, and a grep of the corpus found four cross-references to
+renumber. Third sighting, and still nothing checks that a lesson id is unique
+or that a reference to one resolves.
 **Mechanize:** declined — the trigger is "this test feels awkward", which is
 not a property of the source. A check could flag `set_var` in tests, but both
 sightings so far were something else: a process-wide default in one, a plain
@@ -518,3 +528,18 @@ with it only because its failures happen to print a recognisable line near the
 end.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-011)
+
+### LESSON-031: After merging into a branch that deleted something, grep for the old name
+**Lesson:** Git conflicts are computed from files both sides edited, so the
+deletion half of a rename cannot conflict with code written against the old
+name. After any merge into a branch that removed or renamed a file, grep the
+merged tree for the old name and run whatever the other side added — not just
+the test suite.
+**Why:** This branch deleted `scripts/ash.sh`; while it was open, `main` grew
+two consumers of it, a guard script and a scheduled workflow. The merge
+reported two conflicts, both in append-only prose files, and said nothing
+about either consumer. `just qc` was green, the PR check was green, and the
+06:17 UTC distillation would have failed the next morning on a workflow no
+pull request exercises. One `just distil-guard preflight` found all of it.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-012)

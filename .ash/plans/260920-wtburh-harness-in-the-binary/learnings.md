@@ -3,7 +3,7 @@ id: 260920-wtburh
 slug: harness-in-the-binary
 updated: 2026-09-20
 areas: [cli, harness, agents]
-issue_count: 11
+issue_count: 13
 ---
 
 # Learnings — the harness moves into the binary (260920-wtburh-harness-in-the-binary)
@@ -255,3 +255,54 @@ line in the last few. For any write to an external system, the check is not
 the exit code anyway: read the thing back.
 **Skill:** none
 **Gap:** answered — a shell habit, not a procedure a skill would encode.
+
+### ISSUE-012: the real conflicts in the merge were the ones git could not see
+**What happened:** Merging `main` after three PRs landed produced two textual
+conflicts, both trivial. The changes that actually mattered were three git
+reported nothing about: `scripts/distil-guard.sh` shelling to the deleted
+`scripts/ash.sh`, `.github/workflows/distil.yml` allowlisting
+`Bash(scripts/ash.sh:*)` for an unattended agent, and neither of that
+workflow's jobs installing a Rust toolchain now that `just harness`,
+`just review` and `just index` all go through `cargo`.
+**Root cause:** Git merges the files both sides edited. This branch *deleted*
+a file that main then built two new consumers around — no line of theirs and
+mine ever overlapped, so there was nothing to conflict on. The scheduled
+distillation runs at 06:17 UTC on a workflow `ci.yml` never exercises, so a
+green `just qc` and a green PR check would both have said the merge was fine
+until the next morning.
+**Fix applied:** `ASH` became a bash array defaulting to
+`cargo run --quiet -- harness`, overridable with `ASH_BIN`; the dead allowlist
+entry removed rather than replaced, because `/distil` only ever calls the
+`just` wrappers and a `Bash(cargo run:*)` stand-in would also have permitted
+`cargo run -- install`; a toolchain step added to both jobs, explicitly rather
+than trusting whatever the runner image preinstalls.
+**Recommendation:** After merging into a branch that deleted or renamed
+anything, grep the merged tree for the old name before trusting the merge —
+the deletion side of a rename is invisible to the merge algorithm. And run
+whatever the other side added, not just the test suite: `just distil-guard
+preflight` found all of this in one command.
+**Skill:** none
+**Gap:** answered — a merge technique, not a procedure a skill would own.
+
+### ISSUE-013: the envelope had no test, so it shipped without its findings
+**What happened:** `pinst harness skills --json` exited 3, reported
+`summary.findings: 1`, and carried the finding's id, message and remediation
+nowhere at all. Found only because `distil-guard.sh` arrived on main and tried
+to read `agenda_items` out of that envelope.
+**Root cause:** Phase 4 put the skill rows in `items` and the counts in
+`summary`; `ash.sh` had put the findings in `items` and the rows beside them.
+The plan's REQ-002 said the envelope contract was preserved, and every check
+of it was a manual `--json | python3 -m json.tool` at a terminal. Nothing in
+`cargo test` looked at the envelope, so nothing noticed that a `status:
+issues` document had no reason in it.
+**Fix applied:** `items` is findings again, uniform with `harness check` and
+`pinst doctor`; the report moved to `summary.skills`. The summary builder was
+extracted to a free function so its shape could be asserted, and it now has a
+test.
+**Recommendation:** A contract verified only by eye at a terminal is not
+verified. When a plan says an output shape is preserved, that sentence needs
+an assertion in the same change — the manual check passes on exactly the
+output you already expected to see.
+**Skill:** none
+**Gap:** answered — covered by LESSON-008, which is about invariants that
+live only in prose.
