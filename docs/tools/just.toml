@@ -1,0 +1,28 @@
+what = "Command runner: named recipes in a justfile, with arguments and dependencies."
+when = "Every repeatable task in this repo. `just qc` is the quality gate — fmt, clippy, tests and the harness checks, in the order that fails fastest."
+keywords = ["task runner", "make", "recipe", "justfile", "commands", "scripts", "qc"]
+status = "authored"
+verified_with = "1.58.0"
+see_also = ["rust", "pinst"]
+gotchas = """
+Recipes run each line in its own shell unless the recipe starts with a
+shebang, so `cd foo` on one line does not affect the next. Exit codes
+propagate: `just run doctor` reporting exit 3 is pinst's documented verdict,
+not a broken recipe.
+"""
+
+[[recipes]]
+cmd = "just --list"
+does = "Every recipe in the justfile, with its doc comment."
+
+[[recipes]]
+cmd = "just qc"
+does = "This repo's quality gate. Run it before every commit."
+
+[[recipes]]
+cmd = "just --show qc"
+does = "Print a recipe's body without running it."
+
+[[recipes]]
+cmd = "just run docs search 'search a tree'"
+does = "Run pinst from source with arguments forwarded."

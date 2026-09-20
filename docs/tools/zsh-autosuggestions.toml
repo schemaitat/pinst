@@ -1,0 +1,10 @@
+what = "The oh-my-zsh plugin that suggests completions from history as you type."
+when = "Never invoked. It is a cloned repo under the oh-my-zsh custom plugins directory, enabled by name in the .zshrc plugins array."
+keywords = ["autosuggest", "suggestions", "history", "zsh plugin", "completion"]
+status = "authored"
+see_also = ["oh-my-zsh", "zsh"]
+gotchas = """
+No command, so nothing to capture — the manifest says so with an empty
+help_cmd. pinst detects it by the presence of the plugin directory, so a
+half-finished clone reads as installed.
+"""

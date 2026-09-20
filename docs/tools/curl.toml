@@ -1,0 +1,32 @@
+what = "HTTP client: fetch a URL, post a body, inspect response headers."
+when = "Any one-off HTTP request from a script. Most of the other installers here are `curl … | sh`, which is why it is a base dependency."
+keywords = ["http", "download", "fetch", "request", "api", "post", "rest", "url"]
+status = "authored"
+verified_with = "8.18.0"
+see_also = ["gh"]
+gotchas = """
+Without -f, curl prints the server's error page and still exits 0, so a
+script sees a successful download of an HTML 404. The `-fsSL` quartet is the
+one to reach for: fail on HTTP errors, silent, but still show the error, and
+follow redirects.
+"""
+
+[[recipes]]
+cmd = "curl -fsSL https://example.com -o out.html"
+does = "Download to a file, failing on an HTTP error rather than saving the error page."
+
+[[recipes]]
+cmd = "curl -fsS -I https://example.com"
+does = "Show only the response headers."
+
+[[recipes]]
+cmd = "curl -fsSL -o /dev/null -w '%{http_code}' https://example.com"
+does = "Print just the status code — the cheapest liveness check."
+
+[[recipes]]
+cmd = "curl -fsSL -X POST -H 'Content-Type: application/json' -d '{\"a\":1}' https://httpbin.org/post"
+does = "POST a JSON body."
+
+[[recipes]]
+cmd = "curl -fsSL https://example.com/install.sh | sh"
+does = "The install-script idiom every tool here uses. Read the script first."

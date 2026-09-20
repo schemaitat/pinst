@@ -1,0 +1,32 @@
+what = "Local-first task manager with a SQLite store, a TUI, and a CLI built for agents to drive."
+when = "Tracking work that outlives one session. `aven prime` is the entry point for an agent: it emits the workspace context in one call rather than making you discover it."
+keywords = ["tasks", "todo", "issues", "backlog", "project", "planning", "tracker", "epic"]
+status = "authored"
+verified_with = "0.1.39"
+see_also = ["herdr", "claude"]
+gotchas = """
+Everything is scoped to the active workspace, so a command that returns
+nothing usually means the wrong workspace rather than no tasks — check with
+`aven workspace`. `aven tui` takes over the terminal; stick to the
+subcommands from a script.
+"""
+
+[[recipes]]
+cmd = "aven prime --limit 20"
+does = "Emit the workspace context for an agent — read this first."
+
+[[recipes]]
+cmd = "aven list --status todo"
+does = "Tasks in one status: inbox, backlog, todo, active, done or canceled."
+
+[[recipes]]
+cmd = "aven search 'docs'"
+does = "Search tasks in the active workspace."
+
+[[recipes]]
+cmd = "aven skill"
+does = "Print the coding-agent skill file, which documents the machine contract."
+
+[[recipes]]
+cmd = "aven doctor"
+does = "Diagnose configuration, database and workspace state without changing anything."

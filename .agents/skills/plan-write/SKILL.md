@@ -415,9 +415,17 @@ exists to avoid losing.
 - **Commits**: add a trailing footer line `Plan: <id>-<slug>` (e.g.
   `Plan: 260919-qwerty-add-mlflow-experiment-tracking`), after any other
   footers like `BREAKING CHANGE:` or attribution lines.
-- **Pull requests**: prefix the title with the id in brackets, e.g.
-  `[260919-qwerty] Add MLflow experiment tracking`, so it's visible in PR
-  lists without opening the description.
+- **Pull requests**: put the id in the **body**, as a trailing
+  `Plan: <id>-<slug>` line, exactly as on a commit. The `create-pr` skill
+  builds that body and owns the details.
+
+  **Never prefix the PR title with the id.** Squash merge is enabled on this
+  repo, so under a squash the PR title *becomes* the commit subject on `main`,
+  and `main` is released by release-please, which reads Conventional Commits.
+  A title starting with `[260919-qwerty]` does not parse: no version bump, no
+  changelog entry, and no error — the work ships and never appears in a
+  release. Making the id visible in PR lists is not worth a silent release
+  failure, and the id is one click away in the body.
 
 This applies for the plan's entire lifetime, not just its first commit — if
 work spans several phases and several PRs, every one of them carries the same

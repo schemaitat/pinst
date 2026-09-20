@@ -1,0 +1,32 @@
+what = "Find files and directories by name, fast, respecting .gitignore."
+when = "Locating files by name or extension. Reach for it instead of `find`: the common case is one short argument, and ignored files are skipped by default."
+keywords = ["find", "locate", "files", "filename", "glob", "search files", "fdfind"]
+status = "authored"
+verified_with = "10.3.0"
+see_also = ["ripgrep"]
+gotchas = """
+Debian ships the binary as `fdfind`; pinst symlinks it to ~/.local/bin/fd
+after install, which is why the manifest detects both names. The pattern is a
+regex by default — pass -g for globs. Hidden and ignored files need -H and -I
+(or -u for both).
+"""
+
+[[recipes]]
+cmd = "fd pattern"
+does = "Find everything whose name matches, from here down."
+
+[[recipes]]
+cmd = "fd -e rs"
+does = "Every file with a given extension."
+
+[[recipes]]
+cmd = "fd -t f --max-depth 1 -e toml"
+does = "Files only, one level deep — the fast way to see what a directory holds."
+
+[[recipes]]
+cmd = "fd -H -I node_modules"
+does = "Include hidden and ignored entries, for finding what is normally skipped."
+
+[[recipes]]
+cmd = "fd -e py -x wc -l"
+does = "Run a command per result, in parallel."

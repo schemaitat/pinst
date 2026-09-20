@@ -1,0 +1,22 @@
+what = "Extract .zip archives."
+when = "Unpacking a downloaded release that ships a zip rather than a tarball; the oh-my-posh installer needs it."
+keywords = ["zip", "archive", "extract", "unpack", "decompress"]
+status = "authored"
+verified_with = "6.00"
+see_also = ["curl"]
+gotchas = """
+Without -o, unzip stops and prompts when a file already exists, which hangs
+an unattended script. Pass -o to overwrite or -n to skip.
+"""
+
+[[recipes]]
+cmd = "unzip -l archive.zip"
+does = "List the contents without extracting anything."
+
+[[recipes]]
+cmd = "unzip -o archive.zip -d target/"
+does = "Extract into a directory, overwriting rather than prompting."
+
+[[recipes]]
+cmd = "unzip -v"
+does = "Version and build configuration."

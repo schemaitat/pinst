@@ -1,0 +1,23 @@
+what = "The JavaScript runtime, installed through nvm and carrying npm with it."
+when = "Running JS, and as the runtime several of the agent tools here need. `node -e` is the quickest way to evaluate something without a file."
+keywords = ["javascript", "js", "npm", "runtime", "nodejs"]
+status = "authored"
+verified_with = "24.21.0"
+see_also = ["nvm", "opencode", "claude"]
+gotchas = """
+Because Node comes from nvm, its path is under ~/.nvm and changes when the
+active version changes. A cron job or a systemd unit that hardcodes the path
+breaks on the next `nvm use`.
+"""
+
+[[recipes]]
+cmd = "node -e 'console.log(1+1)'"
+does = "Evaluate an expression without writing a file."
+
+[[recipes]]
+cmd = "node script.js"
+does = "Run a script."
+
+[[recipes]]
+cmd = "node --version"
+does = "Which version nvm has active right now."

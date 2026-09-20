@@ -1,0 +1,32 @@
+what = "This tool: installs, updates and doctors the machine's toolchain from a manifest, carries the dotfiles embedded, and documents the tools it manages."
+when = "Provisioning a machine, converging a drifted one, or — with `docs` — finding out what a tool here is for without running it first."
+keywords = ["toolchain", "dotfiles", "provisioning", "bootstrap", "manifest", "configs", "install", "doctor", "docs"]
+status = "authored"
+verified_with = "0.4.0"
+see_also = ["just", "rust"]
+gotchas = """
+Exit codes carry the verdict: 0 clean, 1 a step failed, 2 a bad invocation, 3
+ran fine but found things to act on. `pinst list` exiting 3 because a tool is
+missing is the contract working, not a failure. Every command takes --json,
+and every mutating one takes --dry-run; run the dry run first.
+"""
+
+[[recipes]]
+cmd = "pinst doctor --json"
+does = "What is off right now, as a machine-readable envelope."
+
+[[recipes]]
+cmd = "pinst list --json"
+does = "Every manifest tool with its live install status and version."
+
+[[recipes]]
+cmd = "pinst docs search 'search a tree'"
+does = "Find the right tool for a task, with the matching recipes inline."
+
+[[recipes]]
+cmd = "pinst docs dump --json"
+does = "The whole catalogue in one call, for loading into an agent's context."
+
+[[recipes]]
+cmd = "pinst bootstrap --dry-run"
+does = "Exactly what provisioning a fresh machine would do, without touching anything."

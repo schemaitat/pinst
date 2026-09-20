@@ -81,10 +81,11 @@ commit subject on `main`. A title release-please cannot parse produces no
 version bump and no changelog entry, silently: the work ships and never
 appears in a release.
 
-So: **do not prefix the title with the plan id.** The `plan-write` skill says
-to (`[260919-qwerty] Add MLflow…`), and PR #1 did exactly that — it survived
-only because that PR was not squashed. The id belongs in the body, where no
-tool parses it. Flag this to the user if they ask for the bracket form.
+So: **do not prefix the title with the plan id.** PR #1 did
+(`[260919-qwerty] Add MLflow…`) and survived only because it was not squashed;
+`plan-write` prescribed that form until PR #12, and now says the opposite. The
+id belongs in the body, where no tool parses it. If the user asks for the
+bracket form, say what it costs before doing it.
 
 If the branch is one phase of an unfinished plan, say so in the title's scope
 or subject rather than with a prefix, e.g.

@@ -71,6 +71,8 @@ pub enum Commands {
     Update(SelectArgs),
     /// Manage the configs pinst carries (status, apply, diff, adopt).
     Config(ConfigArgs),
+    /// Look up how to use the tools the manifest declares.
+    Docs(DocsArgs),
     /// Check tools and configs, reporting actionable findings.
     Doctor(DoctorArgs),
     /// Converge this machine: install tools, apply configs, then report.
@@ -91,6 +93,7 @@ impl Commands {
             Commands::Install(_) => "install",
             Commands::Update(_) => "update",
             Commands::Config(_) => "config",
+            Commands::Docs(_) => "docs",
             Commands::Doctor(_) => "doctor",
             Commands::Apply(_) => "apply",
             Commands::Bootstrap(_) => "bootstrap",
@@ -142,6 +145,75 @@ pub enum ConfigAction {
     Adopt,
 }
 
+/// The tool catalogue: what each tool is for, and what to type.
+///
+/// Shaped for a caller that has a task rather than a tool in mind — which is
+/// why `search` returns the matching recipes inline instead of a list of names
+/// to look up separately.
+#[derive(Debug, Args, Clone)]
+pub struct DocsArgs {
+    #[command(subcommand)]
+    pub action: DocsAction,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum DocsAction {
+    /// Find the tool for a task, with the matching recipes inline.
+    Search(DocsSearchArgs),
+    /// Show the page for one tool.
+    Show(DocsShowArgs),
+    /// Print the whole catalogue as one document.
+    Dump(DocsDumpArgs),
+    /// Report which tools have a page, and which are still drafts.
+    Status,
+    /// Seed a draft page from a tool's own help output.
+    Adopt(DocsAdoptArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsSearchArgs {
+    /// What you are trying to do, in your own words.
+    #[arg(required = true, num_args = 1..)]
+    pub query: Vec<String>,
+    /// Only tools carrying this tag (repeatable).
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
+    /// Only tools that are actually installed.
+    #[arg(long)]
+    pub installed: bool,
+    /// Keep at most this many results.
+    #[arg(long, default_value_t = 10)]
+    pub limit: usize,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsDumpArgs {
+    /// Only tools carrying this tag (repeatable).
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
+    /// Only tools selected by this profile.
+    #[arg(long)]
+    pub profile: Option<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsShowArgs {
+    /// The tool to look up. Must be a tool the manifest declares.
+    pub tool: String,
+    /// Re-run the tool's help instead of answering from the cache.
+    #[arg(long)]
+    pub refresh: bool,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsAdoptArgs {
+    /// The tool to seed a page for.
+    pub tool: String,
+    /// Re-run the tool's help instead of seeding from the cache.
+    #[arg(long)]
+    pub refresh: bool,
+}
+
 #[derive(Debug, Args, Clone)]
 pub struct DoctorArgs {
     /// Apply the fixable subset of findings.
@@ -161,6 +233,8 @@ pub enum SchemaKind {
     Manifest,
     /// JSON Schema for the --json output envelope.
     Output,
+    /// JSON Schema for a docs/tools/<name>.toml page.
+    Docs,
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
@@ -171,6 +245,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
         Commands::Install(args) => commands::install::run(&ctx, args).await,
         Commands::Update(args) => commands::update::run(&ctx, args).await,
         Commands::Config(args) => commands::config::run(&ctx, args).await,
+        Commands::Docs(args) => commands::docs::run(&ctx, args).await,
         Commands::Doctor(args) => commands::doctor::run(&ctx, args).await,
         Commands::Apply(args) => commands::apply::run(&ctx, args).await,
         Commands::Bootstrap(args) => commands::bootstrap::run(&ctx, args).await,

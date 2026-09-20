@@ -32,7 +32,10 @@ query happens before anything a script can see.
 ISSUE-007); again in 260919-vldfei-self-improving-agent-harness (ISSUE-002,
 ISSUE-003), where the unchecked assumptions were about the repo's own scripts
 and its own corpus — closer to hand than GitHub, and for that reason trusted
-without a query.
+without a query; and again in 260920-tensvp-tool-docs-explorer (ISSUE-002,
+ISSUE-006), where the plan asserted which of 26 local binaries answer
+`--help` without running any of them, and named a verification method no
+dependency in the tree can perform. Both were one loop away from being facts.
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
 **Lesson:** When verification depends on landing on `main`, an admin action or
@@ -109,10 +112,12 @@ check can express. `lesson.unenforced` mechanizes its narrow half: a claim of
 enforcement must name something real.
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
 plans predated the format their own skills mandate); again in
-260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); and again in
+260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); again in
 260919-vldfei-self-improving-agent-harness (ISSUE-004), where six SKILL.md
 files had never been valid YAML because only hand-written parsers had ever
-read them.
+read them; and again in 260920-tensvp-tool-docs-explorer (ISSUE-008), where a
+Done criterion narrowed during implementation and became a test in the same
+change rather than a corrected sentence in the plan.
 
 ### LESSON-009: Internal consistency is not freshness — check the record against something written after the fact
 **Lesson:** A checker that compares a record only with itself will pass on a
@@ -211,3 +216,63 @@ phase, exactly the decay this plan was written to prevent: a signal that is
 correct, repeated, and eventually ignored.
 **Status:** prose
 **Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-006)
+
+### LESSON-015: A macro that reads files at compile time must declare them as build inputs
+**Lesson:** When a macro embeds a directory or file into the binary
+(`include_dir!`, `include_str!` over generated content), add a `build.rs`
+emitting `cargo:rerun-if-changed` for those paths in the same change. Treat
+"the data is in the repo" as saying nothing about whether the compiled
+artifact contains it.
+**Why:** Cargo cannot see through a macro, so files read during expansion are
+not tracked inputs: edit only data files and nothing is recompiled, and the
+previous build's embedded copy keeps shipping. The failure is invisible where
+you would notice it and visible where you cannot debug it — a dev machine
+reads the source tree directly and looks correct, while a machine running the
+downloaded binary silently serves a stale copy. In this repo it had been
+latent since `configs/` was first embedded, and only surfaced because a test
+compared the checkout tree against the embedded catalogue, written for an
+unrelated reason.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-004)
+
+### LESSON-016: Add an API in the phase that consumes it
+**Lesson:** In a phased plan, do not land a function, a method or a module
+before the code that calls it. Where a module genuinely has to arrive first,
+make the gap loud and self-deleting — an `#[cfg_attr(not(test),
+allow(dead_code))]` whose comment names the phase that removes it — rather
+than a quiet allow.
+**Why:** Phase boundaries are slices of design, but `just qc` enforces a
+property of the whole tree at every commit, and `-D warnings` makes dead code
+a build failure. Speculative API also tends to be wrong: of three items
+written ahead of their callers here, one was deleted and re-added with a
+different signature, one turned out to be unnecessary, and one only earned its
+place by finding a use nobody had planned (reporting orphan pages).
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-003)
+
+### LESSON-017: Reject unknown fields in any format a human writes by hand
+**Lesson:** Put `#[serde(deny_unknown_fields)]` on hand-authored config types.
+The cost is one attribute; the alternative is a file that loads clean and
+means something other than what it says.
+**Why:** Serde ignores unknown fields by default, so a typo, a
+singular/plural slip, or a key that landed in the wrong TOML table silently
+disappears — and the result is not an error but a document that lies. The
+first page authored in this repo put a top-level key below an
+array-of-tables, where TOML binds it to that table; the guard turned a page
+that would have quietly lost its content into a parse failure naming the
+field.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-001)
+
+### LESSON-018: A test that wants to override ambient state is telling you to make it a parameter
+**Lesson:** When isolating a test means setting an environment variable, a
+global, or a process-wide default, change the code to take the value as an
+argument instead of building machinery around the environment.
+**Why:** Process-wide state forces a lock, the lock has to be held for the
+duration of the call, and `clippy::await_holding_lock` rejects holding one
+across an `.await` — so the workaround does not even work in async code. The
+parameter version is shorter, needs no lock, and removes the possibility of a
+test reaching the developer's real `~/.cache` at all. The awkward test was a
+design problem one level up, not a testing problem.
+**Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
