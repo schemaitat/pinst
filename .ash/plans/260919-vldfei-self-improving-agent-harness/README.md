@@ -1,9 +1,9 @@
 ---
 id: 260919-vldfei
 slug: self-improving-agent-harness
-status: Proposed
+status: In Progress
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 areas: [agents, harness, learnings]
 summary: Make the harness measure itself — lessons with a lifecycle, distillation enforced by a finding, and a skill audit that reports what fires, what conforms, what fails, and what is missing.
 files_touched: [.agents/README.md, .agents/skills/plan-learnings/SKILL.md, .agents/skills/conventional-commits/SKILL.md, .agents/skills/create-pr/SKILL.md, .agents/skills/plan-write/SKILL.md, .agents/skills/plan-implement/SKILL.md, .agents/skills/pinst/SKILL.md, scripts/ash.sh, justfile, .ash/LEARNINGS.md, .ash/plans/260918-lmmebj-self-contained-toolchain-cli/learnings.md, .ash/plans/260918-pzdyxp-dotfiles-manager-tui/learnings.md, .ash/plans/260919-zeuuaj-release-please-binary-artifacts/learnings.md, .claude/commands/distil.md]
@@ -122,7 +122,7 @@ does not.
 ## Phases
 | # | Phase | File | Status |
 |---|-------|------|--------|
-| 1 | Give lessons a lifecycle and issues an owner | [phase-01.md](phase-01.md) | Proposed |
+| 1 | Give lessons a lifecycle and issues an owner | [phase-01.md](phase-01.md) | Done |
 | 2 | Make undistilled learnings a finding | [phase-02.md](phase-02.md) | Proposed |
 | 3 | Skill contracts and the artifact audit | [phase-03.md](phase-03.md) | Proposed |
 | 4 | Corroborate with invocation evidence | [phase-04.md](phase-04.md) | Proposed |

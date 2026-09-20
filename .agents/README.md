@@ -80,6 +80,32 @@ The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
 
+### Two fields make the loop measurable
+
+Both are written by `plan-learnings` and read by `scripts/ash.sh`:
+
+- **`**Status:**` on every lesson** in `.ash/LEARNINGS.md` — `prose`,
+  `mechanized` or `retired`. A `mechanized` lesson also carries
+  **`**Check:**`**, naming the finding id that now enforces it
+  (`phase.logged-not-done`, `wire.missing` — an id, not a description). That
+  id must exist somewhere under `scripts/`, in *either* checker: `ash.sh`
+  owns the corpus invariants and `agents-wire.sh` owns the skill projection,
+  and a lesson may be mechanized by either. `ash.sh check` reports
+  `lesson.unenforced` when the id is nowhere to be found, because a lesson
+  claiming enforcement it does not have is worse than one honestly marked
+  `prose` — it tells the next reader the problem is handled.
+- **`**Skill:**` on every issue** in a plan's `learnings.md` — the skill whose
+  *instructions* would have had to change to prevent it, or `none`. Read by
+  skill it is the failure tally in `ash.sh skills`; read by the plan's `areas`
+  it is the missing-skill candidate list.
+
+`Status:` exists so the file has an end state instead of only growing, and so
+one question becomes answerable: how much of what we learned is actually
+enforced? Today that is 2 of 10. The other eight are not a backlog — most
+lessons are judgement that no exit code can carry — but a lesson sitting at
+`prose` across several plans is a candidate for a check rather than for louder
+prose.
+
 ## Routing
 
 | The request | Entry point |

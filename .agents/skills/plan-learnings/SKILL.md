@@ -116,10 +116,21 @@ surfacing above the issue list.>
 **Root cause:** <why>
 **Fix applied:** <what got it working, or "unresolved">
 **Recommendation:** <how to avoid/catch/fix faster next time>
+**Skill:** <name> | none
 
 ### ISSUE-002: <short title>
 ...
 ```
+
+**`Skill:`** names *the skill whose instructions would have had to change to
+prevent this issue* — not the skill that happened to be loaded when it
+surfaced. `none` means no skill covers this work, and `none` is the honest
+answer most of the time: a musl toolchain surprise or a GitHub permission is
+not a skill-shaped problem. Write the field on every issue, because it is read
+two ways and neither can be recovered from prose afterwards. Grouped by skill
+it is the per-skill failure tally in `scripts/ash.sh skills`; grouped by the
+plan's `areas` it is the missing-skill candidate list. You were there; a later
+heuristic was not.
 
 If a run genuinely produced no issues, still write the file with an empty
 `## Issues` section (`None — implementation went as planned.`) rather than
@@ -162,8 +173,34 @@ before planning new work.
 reading the source plan>
 **Why:** <the underlying reason — the thing that makes it true in general,
 not just the anecdote it came from>
+**Status:** prose | mechanized | retired
+**Check:** <finding id>          # only when Status is mechanized
 **Seen in:** 260919-qwerty-add-mlflow-experiment-tracking (ISSUE-002)
 ```
+
+### The lesson lifecycle
+
+`Status:` is what stops this file from being a pile that only grows:
+
+- **`prose`** — written down, enforced by whoever remembers it. Every lesson
+  starts here.
+- **`mechanized`** — a check now enforces it, named on the `**Check:**` line
+  by its finding id (`phase.logged-not-done`, not a description of it). That
+  id must exist in `scripts/`; `ash.sh check` reports `lesson.unenforced` when
+  it does not, because a lesson claiming enforcement it does not have is worse
+  than one honestly marked `prose` — it tells the next reader the problem is
+  handled.
+- **`retired`** — no longer true or no longer relevant, with a one-line reason.
+  Retired lessons stay in the file. The history of what stopped being true is
+  worth the few lines, and deleting one would leave its `Seen in:` references
+  dangling.
+
+`mechanized` is the goal state, and the point of recording it is the question
+it makes answerable: *how much of what we learned is actually enforced?* A
+lesson sitting at `prose` across several plans is a candidate for a check, not
+a candidate for louder prose — LESSON-008 is exactly that observation, and
+`ash.sh skills` lists those lessons under "recurring, unenforced" so they stop
+being invisible.
 
 When a lesson already in the file recurs in a new plan, don't add a second
 entry — append the new plan to its `Seen in:` line. The count of sources

@@ -13,6 +13,7 @@ anything. A risk reasoned from a general rule ("the kernel refuses writes to a
 running executable") can be defeated by a detail of the specific tool involved
 (GNU tar unlinks before extracting), and the only way to find that out is to
 try it.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-002)
 
 ### LESSON-002: Check platform-side preconditions with an API call while planning
@@ -23,6 +24,7 @@ written, not asserted as an ASSUMPTION for implementation to discover.
 codebase, and getting one wrong blocks a whole phase on someone else's action.
 `gh api repos/<slug>/actions/permissions/workflow` would have shown up front
 that this repo cannot let Actions open a pull request.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-001, ISSUE-007)
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
@@ -32,6 +34,7 @@ the working tree, and what can only be confirmed afterwards.
 **Why:** Otherwise a phase whose code is complete and committed still reads as
 unfinished, and the distinction between "not written" and "written, awaiting a
 merge" is lost exactly when someone picks the work back up.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005,
 ISSUE-008, and again as ISSUE-009 — the lesson was written during that plan
 and still not applied to its own phases, which is what let them go stale)
@@ -44,6 +47,7 @@ it unexpanded — `$HOME/...`, `${VAR:-default}`, `~/...` are all idiomatic here
 **Why:** `under_home()` compared `$HOME/.local/bin` as a literal path against
 the expanded `$HOME`, concluded the destination was privileged, and would have
 installed root-owned files into the user's own home.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-003)
 
 ### LESSON-005: `cross` is for foreign architectures, not a different libc
@@ -52,6 +56,7 @@ installed root-owned files into the user's own home.
 `cross` and its container for a genuinely different architecture.
 **Why:** It removes a Docker image pull from every release build and keeps the
 same command working on a developer machine as in CI.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-004)
 
 ### LESSON-006: Print another action's outputs on the first run that uses them
@@ -63,6 +68,7 @@ the failure mode is a job that is silently skipped or runs with an empty
 argument — indistinguishable in the UI from "nothing to do". release-please's
 manifest mode emits `.--tag_name`, not `tag_name`, and the dump step is what
 turned that from a broken release into a three-line fix.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-006)
 
 ### LESSON-007: A skill that is not projected into the runtime's own directory never loads
@@ -74,6 +80,8 @@ reads — Claude Code reads `.claude/skills/`. An unwired skill fails silently:
 there is no error, the skill simply never appears, and the nearest thing that
 *does* load is whatever stale copy exists in someone's personal `~/.claude`.
 Silence is the whole problem, which is why the check has to be mechanical.
+**Status:** mechanized
+**Check:** wire.missing
 **Seen in:** the harness audit on `feat/agents-orchestration` — all four repo
 skills were unwired, and a drifted personal copy of `plan-write` was loading
 in their place.
@@ -88,6 +96,7 @@ skills stated in prose — quoted indices, no duplicate `## Status` section,
 a regenerated `INDEX.md` — was being violated by the corpus at the moment the
 skills were committed. An exit code is checkable by anyone, at any time,
 without having read the skill.
+**Status:** prose
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
 plans predated the format their own skills mandate); again in
 260919-zeuuaj-release-please-binary-artifacts (ISSUE-009).
@@ -108,6 +117,8 @@ agreeing with itself. The contradiction was sitting in plain sight — the
 changelog recorded phases 3 and 4 as shipped while the phase files said
 `In Progress` — and nothing was comparing the two halves. Staleness costs
 more than inconsistency, because a stale record still reads as authoritative.
+**Status:** mechanized
+**Check:** phase.logged-not-done
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-009)
 
 ### LESSON-010: Never run a state-deriving tool inside the window where the workflow hides that state
@@ -125,4 +136,5 @@ Two releases and an empty third release PR came out of that loop in fifteen
 minutes, each changelog a copy of the whole history. The tell is generic
 enough to reuse: a release PR listing entries older than the previous release
 has lost its boundary, whatever version it proposes.
+**Status:** prose
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-010)
