@@ -195,6 +195,21 @@ They are the only checks in here that compare the corpus against a record of
 what actually shipped, and they exist because plan `260919-zeuuaj` sat `In
 Progress` for a day with its own changelog recording all four phases as done.
 
+Two more keep the distillation loop honest, over the fields described under
+"Two fields make the loop measurable" above:
+
+- `learnings.untriaged` — a plan's `learnings.md` records an `ISSUE-NNN` that
+  no lesson's `Seen in:` line references. This is the cadence: a plan closing
+  starts the clock, and the clock stops when someone actually decides —
+  promote it, add it to an existing lesson, or write `**Distilled:** declined
+  — <reason>` on the issue, which silences it permanently. Three outcomes, one
+  of them free, because a check that cries wolf is a check that gets deleted.
+- `lesson.unenforced` — a lesson marked `**Status:** mechanized` whose
+  `**Check:**` id no script under `scripts/` emits (or which names no id at
+  all). An `error`, not a warning: a lesson claiming enforcement it does not
+  have is worse than one honestly marked `prose`, because it tells the next
+  reader the problem is handled.
+
 Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
 `remediation` string, exactly like `pinst doctor` — match on the id, don't
 parse the prose.

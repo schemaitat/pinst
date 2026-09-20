@@ -19,6 +19,7 @@ ASH_DIR="${ASH_DIR:-.ash}"
 PLANS_DIR="$ASH_DIR/plans"
 INDEX_FILE="$ASH_DIR/INDEX.md"
 LOG_FILE="$ASH_DIR/CHANGELOG.log"
+LEARNINGS_FILE="$ASH_DIR/LEARNINGS.md"
 JSON=0
 
 FIND_ID=(); FIND_SEV=(); FIND_MSG=(); FIND_REM=()
@@ -141,6 +142,7 @@ check_corpus() {
     check_phases "$d" "$name" "$id" "$slug" "$readme"
     check_learnings "$d" "$name"
     check_changelog "$d" "$name" "$id"
+    check_distillation "$d" "$name" "$id"
   done <<< "$(plan_dirs)"
 }
 
@@ -348,6 +350,128 @@ check_learnings() {
   fi
 }
 
+# --- distillation -----------------------------------------------------------
+# A plan closing is what starts the clock on distilling what it taught. These
+# two checks are the clock: an issue nobody has decided about keeps `qc` red,
+# and a lesson claiming to be enforced has to name a check that exists.
+#
+# Deliberately no wall-clock schedule. The trigger is a plan closing, not a
+# Tuesday — a weekly job fires into silence on a quiet week, misses four plans
+# on a busy one, and lives in one person's account rather than in the repo.
+
+# Every (plan id, issue id) pair referenced from a lesson's `Seen in:` line.
+# The line is free prose and often wraps, so the whole tail of the block is
+# buffered and both kinds of id are pulled out of it. A buffer naming two
+# plans yields the cross-product, which can only *silence* a finding — the
+# safe direction, given a check that cries wolf is a check that gets deleted.
+#
+# No `{n}` intervals in the patterns: mawk has not always supported them, and
+# these scripts are meant to run on a machine that has just been bootstrapped.
+seen_pairs() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush(   tmp, n, m, i, j) {
+      if (buf == "") return
+      n = 0; m = 0
+      tmp = buf
+      while (match(tmp, /[0-9][0-9][0-9][0-9][0-9][0-9]-[a-z][a-z][a-z][a-z][a-z][a-z]/)) {
+        plans[++n] = substr(tmp, RSTART, RLENGTH)
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      tmp = buf
+      while (match(tmp, /ISSUE-[0-9]+/)) {
+        issues[++m] = substr(tmp, RSTART, RLENGTH)
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      for (i = 1; i <= n; i++) for (j = 1; j <= m; j++) print plans[i], issues[j]
+      buf = ""; delete plans; delete issues
+    }
+    /^### LESSON-/ { flush(); inseen = 0 }
+    /^\*\*Seen in:\*\*/ { inseen = 1 }
+    inseen { buf = buf " " $0 }
+    /^[[:space:]]*$/ { if (inseen) { flush(); inseen = 0 } }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
+}
+
+# "ISSUE-00N open|declined" for one learnings.md.
+issue_states() {
+  [ -f "$1" ] || return 0
+  awk '
+    function flush() { if (cur != "") print cur, (dec ? "declined" : "open"); cur = ""; dec = 0 }
+    /^### ISSUE-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Distilled:\*\*[[:space:]]*declined/ { if (cur != "") dec = 1 }
+    /^## / { flush() }
+    END { flush() }
+  ' "$1"
+}
+
+check_distillation() {
+  local d="$1" name="$2" id="$3"
+  local lf="$d/learnings.md"
+  [ -f "$lf" ] || return 0
+
+  local pairs state issue st
+  pairs="$(seen_pairs)"
+
+  while IFS= read -r state; do
+    [ -n "$state" ] || continue
+    issue="${state%% *}"; st="${state##* }"
+    [ "$st" = "open" ] || continue
+    printf '%s\n' "$pairs" | grep -qx "$id $issue" && continue
+    finding "learnings.untriaged.$name.$issue" warning \
+      "$lf records $issue but no lesson in $LEARNINGS_FILE references it" \
+      "run the plan-learn skill: promote it, add it to an existing lesson'\''s 'Seen in:' line, or write '\''**Distilled:** declined — <reason>'\'' on the issue"
+  done <<< "$(issue_states "$lf")"
+}
+
+# A lesson may be mechanized by either checker — ash.sh owns the corpus
+# invariants, agents-wire.sh owns the skill projection — so the id is looked
+# for across scripts/ rather than in this file alone.
+check_lessons() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  local line lesson st ck
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    lesson="$(printf '%s' "$line" | cut -d" " -f1)"
+    st="$(printf '%s' "$line" | cut -d" " -f2)"
+    ck="$(printf '%s' "$line" | cut -d" " -f3)"
+    [ "$st" = "mechanized" ] || continue
+    if [ -z "$ck" ] || [ "$ck" = "-" ]; then
+      finding "lesson.unenforced.$lesson" error \
+        "$LEARNINGS_FILE marks $lesson mechanized but names no '\''**Check:**'\'' finding id" \
+        "add the finding id that enforces it, or set '\''**Status:** prose'\''"
+      continue
+    fi
+    grep -rqF "$ck" scripts/ 2>/dev/null && continue
+    finding "lesson.unenforced.$lesson" error \
+      "$LEARNINGS_FILE says $lesson is mechanized by '\''$ck'\'', which no script under scripts/ emits" \
+      "point '\''**Check:**'\'' at a finding id that exists, or set '\''**Status:** prose'\''"
+  done <<< "$(lesson_states)"
+}
+
+# "LESSON-00N status check-or-dash" for every lesson.
+lesson_states() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush() { if (cur != "") print cur, (st == "" ? "-" : st), (ck == "" ? "-" : ck); cur = ""; st = ""; ck = "" }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Status:\*\*/ { st = $2 }
+    /^\*\*Check:\*\*/ { ck = $2 }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
+}
+
+count_lessons() { lesson_states | grep -c . || true; }
+count_issues() {
+  local n=0 f
+  for f in "$PLANS_DIR"/*/learnings.md; do
+    [ -f "$f" ] || continue
+    n=$((n + $(issue_states "$f" | grep -c . || true)))
+  done
+  printf '%s' "$n"
+}
+
 # --- index ------------------------------------------------------------------
 
 render_index() {
@@ -398,8 +522,9 @@ report() {
         "$(jesc "${FIND_MSG[$i]}")" "$(jesc "${FIND_REM[$i]}")"
       sep=","
     done
-    printf '],"errors":[],"summary":{"plans":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
-      "$(plan_dirs | grep -c . || true)" "$total" "$errors" "$warnings" "$infos"
+    printf '],"errors":[],"summary":{"plans":%s,"lessons":%s,"issues":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
+      "$(plan_dirs | grep -c . || true)" "$(count_lessons)" "$(count_issues)" \
+      "$total" "$errors" "$warnings" "$infos"
   else
     for i in $(find_indices); do
       printf '%-7s %s\n         %s\n         fix: %s\n' \
@@ -438,6 +563,7 @@ done
 case "$cmd" in
   check)
     check_corpus
+    check_lessons
     # A stale index is a corpus problem like any other, so `check` catches it
     # without the caller having to remember a second command.
     if [ -f "$INDEX_FILE" ]; then

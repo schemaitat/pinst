@@ -2,7 +2,7 @@
 id: 260919-vldfei
 slug: self-improving-agent-harness
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Make undistilled learnings a finding
@@ -23,7 +23,7 @@ malformed file — and that deserves to land on its own, revertable without
 taking the audit with it.
 
 ## Steps
-- [ ] TASK-006: `scripts/ash.sh` — add `learnings.untriaged.<plan>.<issue>`:
+- [x] TASK-006: `scripts/ash.sh` — add `learnings.untriaged.<plan>.<issue>`:
       for every `ISSUE-NNN` in a plan's `learnings.md`, a finding unless the
       issue id is referenced by some `**Seen in:**` line in `.ash/LEARNINGS.md`
       or the issue block carries `**Distilled:** declined — <reason>`.
@@ -32,7 +32,7 @@ taking the audit with it.
       the clock stops when a human or agent has actually decided — promote,
       merge into an existing lesson, or decline. Three outcomes, one of which
       is free, so RISK-001's "this is noise" failure mode has a cheap exit.
-- [ ] TASK-007: `scripts/ash.sh` — add `lesson.unenforced.<lesson>`: a lesson
+- [x] TASK-007: `scripts/ash.sh` — add `lesson.unenforced.<lesson>`: a lesson
       whose `**Status:** mechanized` names a `**Check:**` id that appears
       nowhere in `scripts/`. Severity `error` — a lesson claiming enforcement
       it does not have is worse than one honestly marked `prose`, because it
@@ -41,14 +41,14 @@ taking the audit with it.
       label anyone can apply, and the one number this system exists to
       report — how much of what we learned is actually enforced — becomes
       unfalsifiable.
-- [ ] TASK-008: `scripts/ash.sh` — extend `check`'s usage text and the JSON
+- [x] TASK-008: `scripts/ash.sh` — extend `check`'s usage text and the JSON
       envelope's `summary` with `lessons` and `issues` counts alongside
       `plans`, so a machine reading the envelope can see corpus size without
       parsing findings.
       Why: PAT-001 — the envelope is the interface. A consumer that has to
       count `### ISSUE-` blocks itself is a consumer that will drift from
       whatever the script means by "issue".
-- [ ] TASK-009: negative-test all three behaviours against a copy of the
+- [x] TASK-009: negative-test all three behaviours against a copy of the
       corpus under `ASH_DIR`: an untriaged issue fires, the same issue with
       `**Distilled:** declined` does not, and a `mechanized` lesson whose
       `Check:` id is renamed fires as an error. Record the commands in the
@@ -56,7 +56,7 @@ taking the audit with it.
       Why: a check nobody has seen fail is a check nobody knows works —
       exactly how three staleness invariants could have been written and
       quietly never fired. `ASH_DIR` already exists for this.
-- [ ] TASK-010: `.agents/README.md` — add the three new findings to the
+- [x] TASK-010: `.agents/README.md` — add the three new findings to the
       documented invariant list, with the same "what it catches" framing as the
       staleness group.
       Why: the list is what someone reads when a finding surprises them, and an
@@ -87,3 +87,29 @@ taking the audit with it.
   `mechanized` lesson names a check that exists.
 - TEST-007: `ash.sh check --json` emits `plans`, `lessons` and `issues` in
   `summary`, and remains valid JSON (`python3 -m json.tool`).
+
+## Verified
+Negative tests (TASK-009), each against a copy of the corpus under `ASH_DIR`
+so the real one is never made wrong to prove a check works:
+
+```sh
+cp -r .ash /tmp/t2
+# TEST-004a — untriaged: blank out the Seen in: line that cites ISSUE-006
+ASH_DIR=/tmp/t2 scripts/ash.sh check
+#   warning learnings.untriaged.260919-zeuuaj-release-please-binary-artifacts.ISSUE-006
+# TEST-004b — add '**Distilled:** declined — <reason>' to that issue
+ASH_DIR=/tmp/t2 scripts/ash.sh check          # silent again
+# TEST-005 — rename LESSON-009's Check: to phase.logged-not-done-typo
+ASH_DIR=/tmp/t2 scripts/ash.sh check
+#   error   lesson.unenforced.LESSON-009
+```
+
+- TEST-004 ✓ fires on an untriaged issue, silent once declined.
+- TEST-005 ✓ fires at severity `error` on a `Check:` id no script emits;
+  restoring the id clears it.
+- TEST-006 ✓ the real corpus passes both new checks unchanged — all ten
+  issues were already referenced by a lesson, so nothing needed declining.
+  `qc` shows only the `plan.learnings-missing` info finding for this
+  in-flight plan.
+- TEST-007 ✓ `ash.sh check --json` parses under `python3 -m json.tool` and
+  its `summary` reads `{"plans": 4, "lessons": 10, "issues": 10, ...}`.
