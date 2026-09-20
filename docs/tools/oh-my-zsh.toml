@@ -1,0 +1,11 @@
+what = "The zsh framework the .zshrc is built on: plugin loading, completions, and theme handling."
+when = "Never invoked — it is a directory at ~/.oh-my-zsh that .zshrc sources. You reach for it by editing the `plugins` array in the zsh config pinst carries."
+keywords = ["omz", "zsh framework", "plugins", "completions", "zshrc"]
+status = "authored"
+see_also = ["zsh", "zsh-autosuggestions", "direnv"]
+gotchas = """
+There is no `oh-my-zsh` command, so there is nothing for `pinst docs` to
+capture — its manifest entry sets an empty help_cmd to say so. Plugins live
+under ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins and are enabled by name
+in .zshrc, not by an install command.
+"""

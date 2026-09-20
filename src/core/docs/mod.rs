@@ -167,6 +167,50 @@ mod tests {
     }
 
     #[test]
+    fn every_see_also_link_names_a_real_tool() {
+        // A page that points at a tool nobody has heard of sends its reader
+        // somewhere that does not exist — and unlike a missing page, this is
+        // always a mistake rather than work not yet done.
+        let manifest = manifest::load(None).unwrap().manifest;
+        for doc in embedded().iter() {
+            for link in &doc.see_also {
+                assert!(
+                    manifest.tools.iter().any(|tool| &tool.name == link),
+                    "{}'s see_also points at '{}', which the manifest does not declare",
+                    doc.name,
+                    link
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_authored_page_with_recipes_says_which_version_it_was_verified_against() {
+        // `authored` claims every recipe was run here; the version it was run
+        // against is what makes that claim checkable later. A page with no
+        // recipes — a framework, a plugin — has nothing to pin.
+        for doc in embedded().iter() {
+            if doc.status == page::PageStatus::Authored && !doc.recipes.is_empty() {
+                assert!(
+                    doc.verified_with.is_some(),
+                    "{} is authored with recipes but names no verified_with",
+                    doc.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn no_recipe_is_missing_its_command_or_its_explanation() {
+        for doc in embedded().iter() {
+            for recipe in &doc.recipes {
+                assert!(!recipe.cmd.trim().is_empty(), "{}: empty cmd", doc.name);
+                assert!(!recipe.does.trim().is_empty(), "{}: empty does", doc.name);
+            }
+        }
+    }
+
+    #[test]
     fn a_page_that_does_not_parse_fails_the_load() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fd.toml"), "what = ").unwrap();

@@ -6,7 +6,7 @@ created: 2026-09-20
 updated: 2026-09-20
 areas: [cli, docs, manifest, tui]
 summary: Give pinst a baked-in, searchable catalogue of how to use the tools it installs, so an agent can find the right tool and its exact invocation in one call.
-files_touched: [src/core/source.rs, src/core/docs/mod.rs, src/core/docs/page.rs, src/core/docs/capture.rs, src/core/docs/search.rs, src/core/configs.rs, src/core/manifest.rs, src/core/mod.rs, src/cli/mod.rs, src/cli/commands/docs.rs, src/cli/commands/mod.rs, src/cli/commands/schema.rs, docs/tools/, manifest.toml, README.md, .agents/skills/pinst/SKILL.md, src/app.rs, src/event.rs, src/ui/mod.rs, src/ui/docs.rs]
+files_touched: [build.rs, src/core/source.rs, src/core/docs/mod.rs, src/core/docs/page.rs, src/core/docs/capture.rs, src/core/docs/search.rs, src/core/configs.rs, src/core/manifest.rs, src/core/mod.rs, src/cli/mod.rs, src/cli/commands/docs.rs, src/cli/commands/mod.rs, src/cli/commands/schema.rs, docs/tools/, manifest.toml, README.md, .agents/skills/pinst/SKILL.md, src/app.rs, src/event.rs, src/ui/mod.rs, src/ui/docs.rs]
 ---
 
 # A baked-in, searchable catalogue of tool usage
@@ -143,7 +143,7 @@ every search result carries install status and version for free.
 | 2 | Read the catalogue: `docs show` and `docs status` | [phase-02.md](phase-02.md) | Done |
 | 3 | Capture what is not written yet, and adopt it | [phase-03.md](phase-03.md) | Done |
 | 4 | The one-call surface: `docs search` and `docs dump` | [phase-04.md](phase-04.md) | Done |
-| 5 | Author the catalogue | [phase-05.md](phase-05.md) | Proposed |
+| 5 | Author the catalogue | [phase-05.md](phase-05.md) | Done |
 | 6 | Publish the contract and make it browsable | [phase-06.md](phase-06.md) | Proposed |
 
 ## Affected Files

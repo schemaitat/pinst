@@ -1,0 +1,36 @@
+what = "Python package and project manager: environments, dependencies, tool runs and Python versions."
+when = "Anything Python. It replaces pip, venv, pipx and pyenv, and it is fast enough that `uv run` is a reasonable substitute for activating an environment."
+keywords = ["python", "pip", "venv", "virtualenv", "packages", "dependencies", "pyproject", "pipx", "pyenv"]
+status = "draft"
+verified_with = "0.12.17"
+see_also = ["direnv", "node"]
+gotchas = """
+`uv run` inside a project directory resolves the project's environment and
+will create or sync it; pass --no-project for a throwaway interpreter. uv
+installs its own Python builds, so `uv python list` and `which python` can
+disagree.
+"""
+
+[[recipes]]
+cmd = "uv run script.py"
+does = "Run a script in the project's environment, syncing it first if needed."
+
+[[recipes]]
+cmd = "uv run --no-project python -c 'print(1)'"
+does = "A throwaway interpreter that ignores any surrounding project."
+
+[[recipes]]
+cmd = "uv run --with rich python -c 'import rich'"
+does = "Run with an extra dependency, without adding it to the project."
+
+[[recipes]]
+cmd = "uv python list --only-installed"
+does = "Which Python interpreters uv can see."
+
+[[recipes]]
+cmd = "uv sync"
+does = "Make the environment match the lockfile. (unrun here)"
+
+[[recipes]]
+cmd = "uv add requests"
+does = "Add a dependency to pyproject.toml and the lockfile. (unrun here)"

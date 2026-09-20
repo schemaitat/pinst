@@ -1,0 +1,28 @@
+what = "A pager for git and diff output: syntax highlighting, side-by-side view, and readable word-level diffs."
+when = "Reading a diff. The .gitconfig here already sets it as git's pager, so `git diff` and `git show` route through it without anything extra."
+keywords = ["diff", "pager", "git diff", "syntax highlighting", "side by side", "review"]
+status = "authored"
+verified_with = "0.18.2"
+see_also = ["git"]
+gotchas = """
+It is a pager, so in a script it will try to page and can swallow output —
+pass --paging never when piping. As git's configured pager it is invisible
+until it is missing, at which point git falls back to less and every diff
+suddenly looks plain.
+"""
+
+[[recipes]]
+cmd = "git diff --stat | delta --paging never"
+does = "Render a diff without entering a pager — the form to use in a script."
+
+[[recipes]]
+cmd = "git diff | delta --side-by-side"
+does = "Two-column diff, which is much easier for wide changes."
+
+[[recipes]]
+cmd = "delta old.txt new.txt"
+does = "Diff two files directly, outside git."
+
+[[recipes]]
+cmd = "delta --version"
+does = "Which version is installed; the config here assumes a recent one."

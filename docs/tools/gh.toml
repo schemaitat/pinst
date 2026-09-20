@@ -1,0 +1,32 @@
+what = "GitHub from the command line: pull requests, issues, releases, workflow runs, and the raw API."
+when = "Anything that would otherwise need the GitHub web UI. `gh api` is the escape hatch when no subcommand covers what you need."
+keywords = ["github", "pull request", "pr", "open pr", "create pr", "merge", "issue", "release", "ci", "actions", "api", "review"]
+status = "draft"
+verified_with = "2.46.0"
+see_also = ["git", "git-credential-manager"]
+gotchas = """
+Every call needs auth and network; in a sandbox both can be missing, and the
+failure looks like a tool bug rather than a missing token. `gh api` accepts
+`{owner}/{repo}` placeholders only inside a repo — pass the full slug from
+anywhere else.
+"""
+
+[[recipes]]
+cmd = "gh pr list --limit 5"
+does = "Open pull requests in this repo."
+
+[[recipes]]
+cmd = "gh api repos/schemaitat/pinst --jq .full_name"
+does = "Any REST endpoint, with jq filtering built in."
+
+[[recipes]]
+cmd = "gh pr view 11 --json title,state,mergeable"
+does = "Machine-readable detail about one PR."
+
+[[recipes]]
+cmd = "gh run list --limit 5"
+does = "Recent workflow runs, for checking CI without a browser."
+
+[[recipes]]
+cmd = "gh pr create --fill --base main"
+does = "Open a PR from the current branch. (unrun here)"

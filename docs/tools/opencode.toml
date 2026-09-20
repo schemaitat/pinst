@@ -1,0 +1,28 @@
+what = "A terminal coding agent: an interactive TUI by default, with a non-interactive `run` mode and a headless server."
+when = "Delegating a coding task to a model other than the one you are talking to. `opencode run` is the scriptable form; the bare command opens a TUI."
+keywords = ["agent", "coding agent", "tui", "llm", "ai", "assistant", "models"]
+status = "draft"
+verified_with = "1.18.31"
+see_also = ["claude", "herdr"]
+gotchas = """
+Bare `opencode` starts the TUI and takes the terminal — from a script always
+use `run`, `serve` or one of the query subcommands. `--auto` approves every
+permission that is not explicitly denied, which is exactly as dangerous as it
+sounds.
+"""
+
+[[recipes]]
+cmd = "opencode models"
+does = "Every model available across the configured providers."
+
+[[recipes]]
+cmd = "opencode --version"
+does = "Which version is installed."
+
+[[recipes]]
+cmd = "opencode run 'explain this repo' -m provider/model"
+does = "Run one message non-interactively and print the reply. (unrun here — costs a model call)"
+
+[[recipes]]
+cmd = "opencode serve --port 4096"
+does = "Start a headless server for another client to attach to. (unrun here)"
