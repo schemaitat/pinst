@@ -68,6 +68,25 @@ jobs:
             exit 1
           fi
 
+          # Shape, never content. A secret set from a copied terminal buffer
+          # picks up a trailing newline or a line of surrounding prose, and the
+          # only symptom is a 401 from the model an hour later — which reads as
+          # "the token is wrong" when it is "the token has a space on the end".
+          # Length and a prefix match are enough to tell those apart and leak
+          # nothing: the prefixes are public and fixed.
+          check_shape() {
+            local name="$1" val="$2" want="$3"
+            [ -n "$val" ] || return 0
+            local n=${#val}
+            local trimmed="$(printf '%s' "$val" | tr -d '[:space:]')"
+            printf '%s: length=%s expected_prefix=%s whitespace=%s\n' \
+              "$name" "$n" \
+              "$(case "$val" in "$want"*) echo yes ;; *) echo NO ;; esac)" \
+              "$(if [ "${#trimmed}" -ne "$n" ]; then echo PRESENT; else echo none; fi)"
+          }
+          check_shape CLAUDE_CODE_OAUTH_TOKEN "$OAUTH" "sk-ant-oat01-"
+          check_shape ANTHROPIC_API_KEY "$API_KEY" "sk-ant-api03-"
+
       # exit 0 = there is work, 1 = corpus clean, 3 = the guard itself could
       # not run. Only the third is a failure; the first two are both answers.
       - name: Is there anything to distil?
@@ -92,6 +111,13 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # claude-code-action@v1 requests an OIDC token during setup and fails
+      # before calling the model without this — even when the credential is a
+      # CLAUDE_CODE_OAUTH_TOKEN and no cloud provider federation is in use.
+      # The failure is "Could not fetch an OIDC token", after the token has
+      # been accepted and the dependencies installed, which reads like an auth
+      # problem and is not one.
+      id-token: write
     env:
       # `create-pr`'s evidence command shells out to `gh pr list`. Without a
       # token it fails, and the review the model is about to read carries a
@@ -124,6 +150,11 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Passed explicitly so the action uses the workflow's own token for
+          # GitHub work instead of exchanging its OIDC token for a Claude Code
+          # App token — an app this repo has no other reason to install, since
+          # every GitHub operation here is a step in this file.
+          github_token: ${{ github.token }}
           prompt: /distil
           display_report: true
           show_full_output: true
