@@ -3,11 +3,6 @@
 //! logic of their own.
 
 pub mod configs;
-// The `docs` CLI that consumes the catalogue lands in the next phase of
-// 260920-tensvp; until it does, every item here is reachable only from this
-// module's own tests. Removed by phase 2 — `just qc` treats warnings as
-// errors, so it cannot outlive its purpose quietly.
-#[cfg_attr(not(test), allow(dead_code))]
 pub mod docs;
 pub mod doctor;
 pub mod engine;

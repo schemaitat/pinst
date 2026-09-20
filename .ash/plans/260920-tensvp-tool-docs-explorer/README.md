@@ -140,7 +140,7 @@ every search result carries install status and version for free.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | The page format and the embedded catalogue | [phase-01.md](phase-01.md) | Done |
-| 2 | Read the catalogue: `docs show` and `docs status` | [phase-02.md](phase-02.md) | Proposed |
+| 2 | Read the catalogue: `docs show` and `docs status` | [phase-02.md](phase-02.md) | Done |
 | 3 | Capture what is not written yet, and adopt it | [phase-03.md](phase-03.md) | Proposed |
 | 4 | The one-call surface: `docs search` and `docs dump` | [phase-04.md](phase-04.md) | Proposed |
 | 5 | Author the catalogue | [phase-05.md](phase-05.md) | Proposed |

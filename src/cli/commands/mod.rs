@@ -1,6 +1,7 @@
 pub mod apply;
 pub mod bootstrap;
 pub mod config;
+pub mod docs;
 pub mod doctor;
 pub mod install;
 pub mod list;

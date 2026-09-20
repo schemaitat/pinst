@@ -12,7 +12,7 @@
 pub mod page;
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use color_eyre::eyre::{Context, Result};
 use include_dir::{Dir, include_dir};
@@ -66,15 +66,6 @@ impl Catalogue {
 
     pub fn is_empty(&self) -> bool {
         self.pages.is_empty()
-    }
-
-    /// Where a page would be written. `None` when the catalogue came from the
-    /// binary: there is no tree to write into.
-    pub fn page_path(&self, tool: &str) -> Option<PathBuf> {
-        match &self.source {
-            Source::Tree(root) => Some(root.join(format!("{tool}.toml"))),
-            Source::Embedded => None,
-        }
     }
 }
 
@@ -204,17 +195,12 @@ mod tests {
         // The same property the config tests assert: what a dev machine reads
         // off disk and what a provisioned machine reads out of the binary
         // must not be able to disagree.
-        let tree = Source::Tree(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(SUBDIR));
+        let tree = Source::Tree(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(SUBDIR));
         let from_tree = Catalogue::load_from(tree).unwrap();
         let from_binary = embedded();
         let tree_names: Vec<&str> = from_tree.iter().map(|d| d.name.as_str()).collect();
         let binary_names: Vec<&str> = from_binary.iter().map(|d| d.name.as_str()).collect();
         assert_eq!(tree_names, binary_names);
-    }
-
-    #[test]
-    fn an_embedded_catalogue_has_nowhere_to_write_a_page() {
-        assert!(embedded().page_path("fd").is_none());
     }
 
     #[test]
@@ -238,7 +224,6 @@ mod tests {
         assert!(catalogue.source.is_tree());
         assert_eq!(catalogue.len(), 1);
         assert!(catalogue.get("just").is_some());
-        assert!(catalogue.page_path("just").is_some());
     }
 
     #[test]

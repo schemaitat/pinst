@@ -2,7 +2,7 @@
 id: 260920-tensvp
 slug: tool-docs-explorer
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Read the catalogue: `docs show` and `docs status`
@@ -24,31 +24,31 @@ mean deciding the contract while also deciding how to run a subprocess
 safely — two unrelated arguments in one review.
 
 ## Steps
-- [ ] TASK-009: `src/cli/mod.rs` — `Commands::Docs(DocsArgs)` with
+- [x] TASK-009: `src/cli/mod.rs` — `Commands::Docs(DocsArgs)` with
       `DocsAction::{Show, Status}` for now, plus `name()` returning `"docs"`
       and the dispatch arm. Why the `<command> <action>` shape: `config` is
       the precedent, and a family of five verbs under one noun keeps
       `pinst --help` legible (PAT-001).
-- [ ] TASK-010: `src/cli/commands/mod.rs` — `pub mod docs;`.
-- [ ] TASK-011: `src/cli/commands/docs.rs` (new) — `show <tool>`: resolve the
+- [x] TASK-010: `src/cli/commands/mod.rs` — `pub mod docs;`.
+- [x] TASK-011: `src/cli/commands/docs.rs` (new) — `show <tool>`: resolve the
       tool against the manifest, load its page, emit an envelope whose item is
       the page plus the probed `installed`/`version`. Human mode renders the
       page as a compact block — `what`, `when`, then recipes as
       `cmd` / `does` pairs — on stdout, with the manifest source note on
       stderr as every other command does.
-- [ ] TASK-012: `src/cli/commands/docs.rs` — the exit-code contract for
+- [x] TASK-012: `src/cli/commands/docs.rs` — the exit-code contract for
       `show`: unknown tool name is exit 2 (usage, as an unknown tool in a
       selection already is); a known tool with no page is exit 3 with an
       `errors[]` entry naming the remediation (`pinst docs adopt <tool>`, once
       phase 3 exists); a page found is exit 0.
       Why 3 and not 1: nothing failed — the command ran correctly and found
       something to act on, which is exactly what 3 means in this CLI.
-- [ ] TASK-013: `src/cli/commands/docs.rs` — `status`: one item per manifest
+- [x] TASK-013: `src/cli/commands/docs.rs` — `status`: one item per manifest
       tool with `page` (`authored | draft | none`), `installed`, `version`,
       `verified_with`, and a summary counting each. Exit 0 always.
       Why always 0: coverage is a report, and a report that fails the build
       on the normal state gets switched off (GUD-001, LESSON-011).
-- [ ] TASK-014: tests — `show` on a tool with a page, on a tool without one,
+- [x] TASK-014: tests — `show` on a tool with a page, on a tool without one,
       and on a name that is not in the manifest, asserting the exit code and
       the envelope of each; `status` over a fixture manifest asserting the
       per-tool classification and the summary counts.

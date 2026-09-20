@@ -102,10 +102,6 @@ impl ToolDoc {
         }
         Ok(())
     }
-
-    pub fn is_draft(&self) -> bool {
-        self.status == PageStatus::Draft
-    }
 }
 
 #[cfg(test)]
@@ -140,7 +136,6 @@ does = "Search with line numbers."
         assert_eq!(doc.recipes.len(), 1);
         assert_eq!(doc.recipes[0].cmd, "rg -n pattern");
         assert_eq!(doc.see_also, vec!["fd"]);
-        assert!(!doc.is_draft());
     }
 
     #[test]
