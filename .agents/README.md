@@ -248,6 +248,33 @@ Read the `issues` column against the rate. A skill at 100% conformance with
 six issues naming it is producing perfectly-shaped artifacts by a procedure
 that keeps going wrong, and it is the most interesting row in the table.
 
+### Invocation counts are a second opinion
+
+```sh
+scripts/ash.sh skills --transcripts ~/.claude/projects
+```
+
+Off unless asked for, and nothing in `qc` may ever depend on it. With the flag
+the report gains `fired` and `last seen`, counted from a runtime's own session
+transcripts — **two** record shapes, because a skill has two front doors: a
+`Skill` tool call carrying `input.skill`, and a slash command, which appears
+as a `<command-name>` marker in user content. Counting only the first misses
+`/cc` and `/pr` entirely.
+
+These counts do not prove a skill was followed, and their absence does not
+prove it was not. The evidence is blunt: `plan-implement` recorded **zero**
+invocations of either shape before 2026-09-20 while having written a complete
+run log — `run_start` through `run_end`, 18 `task_done` events — on the 19th.
+Grading by invocation would have called the busiest lifecycle skill dead. So
+they decorate the table; the artifact rates decide.
+
+Everything in this path fails soft. An unreadable directory, a malformed line
+or an unrecognised schema degrades to `unmeasured` and never changes the exit
+code, because it reads an undocumented format owned by someone else's release
+cycle. And it emits **derived counts only** — a skill name is printed only
+after matching a directory in `.agents/skills`, so nothing typed into a
+conversation can reach the output, and nothing here writes into `.ash/`.
+
 ## Delegating
 
 The plan skills are deliberately sequential: `plan-write` enforces a strictly

@@ -2,7 +2,7 @@
 id: 260919-vldfei
 slug: self-improving-agent-harness
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — Corroborate with invocation evidence
@@ -22,14 +22,14 @@ vendor's private log format (CON-001). Arriving here second, invocation counts
 can only ever be a column added to a table that already works without them.
 
 ## Steps
-- [ ] TASK-018: `scripts/ash.sh` — add `--transcripts <dir>` to the `skills`
+- [x] TASK-018: `scripts/ash.sh` — add `--transcripts <dir>` to the `skills`
       subcommand, defaulting to off. Absent the flag, nothing outside the repo
       is read and the report omits the column entirely rather than printing
       zeros.
       Why: a zero that means "not measured" is the same failure as RISK-003's
       offline zero, and here it would be worse — it would read as "this skill
       is dead" for a skill nobody happened to point the flag at.
-- [ ] TASK-019: `scripts/ash.sh` — implement the counter in `python3` (DEP-002)
+- [x] TASK-019: `scripts/ash.sh` — implement the counter in `python3` (DEP-002)
       over `<dir>/*/*.jsonl`, counting **both** record shapes: `tool_use`
       entries named `Skill` with `input.skill`, and user-content
       `<command-name>/…</command-name>` markers. Map a command to its skill via
@@ -39,20 +39,20 @@ can only ever be a column added to a table that already works without them.
       `{plan-write: 3, conventional-commits: 2, create-pr: 2,
       plan-learnings: 1}` and misses `/cc` and `/pr` entirely — the same skills
       under their other name.
-- [ ] TASK-020: `scripts/ash.sh` — emit derived counts only: per-skill
+- [x] TASK-020: `scripts/ash.sh` — emit derived counts only: per-skill
       invocation total and last-seen date. No argument strings, no file paths,
       no quoted text, and nothing written under `.ash/`.
       Why: SEC-001. Those files hold whole conversations from every project on
       the machine, including anything a user pasted. A count cannot leak; a
       sample can, and the moment one lands in the corpus it is in git forever.
-- [ ] TASK-021: `scripts/ash.sh` — make every failure in this path non-fatal:
+- [x] TASK-021: `scripts/ash.sh` — make every failure in this path non-fatal:
       an unreadable directory, a malformed line, or an unrecognised schema
       degrades that skill's count to `unmeasured` and never changes the exit
       code.
       Why: RISK-004. This reads an undocumented format owned by someone else's
       release cycle. It is allowed to become useless; it is not allowed to
       break the report it decorates.
-- [ ] TASK-022: `.agents/README.md` — document the flag, the two record
+- [x] TASK-022: `.agents/README.md` — document the flag, the two record
       shapes, what the counts do and do not prove, and the rule that no check
       may ever depend on them.
       Why: the discrepancy this phase surfaces invites exactly one wrong
@@ -85,3 +85,34 @@ can only ever be a column added to a table that already works without them.
 - TEST-015: the JSON envelope from a `--transcripts` run contains no string
   from any transcript other than skill names and ISO dates (verify by grepping
   the output for a phrase known to appear in a transcript).
+
+## Verified
+```
+skill                  wired  conforming (last 20)   all-time    issues  fired  last seen
+conventional-commits   yes    20/20 100%             34/34 100%  0       3      2026-09-19
+create-pr              yes    5/9 55%                5/9 55%     0       3      2026-09-19
+pinst                  yes    reference (exempt)     -           0       0      never
+plan-implement         yes    1/4 25%                1/4 25%     0       1      2026-09-20
+plan-learnings         yes    3/3 100%               3/3 100%    0       1      2026-09-19
+plan-write             yes    4/4 100%               4/4 100%    6       3      2026-09-19
+```
+
+- TEST-012 ✓ with one honest correction. Both record shapes are counted:
+  `conventional-commits` at 3 is two `Skill` calls plus one `/cc`, and
+  `create-pr` at 3 is two plus one `/pr` — neither would show 3 from tool
+  calls alone. The plan predicted `plan-implement` would read **zero**, and it
+  reads 1, because this run is the invocation. Restricted to before
+  2026-09-20 it is exactly 0, against a complete run log written on the 19th,
+  so the anomaly the design rests on is real and now dated. Measuring changed
+  the measurement, which is itself worth knowing about this column.
+- TEST-013 ✓ without the flag the two columns are absent and nothing outside
+  the repo is read. Run with `HOME` pointed at an empty directory the report
+  is unchanged except that `create-pr` degrades to `unmeasured` — `gh` lost
+  its credentials — which is RISK-003 behaving as designed.
+- TEST-014 ✓ a directory of malformed JSONL yields `0 / never`, exit 0, no
+  stack trace; a nonexistent directory yields `unmeasured` for every row plus
+  one `skills.transcripts-unreadable` warning. (Garbage that parses to nothing
+  is indistinguishable from a quiet week — both honestly read as zero.)
+- TEST-015 ✓ every string in the `--json` envelope is a known skill name, an
+  ISO date, or a label built from digits; a phrase known to appear in a
+  transcript does not appear in the output.

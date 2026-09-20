@@ -5,6 +5,7 @@
 #   scripts/ash.sh index [--check]   regenerate (or verify) .ash/INDEX.md
 #   scripts/ash.sh check             validate every corpus invariant
 #   scripts/ash.sh skills            grade each skill against its own contract
+#     ... --transcripts DIR          also count invocations (opt-in, off by default)
 #   scripts/ash.sh new-id [DATE]     mint a plan id: <yymmdd>-<6 letters>
 #
 # Why this exists: the skills state a dozen invariants in prose ("the id must
@@ -32,6 +33,8 @@ EXTRA_JSON=""
 SKILLS_DIR="${SKILLS_DIR:-.agents/skills}"
 WIRED_DIR="${WIRED_DIR:-.claude/skills}"
 SKILLS_WINDOW="${ASH_SKILLS_WINDOW:-20}"
+COMMANDS_DIR="${COMMANDS_DIR:-.claude/commands}"
+TRANSCRIPTS=""
 
 finding() { FIND_ID+=("$1"); FIND_SEV+=("$2"); FIND_MSG+=("$3"); FIND_REM+=("$4"); }
 
@@ -564,9 +567,113 @@ pct() {
   printf '%d%%' $(( n * 100 / d ))
 }
 
+# --- invocation evidence (opt-in) -------------------------------------------
+# Counts how often each skill was actually invoked, from a runtime's own
+# session transcripts. Off unless --transcripts names a directory, and never
+# depended on by anything in `qc`: the path reads an undocumented format owned
+# by someone else's release cycle, outside the repo, on one vendor's machine.
+#
+# It is a second opinion, never the system of record. Counting invocations
+# alone would have graded plan-implement as dead — it shows zero invocations
+# across every transcript here while having written a complete run log.
+#
+# Two record shapes, because a skill has two front doors: a `Skill` tool call
+# carrying `input.skill`, and a slash command, which appears as a
+# <command-name> marker in user content. Counting only the first misses /cc
+# and /pr entirely.
+#
+# SEC-001: the only strings this prints are skill names it already knew and
+# ISO dates. A name is emitted only after matching the set of directories in
+# .agents/skills, so nothing typed into a conversation can reach stdout, and
+# nothing here writes to .ash/.
+transcript_counts() {
+  local dir="$1"
+  [ -d "$dir" ] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "$dir" "$SKILLS_DIR" "$COMMANDS_DIR" <<'PYEOF' 2>/dev/null
+import collections, glob, json, os, re, sys
+
+root, skills_dir, cmds_dir = sys.argv[1:4]
+try:
+    known = {d for d in os.listdir(skills_dir)
+             if os.path.isdir(os.path.join(skills_dir, d))}
+except OSError:
+    sys.exit(1)
+
+# A command file names its skill by the path it tells the agent to read.
+cmd_map = {}
+for f in glob.glob(os.path.join(cmds_dir, "*.md")):
+    try:
+        text = open(f, errors="replace").read()
+    except OSError:
+        continue
+    m = re.search(r"\.agents/skills/([a-z0-9-]+)/", text)
+    if m and m.group(1) in known:
+        cmd_map[os.path.basename(f)[:-3]] = m.group(1)
+
+MARKER = re.compile(r"<command-name>/?([a-z0-9:_-]+)</command-name>")
+counts, last = collections.Counter(), {}
+
+def bump(skill, day):
+    counts[skill] += 1
+    if day and (skill not in last or day > last[skill]):
+        last[skill] = day
+
+def scan_text(text, day):
+    for name in MARKER.findall(text or ""):
+        if name in cmd_map:
+            bump(cmd_map[name], day)
+
+for path in glob.glob(os.path.join(root, "*", "*.jsonl")):
+    try:
+        fh = open(path, errors="replace")
+    except OSError:
+        continue
+    with fh:
+        for line in fh:
+            if "Skill" not in line and "command-name" not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(rec, dict):
+                continue
+            day = (rec.get("timestamp") or "")[:10]
+            content = (rec.get("message") or {}).get("content")
+            if isinstance(content, str):
+                scan_text(content, day)
+            elif isinstance(content, list):
+                for c in content:
+                    if not isinstance(c, dict):
+                        continue
+                    if c.get("type") == "tool_use" and c.get("name") == "Skill":
+                        skill = (c.get("input") or {}).get("skill")
+                        if skill in known:
+                            bump(skill, day)
+                    elif c.get("type") == "text":
+                        scan_text(c.get("text"), day)
+
+for skill in sorted(counts):
+    print(skill, counts[skill], last.get(skill, "-"))
+PYEOF
+}
+
 cmd_skills() {
   local rows_json="" sep="" dir name file produces evidence kind wired
   local win all wn wt an at
+  local counts="" have_counts=0
+
+  if [ -n "$TRANSCRIPTS" ]; then
+    if counts="$(transcript_counts "$TRANSCRIPTS")"; then
+      have_counts=1
+    else
+      finding "skills.transcripts-unreadable" warning \
+        "could not read invocation counts from $TRANSCRIPTS" \
+        "check the path, or drop --transcripts — nothing else depends on it"
+      have_counts=2
+    fi
+  fi
 
   if [ ! -d "$SKILLS_DIR" ]; then
     finding "skills.missing" error "$SKILLS_DIR does not exist" \
@@ -574,8 +681,15 @@ cmd_skills() {
     return
   fi
 
-  [ "$JSON" -eq 1 ] || printf '%-22s %-6s %-22s %-22s %s\n' \
-    "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues"
+  if [ "$JSON" -ne 1 ]; then
+    if [ "$have_counts" -eq 0 ]; then
+      printf '%-22s %-6s %-22s %-22s %s\n' \
+        "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues"
+    else
+      printf '%-22s %-6s %-22s %-22s %-7s %-6s %s\n' \
+        "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues" "fired" "last seen"
+    fi
+  fi
 
   while IFS= read -r dir; do
     [ -n "$dir" ] || continue
@@ -621,10 +735,28 @@ cmd_skills() {
       fi
     fi
 
-    [ "$JSON" -eq 1 ] || printf '%-22s %-6s %-22s %-22s %s\n' \
-      "$name" "$wired" "$win" "$all" "$tally"
+    local fired="-" seen="-"
+    if [ "$have_counts" -eq 1 ]; then
+      fired="$(printf '%s\n' "$counts" | awk -v n="$name" '$1 == n { print $2 }')"
+      seen="$(printf '%s\n' "$counts" | awk -v n="$name" '$1 == n { print $3 }')"
+      [ -n "$fired" ] || { fired=0; seen="never"; }
+    elif [ "$have_counts" -eq 2 ]; then
+      fired="unmeasured"; seen="-"
+    fi
 
-    rows_json="$rows_json$sep{\"name\":\"$(jesc "$name")\",\"wired\":$([ "$wired" = yes ] && echo true || echo false),\"produces\":\"$(jesc "$produces")\",\"windowed\":{\"conforming\":$wn,\"total\":$wt,\"label\":\"$(jesc "$win")\"},\"all_time\":{\"conforming\":$an,\"total\":$at,\"label\":\"$(jesc "$all")\"},\"issues\":$tally}"
+    if [ "$JSON" -ne 1 ]; then
+      if [ "$have_counts" -eq 0 ]; then
+        printf '%-22s %-6s %-22s %-22s %s\n' "$name" "$wired" "$win" "$all" "$tally"
+      else
+        printf '%-22s %-6s %-22s %-22s %-7s %-6s %s\n' \
+          "$name" "$wired" "$win" "$all" "$tally" "$fired" "$seen"
+      fi
+    fi
+
+    local inv_json=""
+    [ "$have_counts" -eq 0 ] || inv_json=",\"invocations\":\"$(jesc "$fired")\",\"last_invoked\":\"$(jesc "$seen")\""
+
+    rows_json="$rows_json$sep{\"name\":\"$(jesc "$name")\",\"wired\":$([ "$wired" = yes ] && echo true || echo false),\"produces\":\"$(jesc "$produces")\",\"windowed\":{\"conforming\":$wn,\"total\":$wt,\"label\":\"$(jesc "$win")\"},\"all_time\":{\"conforming\":$an,\"total\":$at,\"label\":\"$(jesc "$all")\"},\"issues\":$tally$inv_json}"
     sep=","
   done <<< "$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)"
 
@@ -681,17 +813,24 @@ cmd="${1:-}"
 [ $# -eq 0 ] || shift
 check_only=0
 positional=""
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --json) JSON=1 ;;
     --check) check_only=1 ;;
+    --transcripts)
+      shift
+      [ $# -gt 0 ] || { printf 'ash: --transcripts needs a directory\n' >&2; usage; }
+      TRANSCRIPTS="$1"
+      ;;
+    --transcripts=*) TRANSCRIPTS="${1#--transcripts=}" ;;
     -h|--help) usage ;;
-    --*) printf 'ash: unknown flag %s\n' "$arg" >&2; usage ;;
+    --*) printf 'ash: unknown flag %s\n' "$1" >&2; usage ;;
     *)
-      [ -z "$positional" ] || { printf 'ash: unexpected argument %s\n' "$arg" >&2; usage; }
-      positional="$arg"
+      [ -z "$positional" ] || { printf 'ash: unexpected argument %s\n' "$1" >&2; usage; }
+      positional="$1"
       ;;
   esac
+  shift
 done
 
 case "$cmd" in
