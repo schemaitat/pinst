@@ -11,6 +11,7 @@
 
 pub mod capture;
 pub mod page;
+pub mod search;
 pub mod seed;
 
 use std::collections::BTreeMap;

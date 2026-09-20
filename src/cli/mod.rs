@@ -158,12 +158,42 @@ pub struct DocsArgs {
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum DocsAction {
+    /// Find the tool for a task, with the matching recipes inline.
+    Search(DocsSearchArgs),
     /// Show the page for one tool.
     Show(DocsShowArgs),
+    /// Print the whole catalogue as one document.
+    Dump(DocsDumpArgs),
     /// Report which tools have a page, and which are still drafts.
     Status,
     /// Seed a draft page from a tool's own help output.
     Adopt(DocsAdoptArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsSearchArgs {
+    /// What you are trying to do, in your own words.
+    #[arg(required = true, num_args = 1..)]
+    pub query: Vec<String>,
+    /// Only tools carrying this tag (repeatable).
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
+    /// Only tools that are actually installed.
+    #[arg(long)]
+    pub installed: bool,
+    /// Keep at most this many results.
+    #[arg(long, default_value_t = 10)]
+    pub limit: usize,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsDumpArgs {
+    /// Only tools carrying this tag (repeatable).
+    #[arg(long = "tag")]
+    pub tags: Vec<String>,
+    /// Only tools selected by this profile.
+    #[arg(long)]
+    pub profile: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]

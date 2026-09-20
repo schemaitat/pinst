@@ -2,7 +2,7 @@
 id: 260920-tensvp
 slug: tool-docs-explorer
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — The one-call surface: `docs search` and `docs dump`
@@ -21,30 +21,30 @@ them, and the captured text phase 3 produces. Building search first would have
 meant ranking a catalogue of one.
 
 ## Steps
-- [ ] TASK-022: `src/core/docs/search.rs` (new) — case-insensitive scored
+- [x] TASK-022: `src/core/docs/search.rs` (new) — case-insensitive scored
       matching over tool name, manifest `summary` and `tags`, and the page's
       `what`, `when`, `keywords` and each `recipe.cmd`/`recipe.does`. Rank:
       exact name, then name substring, then keyword, then recipe text, then
       prose. Ties break on tool name so the order is stable.
       Why hand-rolled: 26 entries, no new dependency in a size-tuned binary,
       and a ranking whose every rule can be read off the source (ALT-007).
-- [ ] TASK-023: `src/cli/commands/docs.rs` — the `search <query>` action. Each
+- [x] TASK-023: `src/cli/commands/docs.rs` — the `search <query>` action. Each
       item carries the tool, its score, the field that matched, the page's
       `what`, install status and version, and **the matching recipes inline**.
       Why inline recipes: the whole point is that one call is enough to act;
       a result set that only says "see `docs show rg`" has moved the work, not
       done it.
-- [ ] TASK-024: `src/cli/commands/docs.rs` — `--tag`, `--limit` and
+- [x] TASK-024: `src/cli/commands/docs.rs` — `--tag`, `--limit` and
       `--installed` filters on `search`. No hits is exit 0 with empty
       `items[]`, not exit 3.
       Why 0: an empty result is a correct answer, and making it 3 teaches
       every caller to write retry logic around a working command.
-- [ ] TASK-025: `src/cli/commands/docs.rs` — the `dump` action: every page in
+- [x] TASK-025: `src/cli/commands/docs.rs` — the `dump` action: every page in
       one payload, `--json` as an array and human mode as one Markdown
       document, with `--tag`/`--profile` to narrow it. Capture never runs here
       (SEC-001), so `dump` is offline, deterministic and safe to pipe into a
       context window.
-- [ ] TASK-026: tests — ranking assertions (an exact name outranks a keyword
+- [x] TASK-026: tests — ranking assertions (an exact name outranks a keyword
       hit outranks a prose hit; ties are stable), the empty-result exit code,
       filter behaviour, and a `dump` test asserting every page in the
       catalogue appears exactly once.

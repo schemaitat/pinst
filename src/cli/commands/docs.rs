@@ -13,9 +13,10 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
-use crate::cli::{DocsAction, DocsAdoptArgs, DocsArgs, DocsShowArgs};
+use crate::cli::{DocsAction, DocsAdoptArgs, DocsArgs, DocsDumpArgs, DocsSearchArgs, DocsShowArgs};
 use crate::core::docs::page::ToolDoc;
-use crate::core::docs::{Catalogue, capture, seed};
+use crate::core::docs::{Catalogue, capture, search as find, seed};
+use crate::core::graph::{self, Selection};
 use crate::core::manifest::Tool;
 use crate::core::{probe, usage};
 
@@ -76,6 +77,8 @@ pub async fn run(ctx: &Ctx, args: &DocsArgs) -> Result<ExitCode> {
     }
 
     match &args.action {
+        DocsAction::Search(search) => self::search(ctx, &loaded.manifest, &catalogue, search).await,
+        DocsAction::Dump(dump) => self::dump(ctx, &loaded.manifest, &catalogue, dump),
         // The cache location is resolved once, here, and passed down: it is
         // ambient state otherwise, and ambient state is what makes a test
         // reach into the developer's real home directory.
@@ -391,6 +394,170 @@ fn coverage(
     (items, orphans)
 }
 
+/// One search result. The recipes travel with it: a result set that only
+/// says "now go and read the page" has moved the work, not done it.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SearchItem {
+    pub name: String,
+    pub score: u32,
+    /// Which part of the entry matched: name, keyword, recipe, prose, tag, help.
+    pub matched: String,
+    pub what: String,
+    /// `authored`, `draft`, or `none` when only the manifest matched.
+    pub page: String,
+    pub installed: bool,
+    pub version: Option<String>,
+    pub recipes: Vec<crate::core::docs::page::Recipe>,
+}
+
+async fn search(
+    ctx: &Ctx,
+    manifest: &crate::core::manifest::Manifest,
+    catalogue: &Catalogue,
+    args: &DocsSearchArgs,
+) -> Result<ExitCode> {
+    let tools = select(manifest, &args.tags, &None)?;
+    let probes = probe::probe_all(&tools).await;
+
+    let entries: Vec<find::Entry<'_>> = tools
+        .iter()
+        .filter(|tool| {
+            !args.installed
+                || probes
+                    .get(&tool.name)
+                    .map(|probe| probe.installed)
+                    .unwrap_or(false)
+        })
+        .map(|tool| find::Entry {
+            tool,
+            page: catalogue.get(&tool.name),
+        })
+        .collect();
+
+    let query = args.query.join(" ");
+    let hits = find::search(&entries, &query);
+
+    let items: Vec<SearchItem> = hits
+        .iter()
+        .take(args.limit)
+        .map(|hit| {
+            let probe = probes.get(&hit.tool.name);
+            SearchItem {
+                name: hit.tool.name.clone(),
+                score: hit.score,
+                matched: hit.field.as_str().to_string(),
+                what: match hit.page {
+                    Some(page) => page.what.clone(),
+                    None => hit.tool.summary.clone(),
+                },
+                page: match hit.page {
+                    Some(page) => page.status.as_str().to_string(),
+                    None => "none".to_string(),
+                },
+                installed: probe.map(|p| p.installed).unwrap_or(false),
+                version: probe.and_then(|p| p.version.clone()),
+                recipes: hit.recipes.iter().map(|r| (*r).clone()).collect(),
+            }
+        })
+        .collect();
+
+    if !ctx.json {
+        if items.is_empty() {
+            ctx.note(format!("nothing in the catalogue matches '{query}'"));
+        }
+        for item in &items {
+            let marker = if item.installed { " " } else { "!" };
+            println!("{marker} {:<20} {:<9} {}", item.name, item.page, item.what);
+            for recipe in &item.recipes {
+                println!("      $ {}", recipe.cmd);
+                println!("        {}", recipe.does);
+            }
+        }
+    }
+
+    // Always Ok, even with no hits: an empty result is a correct answer, and
+    // exit 3 here would teach every caller to write retry logic around a
+    // working command.
+    let shown = items.len();
+    ctx.finish(
+        Envelope::new("docs search", Status::Ok, items)
+            .summary(serde_json::json!({ "query": query, "matched": hits.len(), "shown": shown })),
+    )
+}
+
+fn dump(
+    ctx: &Ctx,
+    manifest: &crate::core::manifest::Manifest,
+    catalogue: &Catalogue,
+    args: &DocsDumpArgs,
+) -> Result<ExitCode> {
+    let tools = select(manifest, &args.tags, &args.profile)?;
+    let items: Vec<ToolDoc> = tools
+        .iter()
+        .filter_map(|tool| catalogue.get(&tool.name))
+        .cloned()
+        .collect();
+
+    if !ctx.json {
+        println!("# The tools on this machine, and how to use them\n");
+        for page in &items {
+            println!(
+                "## {}{}",
+                page.name,
+                if page.status == crate::core::docs::page::PageStatus::Draft {
+                    " (draft)"
+                } else {
+                    ""
+                }
+            );
+            println!("\n{}\n", page.what);
+            if let Some(when) = &page.when {
+                println!("{when}\n");
+            }
+            for recipe in &page.recipes {
+                println!("- `{}` — {}", recipe.cmd, recipe.does);
+            }
+            if !page.recipes.is_empty() {
+                println!();
+            }
+            if let Some(gotchas) = &page.gotchas {
+                println!("{}\n", gotchas.trim());
+            }
+            if !page.see_also.is_empty() {
+                println!("See also: {}\n", page.see_also.join(", "));
+            }
+        }
+    }
+
+    // Nothing is run here, ever: dump is the surface an agent pipes straight
+    // into a context window, so it stays offline and deterministic.
+    let total = items.len();
+    ctx.finish(
+        Envelope::new("docs dump", Status::Ok, items)
+            .summary(serde_json::json!({ "pages": total, "tools": tools.len() })),
+    )
+}
+
+/// Narrows the catalogue the same way every other command narrows the
+/// manifest, so `--tag` means one thing across the CLI.
+fn select<'m>(
+    manifest: &'m crate::core::manifest::Manifest,
+    tags: &[String],
+    profile: &Option<String>,
+) -> Result<Vec<&'m Tool>> {
+    if tags.is_empty() && profile.is_none() {
+        return Ok(manifest.tools.iter().collect());
+    }
+    graph::select(
+        manifest,
+        &Selection {
+            profile: profile.clone(),
+            tags: tags.to_vec(),
+            names: Vec::new(),
+        },
+    )
+}
+
 /// The manifest is the scope: a name it does not declare is a bad invocation,
 /// not an empty result.
 fn lookup<'m>(manifest: &'m crate::core::manifest::Manifest, name: &str) -> Result<&'m Tool> {
@@ -638,6 +805,91 @@ install = { method = "apt", packages = ["seedable"] }
         ]);
         let code = status(&ctx(), &manifest(), &catalogue).await.unwrap();
         assert_eq!(code, ExitCode::Success);
+    }
+
+    fn search_args(query: &str) -> DocsSearchArgs {
+        DocsSearchArgs {
+            query: query.split_whitespace().map(|s| s.to_string()).collect(),
+            tags: Vec::new(),
+            installed: false,
+            limit: 10,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_search_that_matches_nothing_still_succeeds() {
+        // Exit 3 here would teach every caller to retry a command that worked.
+        let (_dir, catalogue) = catalogue(&[]);
+        let code = search(&ctx(), &manifest(), &catalogue, &search_args("kubernetes"))
+            .await
+            .unwrap();
+        assert_eq!(code, ExitCode::Success);
+    }
+
+    #[tokio::test]
+    async fn a_search_finds_the_tool_and_succeeds() {
+        let (_dir, catalogue) = catalogue(&[(
+            "ripgrep",
+            "what = \"Search a tree.\"\nkeywords = [\"grep\"]\n",
+        )]);
+        let code = search(&ctx(), &manifest(), &catalogue, &search_args("grep"))
+            .await
+            .unwrap();
+        assert_eq!(code, ExitCode::Success);
+    }
+
+    #[tokio::test]
+    async fn an_unknown_tag_is_a_usage_error_not_an_empty_result() {
+        // Same rule as every other command that takes --tag: a filter nothing
+        // can satisfy is a bad invocation.
+        let (_dir, catalogue) = catalogue(&[]);
+        let mut args = search_args("grep");
+        args.tags = vec!["nonexistent".to_string()];
+        let err = search(&ctx(), &manifest(), &catalogue, &args)
+            .await
+            .unwrap_err();
+        assert!(err.downcast_ref::<UsageError>().is_some(), "{err:#}");
+    }
+
+    #[test]
+    fn dump_emits_every_page_of_the_selected_tools_exactly_once() {
+        // `dump` is deliberately not async and takes no cache directory: it is
+        // the surface an agent pipes into a context window, so it cannot run a
+        // capture even by accident.
+        let (_dir, catalogue) = catalogue(&[
+            ("ripgrep", r#"what = "Search a tree.""#),
+            ("fd", r#"what = "Find files.""#),
+            ("seedable", r#"what = "Answers.""#),
+        ]);
+        let args = DocsDumpArgs {
+            tags: Vec::new(),
+            profile: None,
+        };
+        let code = dump(&ctx(), &manifest(), &catalogue, &args).unwrap();
+        assert_eq!(code, ExitCode::Success);
+
+        let manifest = manifest();
+        let selected = select(&manifest, &args.tags, &args.profile).unwrap();
+        let pages: Vec<&str> = selected
+            .iter()
+            .filter_map(|tool| catalogue.get(&tool.name))
+            .map(|page| page.name.as_str())
+            .collect();
+        assert_eq!(pages.len(), 3);
+        let mut unique = pages.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), pages.len(), "no page may appear twice");
+    }
+
+    #[test]
+    fn a_tag_filter_narrows_what_dump_and_search_can_see() {
+        let manifest = manifest();
+        let all = select(&manifest, &[], &None).unwrap();
+        let tagged = select(&manifest, &["dev".to_string()], &None).unwrap();
+        assert_eq!(tagged.len(), 1);
+        assert_eq!(tagged[0].name, "ripgrep");
+        assert!(tagged.len() < all.len());
     }
 
     #[tokio::test]
