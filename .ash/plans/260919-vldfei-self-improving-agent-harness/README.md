@@ -124,7 +124,7 @@ does not.
 |---|-------|------|--------|
 | 1 | Give lessons a lifecycle and issues an owner | [phase-01.md](phase-01.md) | Done |
 | 2 | Make undistilled learnings a finding | [phase-02.md](phase-02.md) | Done |
-| 3 | Skill contracts and the artifact audit | [phase-03.md](phase-03.md) | Proposed |
+| 3 | Skill contracts and the artifact audit | [phase-03.md](phase-03.md) | Done |
 | 4 | Corroborate with invocation evidence | [phase-04.md](phase-04.md) | Proposed |
 | 5 | Name the gaps and close the loop | [phase-05.md](phase-05.md) | Proposed |
 

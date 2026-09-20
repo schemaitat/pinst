@@ -1,6 +1,8 @@
 ---
 name: pinst
 description: Drive the pinst CLI — install or update this machine's tools, apply or adopt its configs, diagnose drift, or bootstrap a fresh machine. Use whenever you are about to run pinst (list, plan, install, update, config, doctor, apply, bootstrap, schema), need to read its JSON output or branch on its exit codes, or want to add a tool or config entry to manifest.toml. This is the machine contract: every command is non-interactive, speaks JSON on stdout, and reports what it would do before doing it.
+produces: 'none'
+kind: reference
 ---
 
 # pinst — the agent contract

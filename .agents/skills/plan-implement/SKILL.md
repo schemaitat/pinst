@@ -1,6 +1,8 @@
 ---
 name: plan-implement
 description: Autonomously implement a plan written by the plan-write skill, working phase by phase through its ADR docs under .ash/plans/<id>-<slug>/, ticking off tasks, and keeping a structured run log under .ash/plans/<id>-<slug>/logs/. Use whenever the user asks to implement, execute, start, resume, or continue a plan (e.g. "implement 260919-qwerty", "start on the mlflow plan", "continue implementing this", "work through phase 2"), even if they don't name the skill directly.
+produces: 'every plan that has been worked on carries a run log with a matching run_start and run_end'
+evidence: 'echo $(for d in .ash/plans/*/; do grep -qh ''"event":"run_start"'' $d/logs/*.log 2>/dev/null && grep -qh ''"event":"run_end"'' $d/logs/*.log 2>/dev/null && echo x; done | grep -c x) $(ls -d .ash/plans/*/ | grep -c .)'
 ---
 
 # Plan Implement Skill

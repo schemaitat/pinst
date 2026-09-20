@@ -214,6 +214,40 @@ Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
 `remediation` string, exactly like `pinst doctor` — match on the id, don't
 parse the prose.
 
+## Grading the skills
+
+`just review` runs the invariants and then `scripts/ash.sh skills`, which
+grades each skill **on the artifacts it leaves in the repo** — never on
+whether anyone invoked it. Each skill declares its own contract in its
+frontmatter:
+
+```yaml
+produces: 'every commit in this repo''s history parses as a Conventional Commit'
+evidence: 'echo $(git log --format=%s $ASH_RANGE | grep -cE ...) $(git log ...)'
+```
+
+`evidence:` is a shell one-liner printing `<conforming> <total>`. It is run
+twice — once with `ASH_WINDOW=20` and `ASH_RANGE=-n 20`, once with both empty
+for all time — so a regression shows up while it is still one commit old
+instead of being buried under a hundred conformant ones. A skill that produces
+no artifact says `produces: none` with `kind: reference`; `pinst` is the only
+one, and that exemption is written down rather than inferred from silence.
+
+The measure lives in the skill because the skill is the only thing that knows
+what it is for. Put it in the script and the two drift — which is the failure
+this whole audit exists to catch. It is also code: `evidence:` is executed, so
+review it like any other line in `qc`.
+
+**A low rate is a conversation, not a failure.** The only findings here are
+structural — `skill.no-contract` when a skill says nothing about what it
+produces, `skill.evidence-failed` when the measure would not run. A measure
+that cannot run reports `unmeasured` and never `0`, because a zero meaning
+"offline" is worse than a gap that admits it.
+
+Read the `issues` column against the rate. A skill at 100% conformance with
+six issues naming it is producing perfectly-shaped artifacts by a procedure
+that keeps going wrong, and it is the most interesting row in the table.
+
 ## Delegating
 
 The plan skills are deliberately sequential: `plan-write` enforces a strictly

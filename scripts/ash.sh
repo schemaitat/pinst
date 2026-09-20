@@ -4,6 +4,7 @@
 #
 #   scripts/ash.sh index [--check]   regenerate (or verify) .ash/INDEX.md
 #   scripts/ash.sh check             validate every corpus invariant
+#   scripts/ash.sh skills            grade each skill against its own contract
 #   scripts/ash.sh new-id [DATE]     mint a plan id: <yymmdd>-<6 letters>
 #
 # Why this exists: the skills state a dozen invariants in prose ("the id must
@@ -23,6 +24,14 @@ LEARNINGS_FILE="$ASH_DIR/LEARNINGS.md"
 JSON=0
 
 FIND_ID=(); FIND_SEV=(); FIND_MSG=(); FIND_REM=()
+
+# Spliced into the JSON envelope by report(), for subcommands that carry a
+# payload as well as findings. Must end in a comma when set.
+EXTRA_JSON=""
+
+SKILLS_DIR="${SKILLS_DIR:-.agents/skills}"
+WIRED_DIR="${WIRED_DIR:-.claude/skills}"
+SKILLS_WINDOW="${ASH_SKILLS_WINDOW:-20}"
 
 finding() { FIND_ID+=("$1"); FIND_SEV+=("$2"); FIND_MSG+=("$3"); FIND_REM+=("$4"); }
 
@@ -49,6 +58,19 @@ fm() { fm_block "$1" | awk -v k="$2" -F': *' '$1==k {sub(/^[^:]*: */,""); print;
 fm_raw() { fm_block "$1" | awk -v k="$2" '$0 ~ "^"k":" {sub(/^[^:]*:[[:space:]]*/,""); print; exit}'; }
 
 unquote() { local v="$1"; v="${v%\"}"; v="${v#\"}"; printf '%s' "$v"; }
+
+# Frontmatter values that hold shell commands are single-quoted YAML scalars,
+# where an embedded quote is written twice. Double quotes would not do: the
+# commands are full of backslashes, and YAML treats those as escapes inside
+# double quotes but as literals inside single ones.
+sq_unquote() {
+  local v="$1"
+  case "$v" in
+    "'"*"'") v="${v#\'}"; v="${v%\'}"; v="$(printf '%s' "$v" | sed "s/''/'/g")" ;;
+    *) v="$(unquote "$v")" ;;
+  esac
+  printf '%s' "$v"
+}
 
 # `[a, b, c]` -> `a, b, c`
 delist() { local v="$1"; v="${v#[}"; v="${v%]}"; printf '%s' "$v"; }
@@ -498,6 +520,117 @@ render_index() {
   done <<< "$(plan_dirs)"
 }
 
+# --- the skill audit --------------------------------------------------------
+# Skills are graded on the artifacts they leave in the repo, never on whether
+# anyone invoked them. A skill declares in its own frontmatter what it
+# produces and the command that measures it, because the skill is the only
+# place that knows what it is for — put the measure in this script and the two
+# drift, which is the failure this whole audit exists to catch.
+#
+# Nothing in here belongs in `check`. These are rates and tallies, and
+# report() exits 3 on a finding of any severity, so a number that got
+# interesting would fail `just qc`. Findings here are structural only: a skill
+# with no contract, or a measure that would not run.
+
+# How many recorded issues name each skill, from the `**Skill:**` line that
+# plan-learnings writes. Prints "name count" per skill that appears.
+skill_tally() {
+  local f
+  for f in "$PLANS_DIR"/*/learnings.md; do
+    [ -f "$f" ] || continue
+    awk '/^\*\*Skill:\*\*/ { print $2 }' "$f"
+  done | sort | uniq -c | awk '{ print $2, $1 }'
+}
+
+# Runs one `evidence:` command and echoes "<conforming> <total>", or nothing
+# when it could not be measured. ASH_RANGE is git-ready ("-n 20" or empty) and
+# ASH_WINDOW is the bare number, so a command can use whichever fits it.
+run_evidence() {
+  local cmd="$1" window="$2" out rc
+  local runner=(sh -c "$cmd")
+  command -v timeout >/dev/null 2>&1 && runner=(timeout 30 sh -c "$cmd")
+  set +e
+  out="$(ASH_WINDOW="$window" ASH_RANGE="${window:+-n $window}" "${runner[@]}" 2>/dev/null)"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || return 1
+  printf '%s' "$out" | grep -qE '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' || return 1
+  printf '%s' "$out" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'
+}
+
+pct() {
+  local n="$1" d="$2"
+  [ "$d" -gt 0 ] 2>/dev/null || { printf 'n/a'; return; }
+  printf '%d%%' $(( n * 100 / d ))
+}
+
+cmd_skills() {
+  local rows_json="" sep="" dir name file produces evidence kind wired
+  local win all wn wt an at
+
+  if [ ! -d "$SKILLS_DIR" ]; then
+    finding "skills.missing" error "$SKILLS_DIR does not exist" \
+      "run this from the repo root"
+    return
+  fi
+
+  [ "$JSON" -eq 1 ] || printf '%-22s %-6s %-22s %-22s %s\n' \
+    "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues"
+
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    name="$(basename "$dir")"
+    file="$dir/SKILL.md"
+    [ -f "$file" ] || continue
+
+    produces="$(sq_unquote "$(fm_raw "$file" produces)")"
+    evidence="$(sq_unquote "$(fm_raw "$file" evidence)")"
+    kind="$(sq_unquote "$(fm_raw "$file" kind)")"
+    wired="no"; [ -e "$WIRED_DIR/$name" ] && wired="yes"
+
+    local tally
+    tally="$(skill_tally | awk -v n="$name" '$1 == n { print $2 }')"
+    [ -n "$tally" ] || tally=0
+
+    if [ -z "$produces" ]; then
+      finding "skill.no-contract.$name" warning \
+        "$file declares no 'produces:' — nothing says what this skill is supposed to leave behind" \
+        "add 'produces:' and 'evidence:' to its frontmatter, or 'kind: reference' if it produces nothing"
+      win="no contract"; all="no contract"; wn=0; wt=0; an=0; at=0
+    elif [ "$produces" = "none" ] || [ "$kind" = "reference" ]; then
+      win="reference (exempt)"; all="-"; wn=0; wt=0; an=0; at=0
+    elif [ -z "$evidence" ]; then
+      finding "skill.no-contract.$name" warning \
+        "$file says what it produces but gives no 'evidence:' command to measure it" \
+        "add an 'evidence:' one-liner printing '<conforming> <total>'"
+      win="no measure"; all="no measure"; wn=0; wt=0; an=0; at=0
+    else
+      local r
+      if r="$(run_evidence "$evidence" "$SKILLS_WINDOW")"; then
+        wn="${r%% *}"; wt="${r##* }"; win="$wn/$wt $(pct "$wn" "$wt")"
+      else
+        finding "skill.evidence-failed.$name" warning \
+          "the 'evidence:' command for $name did not run, or printed something other than two integers" \
+          "run the 'evidence:' one-liner in $file by hand and see what it prints"
+        wn=0; wt=0; win="unmeasured"
+      fi
+      if r="$(run_evidence "$evidence" "")"; then
+        an="${r%% *}"; at="${r##* }"; all="$an/$at $(pct "$an" "$at")"
+      else
+        an=0; at=0; all="unmeasured"
+      fi
+    fi
+
+    [ "$JSON" -eq 1 ] || printf '%-22s %-6s %-22s %-22s %s\n' \
+      "$name" "$wired" "$win" "$all" "$tally"
+
+    rows_json="$rows_json$sep{\"name\":\"$(jesc "$name")\",\"wired\":$([ "$wired" = yes ] && echo true || echo false),\"produces\":\"$(jesc "$produces")\",\"windowed\":{\"conforming\":$wn,\"total\":$wt,\"label\":\"$(jesc "$win")\"},\"all_time\":{\"conforming\":$an,\"total\":$at,\"label\":\"$(jesc "$all")\"},\"issues\":$tally}"
+    sep=","
+  done <<< "$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)"
+
+  EXTRA_JSON="\"skills\":[$rows_json],"
+}
+
 # --- reporting --------------------------------------------------------------
 
 report() {
@@ -522,7 +655,8 @@ report() {
         "$(jesc "${FIND_MSG[$i]}")" "$(jesc "${FIND_REM[$i]}")"
       sep=","
     done
-    printf '],"errors":[],"summary":{"plans":%s,"lessons":%s,"issues":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
+    printf '],%s"errors":[],"summary":{"plans":%s,"lessons":%s,"issues":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
+      "$EXTRA_JSON" \
       "$(plan_dirs | grep -c . || true)" "$(count_lessons)" "$(count_issues)" \
       "$total" "$errors" "$warnings" "$infos"
   else
@@ -577,6 +711,10 @@ case "$cmd" in
         "run: scripts/ash.sh index"
     fi
     report check "corpus clean ($(plan_dirs | grep -c . || true) plans)"
+    ;;
+  skills)
+    cmd_skills
+    report skills "every skill has a contract"
     ;;
   index)
     if [ "$check_only" -eq 1 ]; then

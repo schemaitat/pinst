@@ -2,7 +2,7 @@
 id: 260919-vldfei
 slug: self-improving-agent-harness
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — Skill contracts and the artifact audit
@@ -23,7 +23,7 @@ a rate in `check` would mean `qc` fails whenever a number is interesting
 conformance measure misleads a reviewer, it does not block the repo.
 
 ## Steps
-- [ ] TASK-011: `.agents/skills/*/SKILL.md` — add two frontmatter keys to all
+- [x] TASK-011: `.agents/skills/*/SKILL.md` — add two frontmatter keys to all
       six skills: `produces:`, a one-line English claim about the artifact the
       skill leaves in the repo, and `evidence:`, the shell command that
       measures conformance and prints `<conforming> <total>`. `pinst` declares
@@ -34,7 +34,7 @@ conformance measure misleads a reviewer, it does not block the repo.
       the measures in the script would put the definition of "did create-pr
       work" somewhere `create-pr` cannot see, and the two would drift — which
       is the failure this whole plan is about.
-- [ ] TASK-012: `scripts/ash.sh` — add the `skills` subcommand: enumerate
+- [x] TASK-012: `scripts/ash.sh` — add the `skills` subcommand: enumerate
       `.agents/skills/*/`, read the two keys, run each `evidence:` command with
       a timeout, and report per skill. Findings for structural facts only —
       `skill.no-contract.<name>` when the keys are missing,
@@ -43,7 +43,7 @@ conformance measure misleads a reviewer, it does not block the repo.
       Why: PAT-001 and CON-002. Reusing `finding()`/`report()` gives the JSON
       envelope and exit codes for free (ALT-007), and keeps one definition of
       what a finding looks like.
-- [ ] TASK-013: `scripts/ash.sh` — implement the six `evidence:` commands as
+- [x] TASK-013: `scripts/ash.sh` — implement the six `evidence:` commands as
       the skills' own one-liners, each windowed and all-time:
       `conventional-commits` → subjects matching the type/scope grammar in
       `git log` (100% of 30 today, the baseline); `create-pr` → merged PR
@@ -56,23 +56,23 @@ conformance measure misleads a reviewer, it does not block the repo.
       Why: each of these measures the skill's actual deliverable, not a proxy
       for it (RISK-005). A conforming commit *is* what `conventional-commits`
       is for; there is nothing to game that is not also the goal.
-- [ ] TASK-014: `scripts/ash.sh` — report both a windowed rate (last N units,
+- [x] TASK-014: `scripts/ash.sh` — report both a windowed rate (last N units,
       default 20) and the all-time rate, labelled distinctly.
       Why: RISK-002. Thirty conformant commits make the thirty-first
       non-conformant one invisible in an all-time rate; a window is what makes
       a regression show up while it is still one commit old.
-- [ ] TASK-015: `scripts/ash.sh` — join the per-skill `**Skill:**` tallies from
+- [x] TASK-015: `scripts/ash.sh` — join the per-skill `**Skill:**` tallies from
       Phase 1 onto the report, so each row carries how many recorded issues
       implicate it.
       Why: this is the "does it fail" half of the question. A skill with high
       conformance and three issues naming it is producing conforming artifacts
       by a procedure that keeps going wrong — the most valuable row in the
       table, and invisible from conformance alone.
-- [ ] TASK-016: `justfile` — add `review: ` running `ash.sh check` then
+- [x] TASK-016: `justfile` — add `review: ` running `ash.sh check` then
       `ash.sh skills`, and leave `harness` and `qc` untouched.
       Why: one command for the review pass, and an explicit guarantee that the
       graded report never gates a commit.
-- [ ] TASK-017: `.agents/README.md` — document the contract block, what each
+- [x] TASK-017: `.agents/README.md` — document the contract block, what each
       column of the report means, and the rule that a low rate is a
       conversation rather than a failure.
       Why: a number with no stated meaning gets optimised or ignored, and both
@@ -106,3 +106,36 @@ conformance measure misleads a reviewer, it does not block the repo.
 - TEST-011: `ash.sh skills --json` is valid JSON carrying every row, and
   `just qc` remains green and unchanged in content — the graded report is not
   in it.
+
+## Verified
+`scripts/ash.sh skills` on the real corpus, exit 0:
+
+```
+skill                  wired  conforming (last 20)   all-time               issues
+conventional-commits   yes    20/20 100%             33/33 100%             0
+create-pr              yes    5/9 55%                5/9 55%                0
+pinst                  yes    reference (exempt)     -                      0
+plan-implement         yes    1/4 25%                1/4 25%                0
+plan-learnings         yes    3/3 100%               3/3 100%               0
+plan-write             yes    4/4 100%               4/4 100%               6
+```
+
+- TEST-008 ✓ six rows, exit 0, and the planning baselines reproduce:
+  `conventional-commits` at 100% (33/33 now, 30/30 when the plan was written)
+  and exactly one plan carrying a complete run log.
+- TEST-009 ✓ stripping `produces:`/`evidence:` from a copied `create-pr`
+  yields `skill.no-contract.create-pr` and a `no contract` row
+  (`SKILLS_DIR=<copy> scripts/ash.sh skills`).
+- TEST-010 ✓ replacing an `evidence:` with `exit 7` yields
+  `skill.evidence-failed.plan-write` and an `unmeasured` row — not a crash,
+  and not a misleading zero.
+- TEST-011 ✓ `ash.sh skills --json` parses under `python3 -m json.tool` and
+  carries a `skills` array of six rows; `just qc` is unchanged and does not
+  run the report.
+
+Two rows are worth carrying into the learnings. **`create-pr` at 5/9** is the
+first measure to come in under 100%, and it is measuring the skill's own
+instruction — four merged PRs carry no `Plan:` footer. **`plan-write` at 100%
+with 6 issues** is the row TASK-015 was written for: perfectly-shaped plans
+produced by a procedure that keeps going wrong, which conformance alone would
+have called a success.
