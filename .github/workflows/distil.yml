@@ -131,6 +131,11 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Passed explicitly so the action uses the workflow's own token for
+          # GitHub work instead of exchanging its OIDC token for a Claude Code
+          # App token — an app this repo has no other reason to install, since
+          # every GitHub operation here is a step in this file.
+          github_token: ${{ github.token }}
           prompt: /distil
           display_report: true
           show_full_output: true
