@@ -1,0 +1,244 @@
+# The unattended half of `/distil`.
+#
+# Distillation is the one lifecycle stage with no owner: `plan-write`,
+# `plan-implement` and `plan-learnings` all run because someone starts them,
+# while the corpus-wide pass runs only when a human types `/distil`. This
+# workflow is the thing that notices when nobody is looking.
+#
+# It is deliberately not "wake a model every morning". LESSON-013 says to make
+# the corpus the clock rather than the calendar, and the gate below is how that
+# survives a cron line: `distil-guard preflight` asks the corpus whether there
+# is anything to distil, and a clean corpus ends the run in seconds with no
+# model call, no branch and no pull request. The schedule only polls; the
+# corpus still decides.
+#
+# Nothing here trusts the model with the publishing half. It gets no `gh`, no
+# `git commit` and no `git push` in its tool allowlist, and everything it
+# produced passes `distil-guard verify` — path allowlist, size budget,
+# append-only lessons, harness clean — before a branch exists at all. The
+# commit and the pull request are ordinary steps in this file, where they can
+# be read.
+name: distil
+
+on:
+  schedule:
+    # 06:17 UTC: off the top of the hour, where the runner queue is shortest.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run the pass and verify it, but open nothing — upload the patch instead"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distil
+  cancel-in-progress: false
+
+jobs:
+  # Everything that can be decided without spending a token.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      work: ${{ steps.preflight.outputs.work }}
+    steps:
+      # fetch-depth: 0 is not optional. `ash.sh skills` grades
+      # conventional-commits by reading `git log`, and a depth-1 clone would
+      # report 100% conformance across one commit.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: extractions/setup-just@v3
+
+      # Fail closed, loudly. An unset secret otherwise surfaces as a model step
+      # failing obscurely — or worse, as a job that looks skipped, which is
+      # indistinguishable in the UI from "there was nothing to distil".
+      - name: Require a credential
+        env:
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$OAUTH" ] && [ -z "$API_KEY" ]; then
+            echo "::error::no Anthropic credential is set" >&2
+            echo "set CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) as a repository secret" >&2
+            exit 1
+          fi
+
+      # exit 0 = there is work, 1 = corpus clean, 3 = the guard itself could
+      # not run. Only the third is a failure; the first two are both answers.
+      - name: Is there anything to distil?
+        id: preflight
+        run: |
+          set +e
+          just distil-guard preflight > preflight.out
+          rc=$?
+          set -e
+          cat preflight.out
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::distil-guard preflight could not read the corpus" >&2
+            exit 1
+          fi
+          grep '^work=' preflight.out >> "$GITHUB_OUTPUT"
+
+  distil:
+    needs: gate
+    if: needs.gate.outputs.work == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # `create-pr`'s evidence command shells out to `gh pr list`. Without a
+      # token it fails, and the review the model is about to read carries a
+      # spurious skill.evidence-failed finding.
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: extractions/setup-just@v3
+
+      # `prompt: /distil` runs the repo's own slash command — the same one a
+      # human types — rather than a copy of its instructions living here. A
+      # second copy would drift from .claude/commands/distil.md and from
+      # plan-learnings Step 6, and the drift would be invisible until a run
+      # distilled by yesterday's rules.
+      #
+      # The allowlist is the security boundary: no gh, no git commit, no git
+      # push, no git tag. What the model cannot call, it cannot do. It is
+      # quoted as one argument because claude_args is split shell-style, and
+      # an unquoted `Bash(just review)` would arrive as two broken entries.
+      #
+      # display_report/show_full_output stay on until this workflow has proven
+      # itself unattended (LESSON-006: read the action's real output on the
+      # first runs instead of inferring it from a README).
+      - name: Distil the corpus
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: /distil
+          display_report: true
+          show_full_output: true
+          claude_args: |
+            --max-turns 40
+            --model claude-opus-5
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just review),Bash(just harness),Bash(just index),Bash(just distil-guard:*),Bash(scripts/ash.sh:*),Bash(scripts/agents-wire.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
+
+      # The rail. A failure here ends the run with no branch and no pull
+      # request, and the finding in the log says which way the pass went wrong.
+      - name: Verify what it produced
+        run: just distil-guard verify
+
+      # The gate asked "is there an agenda"; this asks "did the pass actually
+      # change anything". A pass that triages every issue into a decline is a
+      # legitimate outcome with an empty diff, and an empty pull request is
+      # noise.
+      - name: Anything to publish?
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "nothing to distil — the pass changed no files"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff --stat
+          fi
+
+      # The reviewer's briefing, assembled here rather than by the model: the
+      # agenda it was given, what it changed, and anything it proposed. The
+      # proposals file is gitignored and optional — the run is correct without
+      # it, it simply has nothing to report under that heading.
+      - name: Build the pull request body
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          {
+            echo "Written unattended by [\`distil.yml\`](../blob/main/.github/workflows/distil.yml)"
+            echo "on $(date -u +%Y-%m-%d). **Read the triage decisions before merging** —"
+            echo "promoting, merging and declining are judgement calls, and no human made these."
+            echo
+            echo "## What changed"
+            echo '```'
+            git --no-pager diff --stat
+            echo '```'
+            echo
+            echo "## Proposed skills — not written"
+            if [ -s .distil-report.md ]; then
+              cat .distil-report.md
+            else
+              echo "None. (A new skill is always a proposal here; this run made none.)"
+            fi
+            echo
+            echo "## The agenda afterwards"
+            echo '```'
+            just review 2>&1 | sed -n '/## Agenda/,$p' || true
+            echo '```'
+            echo
+            echo "Plan: 260920-impoxu-daily-distil-action"
+          } > pr-body.md
+          cat pr-body.md
+
+      # dry_run stops here: the patch is inspectable, nothing was published.
+      # `git add -N` first, so files the pass created appear in the patch —
+      # the same blind spot the path allowlist had to be fixed for.
+      - name: Write the patch (dry run)
+        if: ${{ inputs.dry_run && steps.diff.outputs.changed == 'true' }}
+        run: |
+          git add -N .
+          git --no-pager diff > distil.patch
+          wc -l distil.patch
+
+      - name: Upload the patch (dry run)
+        if: ${{ inputs.dry_run && steps.diff.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: distil-patch
+          path: |
+            distil.patch
+            pr-body.md
+            .distil-report.md
+          if-no-files-found: warn
+
+      # One rolling branch, force-updated. A dated branch per day would leave a
+      # queue of stale, conflicting pull requests nobody closes; this way at
+      # most one distillation is ever open and the newest is the whole answer.
+      # --force-with-lease, not --force: if something else moved the branch,
+      # stop rather than overwrite it.
+      - name: Commit to the rolling branch
+        if: ${{ !inputs.dry_run && steps.diff.outputs.changed == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B harness/distil
+          git add .ash .agents/skills .claude/skills
+          git commit -m "chore(harness): distil the corpus ($(date -u +%Y-%m-%d))" \
+                     -m "Triaged unattended by .github/workflows/distil.yml." \
+                     -m "Plan: 260920-impoxu-daily-distil-action"
+          git push --force-with-lease origin harness/distil
+
+      # Create or update, never both — a daily rerun has to converge on one
+      # pull request rather than accumulate them. Never --auto-merge: `main`
+      # carries no required review, so auto-merging would make an unattended
+      # model's judgement the record with nobody in the loop.
+      - name: Open or update the pull request
+        if: ${{ !inputs.dry_run && steps.diff.outputs.changed == 'true' }}
+        run: |
+          gh label create needs-human-judgement \
+            --description "Written unattended; the reasoning needs a human before merge" \
+            --color d876e3 2>/dev/null || true
+          title="[260920-impoxu] Distil the corpus ($(date -u +%Y-%m-%d))"
+          if gh pr view harness/distil --json number >/dev/null 2>&1; then
+            gh pr edit harness/distil --title "$title" --body-file pr-body.md
+          else
+            gh pr create --base main --head harness/distil \
+              --title "$title" --body-file pr-body.md \
+              --label needs-human-judgement
+          fi
+          gh pr view harness/distil --json url -q .url

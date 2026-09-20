@@ -2,7 +2,7 @@
 id: 260920-impoxu
 slug: daily-distil-action
 phase: 2
-status: Proposed
+status: In Progress
 ---
 
 # Phase 2 — The scheduled workflow
@@ -30,33 +30,33 @@ settled beforehand has been.
       slash command does not expand, switch to ALT-003 (`npm i -g
       @anthropic-ai/claude-code` and `claude -p "/distil"`) before building the
       rest on a false premise.
-- [ ] TASK-009: `.github/workflows/distil.yml` — add the triggers and
+- [x] TASK-009: `.github/workflows/distil.yml` — add the triggers and
       top-level blocks: `schedule: - cron: "17 6 * * *"`, `workflow_dispatch`
       with a boolean `dry_run` input, `permissions: {contents: write,
       pull-requests: write}`, and `concurrency: {group: distil,
       cancel-in-progress: false}`. Why: an off-the-hour minute avoids the
       congested top of the hour; `cancel-in-progress: false` because a
       half-cancelled distillation leaves a branch mid-update.
-- [ ] TASK-010: `.github/workflows/distil.yml` — the `gate` job: checkout with
+- [x] TASK-010: `.github/workflows/distil.yml` — the `gate` job: checkout with
       `fetch-depth: 0`, `extractions/setup-just@v3`, then `just distil-guard
       preflight`, publishing `work=true|false` as a job output. Why:
       `fetch-depth: 0` is not optional — `conventional-commits`' evidence
       command reads `git log`, and a depth-1 clone would grade a 100% skill on
       one commit. DEP-003.
-- [ ] TASK-011: `.github/workflows/distil.yml` — fail the gate job closed when
+- [x] TASK-011: `.github/workflows/distil.yml` — fail the gate job closed when
       no Anthropic credential is present (SEC-002): a step that exits non-zero
       with a one-line remediation if both `ANTHROPIC_API_KEY` and
       `CLAUDE_CODE_OAUTH_TOKEN` are empty. Why: an unset secret otherwise
       surfaces as a model step that fails obscurely, or worse as a job that
       looks skipped — which is indistinguishable from "nothing to do" (DEP-002).
-- [ ] TASK-012: `.github/workflows/distil.yml` — the `distil` job, `needs:
+- [x] TASK-012: `.github/workflows/distil.yml` — the `distil` job, `needs:
       gate`, `if: needs.gate.outputs.work == 'true'`, `timeout-minutes: 30`,
       with `GH_TOKEN: ${{ github.token }}` exported for the whole job. Why: the
       `create-pr` evidence command shells out to `gh pr list`, and without a
       token the review the model reads carries a spurious
       `skill.evidence-failed.create-pr` (DEP-004). RISK-002 is bounded here by
       the timeout.
-- [ ] TASK-013: `.github/workflows/distil.yml` — the model step:
+- [x] TASK-013: `.github/workflows/distil.yml` — the model step:
       `anthropics/claude-code-action@v1` with `prompt: /distil`, the
       credential, and `claude_args` carrying `--max-turns`, an explicit model,
       and an `--allowedTools` list of `Read,Edit,Write,Glob,Grep` plus only the
@@ -64,30 +64,30 @@ settled beforehand has been.
       `just harness`, `git diff`, `git status`). Why: no `gh`, no `git
       commit`, no `git push` anywhere in that list — ALT-004 and SEC-001 are
       enforced by what is absent.
-- [ ] TASK-014: `.github/workflows/distil.yml` — after the model, run `just
+- [x] TASK-014: `.github/workflows/distil.yml` — after the model, run `just
       distil-guard verify`. Why: the point of Phase 1. A failure here ends the
       run with no branch and no pull request, and the job log carries the
       finding that explains why.
-- [ ] TASK-015: `.github/workflows/distil.yml` — the no-op exit: if `git
+- [x] TASK-015: `.github/workflows/distil.yml` — the no-op exit: if `git
       status --porcelain` is empty, log `nothing to distil` and end the job
       successfully without a branch. Why: the gate answers "was there an
       agenda", this answers "did the pass actually change anything" — a pass
       that triages everything into declines can legitimately produce an empty
       diff, and an empty pull request is noise (REQ-003).
-- [ ] TASK-016: `.github/workflows/distil.yml` — commit to the rolling branch
+- [x] TASK-016: `.github/workflows/distil.yml` — commit to the rolling branch
       `harness/distil`: configure the bot identity, commit with a Conventional
       Commits subject (`chore(harness): distil the corpus (<date>)`) carrying
       the `Plan: 260920-impoxu-daily-distil-action` footer, and force-push.
       Why: ALT-006 — one rolling branch, so at most one distillation is open;
       the footer is what keeps the commit inside this repo's own conventions.
-- [ ] TASK-017: `.github/workflows/distil.yml` — open or update the pull
+- [x] TASK-017: `.github/workflows/distil.yml` — open or update the pull
       request with `gh pr create ... || gh pr edit`, body assembled from the
       model's report and an explicit `## Proposed skills — not written`
       section, plus a `needs-human-judgement` label. Why: REQ-004 — an
       unattended proposal needs a destination a reviewer cannot miss, and the
       idempotent create-or-edit is what makes a daily rerun converge rather
       than duplicate. Never `--auto-merge` (ALT-008).
-- [ ] TASK-018: `.github/workflows/distil.yml` — honour `dry_run`: run
+- [x] TASK-018: `.github/workflows/distil.yml` — honour `dry_run`: run
       everything through `verify`, upload the patch with
       `actions/upload-artifact`, and skip TASK-016/TASK-017. Why: REQ-005 — a
       way to see exactly what tomorrow's run would do without it doing

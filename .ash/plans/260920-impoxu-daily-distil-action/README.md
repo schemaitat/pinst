@@ -143,7 +143,7 @@ is still recorded on the issue so the review stops re-asking (LESSON-014).
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | The gate and the guard, as shell | [phase-01.md](phase-01.md) | Done |
-| 2 | The scheduled workflow | [phase-02.md](phase-02.md) | Proposed |
+| 2 | The scheduled workflow | [phase-02.md](phase-02.md) | In Progress |
 | 3 | Teach the harness about its own robot | [phase-03.md](phase-03.md) | Proposed |
 
 ## Affected Files

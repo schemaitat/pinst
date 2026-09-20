@@ -1,2 +1,5 @@
 /target
 /dist
+
+# Written by an unattended /distil run for the pull request body; never committed.
+/.distil-report.md
