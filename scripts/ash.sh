@@ -887,7 +887,7 @@ report_gaps() {
 "
   [ -z "$gaps" ] || agenda="$agenda$(printf '%s\n' "$gaps" | head -1 | awk '{ print $2 " has " $1 " issue(s) no skill owns — is there a skill missing here?" }')
 "
-  [ -z "$recurring" ] || agenda="$agenda""recurring and still unenforced: $(printf '%s' "$recurring" | tr '\n' ' ')— candidates for a check
+  [ -z "$recurring" ] || agenda="$agenda""recurring and still unenforced: $(printf '%s' "$recurring" | tr '\n' ' ') — candidates for a check
 "
 
   if [ "$JSON" -ne 1 ]; then
