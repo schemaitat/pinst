@@ -22,7 +22,7 @@ spends money and first talks to GitHub, so everything mechanical that can be
 settled beforehand has been.
 
 ## Steps
-- [ ] TASK-008: `.github/workflows/distil.yml` — settle ASSUMPTION-001 first:
+- [x] TASK-008: `.github/workflows/distil.yml` — settle ASSUMPTION-001 first:
       a `workflow_dispatch`-only skeleton with `prompt: /distil`,
       `display_report: true` and `show_full_output: true`, run once by hand.
       Why: GUD-002/LESSON-006 — read the third-party action's actual report on
@@ -126,3 +126,26 @@ admin):**
   issue produces a patch artifact whose diff is confined to `.ash/`.
 - TEST-011: A live run opens exactly one pull request on `harness/distil`, and
   a second run the same day updates it instead of opening a second.
+
+## Confirmed after the merge
+
+- 2026-09-20, run 35514351967 (`workflow_dispatch`, `dry_run: true`, on
+  `fix/distil-oidc-permission`): **ASSUMPTION-001 holds.** The action logged
+  `Context prompt: /distil`, `Mode: agent`, installed Claude Code 2.1.278 and
+  ran the pass to completion. TASK-008 is answered by this run, not by the
+  skeleton it originally described — the skeleton was overtaken by the real
+  workflow, which settles the same question.
+- TEST-010 confirmed by the same run: the uploaded patch touches
+  `.agents/skills/plan-write/SKILL.md` and `.ash/LEARNINGS.md` only.
+  (`pr-body.md` also appeared, from `git add -N .` running after the body was
+  written; the scratch files are gitignored now and the commit step never named
+  them.)
+- The pass itself behaved as designed: it took the one agenda item, declined to
+  mechanize LESSON-003 with its reasoning written onto the lesson, moved the
+  instruction into `plan-write` instead, wrote no new skill, and surfaced the
+  shell-checker proposal in the pull request body with an argument against
+  itself.
+- **Still outstanding:** TEST-009 (a clean corpus ends at the gate with no model
+  call) and TEST-011 (one pull request, and a second run the same day updates it
+  rather than opening another). Both need a run that is not a dry run, so they
+  wait for this to land on `main`. The phase stays `In Progress` until then.
