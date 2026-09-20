@@ -234,14 +234,17 @@ and an agenda. Then, in this order:
 2. **Reclassify what changed.** A `prose` lesson that a check now enforces
    becomes `mechanized` with the finding id on `**Check:**`. A lesson that
    stopped being true becomes `retired` with a reason. `lesson.unenforced`
-   will catch a `Check:` id that names nothing.
+   will catch a `Check:` id that names nothing. A lesson the review keeps
+   listing as "recurring, unenforced" that *cannot* be mechanized — because it
+   is judgement rather than an invariant — takes `**Mechanize:** declined —
+   <reason>` and stops being listed.
 3. **Answer the gap groups.** Each names an area and the issues in it that no
    skill owns. For each, say one of: *there is a skill missing here, and it
    would do X*, or *this work is not skill-shaped* — most recorded issues are
    domain surprises (a toolchain, an API, a permission), and no instruction
-   would have prevented them. Write the answer down in the review's own record
-   rather than only in the conversation, because the gap section recomputes
-   from scratch and will otherwise ask again.
+   would have prevented them. Record the answer as `**Gap:** answered —
+   <reason>` on each issue, not only in the conversation: the gap section
+   recomputes from scratch and will otherwise raise the same group forever.
 4. **Propose, do not write.** A new skill is a proposal to the user with its
    trigger description and what it would produce. Writing one unasked is how a
    harness accumulates skills nobody invokes.

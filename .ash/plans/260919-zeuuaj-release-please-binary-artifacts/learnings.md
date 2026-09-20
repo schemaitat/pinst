@@ -85,6 +85,7 @@ read twice — once by Rust, once by `sh`. When adding a field like that, check
 every Rust-side inspection of it for the assumption that it is already
 expanded.
 **Skill:** none
+**Gap:** answered — a Rust function compared an unexpanded path literal. Carried by LESSON-004; no instruction would have caught it
 
 ### ISSUE-004: The musl build needed no `cross`, so DEP-002 dropped out
 **What happened:** RISK-001 predicted trouble cross-compiling `aws-lc-rs`
@@ -104,6 +105,7 @@ That removes a Docker image pull from every release.
 when the libc does. Validating the build before wiring CI to it cost one
 command and saved a dependency.
 **Skill:** none
+**Gap:** answered — toolchain knowledge about musl versus a foreign architecture. Carried by LESSON-005
 
 ### ISSUE-005: Phases whose verification lives on GitHub cannot close locally
 **What happened:** TASK-003, TASK-007 and TASK-014 — check a repo setting,
@@ -137,6 +139,7 @@ them on the first run. It costs three lines and turns a silent skip into a
 visible fact. Keep the step afterwards — the names can change under you on
 the next major version.
 **Skill:** none
+**Gap:** answered — a third-party action's output naming. Carried by LESSON-006, and the dump step that caught it is already in the workflow
 
 ### ISSUE-007: The repo is private, which breaks the entire consumption path
 **What happened:** `gh repo view` reports `PRIVATE`. On a private repo both
@@ -244,6 +247,7 @@ boundary, whatever version number it proposes. Both were diagnosable in one
 command — `npx release-please release-pr --dry-run --debug` prints the
 boundary it found, or says it found none.
 **Skill:** none
+**Gap:** answered — a GitHub object's lifecycle. Carried by LESSON-010
 
 ## Deviations from the plan, for the record
 - **TASK-015/TASK-016 dropped** (ISSUE-002), on an explicit user decision.

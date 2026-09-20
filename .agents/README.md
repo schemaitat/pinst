@@ -298,6 +298,25 @@ work has no skill to do it. It is reported and never enforced, because a
 missing skill is a judgement about what is worth automating and `qc` should
 not fail over an opinion.
 
+**Every recurring question can be told it has been answered.** A report that
+asks something on every run, with no way to record the reply, decays into
+noise at exactly the rate people read it. There are three markers, all the
+same shape — one line, permanent, and a normal outcome rather than a failure
+to think:
+
+| Marker | Written on | Silences |
+|--------|-----------|----------|
+| `**Distilled:** declined — <reason>` | an issue | `learnings.untriaged` |
+| `**Gap:** answered — <reason>` | an issue | the gap report |
+| `**Mechanize:** declined — <reason>` | a lesson | "recurring, unenforced" |
+
+They answer different questions about the same record — *has anyone distilled
+this*, *should a skill own this*, *should a check enforce this* — so an issue
+can carry two of them with different reasons. Most recorded issues are domain
+surprises: a toolchain, an API, a permission, a GitHub object's lifecycle. No
+instruction would have prevented them, `LEARNINGS.md` is already the right
+home, and saying so once should be enough.
+
 ## Delegating
 
 The plan skills are deliberately sequential: `plan-write` enforces a strictly

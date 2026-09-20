@@ -1,6 +1,6 @@
 ---
 name: conventional-commits
-description: Craft and make git commits in this repo (pinst) using the Conventional Commits format (type(scope): subject). Use this whenever the user asks to commit changes, write a commit message, "commit this", "make a commit", or wrap up a change with a commit — even if they don't say "conventional commits" explicitly. Also use it to validate or fix up a commit message someone already wrote. This repo's entire history follows this convention, so every new commit should too.
+description: 'Craft and make git commits in this repo (pinst) using the Conventional Commits format (type(scope): subject). Use this whenever the user asks to commit changes, write a commit message, "commit this", "make a commit", or wrap up a change with a commit — even if they don''t say "conventional commits" explicitly. Also use it to validate or fix up a commit message someone already wrote. This repo''s entire history follows this convention, so every new commit should too.'
 produces: 'every commit in this repo''s history parses as a Conventional Commit'
 evidence: 'echo $(git log --format=%s $ASH_RANGE | grep -cE ''^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: '') $(git log --format=%s $ASH_RANGE | grep -c .)'
 ---

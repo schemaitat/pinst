@@ -49,7 +49,9 @@ a `run_end` event — which is the same move as `phase.logged-not-done`:
 compare against the record written after the fact. A two-line change, and
 until it lands every implementation run has a permanently red gate, which is
 how a check earns being ignored.
+**Update (2026-09-20):** fixed. `plan.learnings-missing` now requires a `run_end` event in the plan's logs before it fires, so a run in progress is silent and a finished one is not.
 **Skill:** none
+**Gap:** answered — a defect in a checker, now fixed — the finding gates on run_end
 
 ### ISSUE-002: the plan's guess at which lessons were mechanized was wrong two ways
 **What happened:** TASK-003 named LESSON-003, LESSON-008 and LESSON-009 as
@@ -104,7 +106,9 @@ single-quoted and parse cleanly in isolation.
 is enforced by something. A format that only ever meets hand-written parsers
 is not the format its authors think it is, and the bill arrives the first time
 a real parser shows up.
+**Update (2026-09-20):** fixed. Every frontmatter value that YAML could not read plain is quoted, and `agents-wire.sh --check` now reports `skill.unquoted-value` so it stays that way.
 **Skill:** none
+**Gap:** answered — a file-format defect, now fixed and kept fixed by skill.unquoted-value
 
 ### ISSUE-005: the invocation column is reflexive — measuring moved the number
 **What happened:** The plan's motivating anomaly was `plan-implement` showing
@@ -121,6 +125,7 @@ Where a reflexive one is worth keeping, pin the baseline with a date before
 the work starts — otherwise the evidence for the design disappears into the
 act of building it.
 **Skill:** none
+**Gap:** answered — a property of the measure itself, not of any procedure. Carried by LESSON-012
 
 ### ISSUE-006: the first agenda had no way to record its own answer
 **What happened:** TASK-029 ran the loop once. The agenda asked whether a
@@ -138,6 +143,7 @@ record the answer, in the same change that adds the question. Otherwise its
 signal decays to noise at exactly the rate people read it — which is the
 failure mode this whole plan was written to prevent, reproduced inside the
 plan's own last phase.
+**Update (2026-09-20):** fixed. An issue can carry `**Gap:** answered — <reason>`, which drops it from the gap report the way `**Distilled:** declined` drops it from triage.
 **Skill:** plan-write
 
 ## Deviations from the plan, for the record

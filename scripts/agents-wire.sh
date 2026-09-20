@@ -77,6 +77,33 @@ check_skill_source() {
       "add one — it is the only thing a model sees when deciding to load the skill"
     bad=1
   fi
+
+  # This frontmatter has always *looked* like YAML while only ever being read
+  # by grep and awk, so nothing noticed that half of it would not parse: a
+  # description reading "... (type(scope): subject) ..." ends a plain scalar at
+  # the colon. It cost nothing until something started reading the block as
+  # YAML, and then it cost every skill at once. Quoting is the fix; this is
+  # what keeps it fixed.
+  local unquoted
+  unquoted="$(awk '
+    NR == 1 && $0 != "---" { exit }
+    NR == 1 { next }
+    /^---[[:space:]]*$/ { exit }
+    /^[a-z_-]+:[[:space:]]/ {
+      key = $0; sub(/:.*$/, "", key)
+      val = $0; sub(/^[a-z_-]+:[[:space:]]+/, "", val)
+      first = substr(val, 1, 1)
+      if (first == "\"" || first == "\047") next
+      if (val ~ /:[[:space:]]/) print key
+    }
+  ' "$file" | tr '\n' ' ')"
+  if [ -n "$unquoted" ]; then
+    finding "skill.unquoted-value.$name" warning \
+      "$file frontmatter value(s) contain a colon and are not quoted: ${unquoted% }" \
+      "wrap the value in single quotes, doubling any apostrophe inside it"
+    bad=1
+  fi
+
   return "$bad"
 }
 

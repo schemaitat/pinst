@@ -367,10 +367,10 @@ check_learnings() {
     finding "plan.learnings-missing.$name" warning \
       "$name is Done but has no learnings.md" \
       "run the plan-learn skill for $name"
-  elif [ -d "$d/logs" ] && [ -n "$(find "$d/logs" -type f -print -quit)" ]; then
+  elif [ -d "$d/logs" ] && grep -qh '"event":"run_end"' "$d"/logs/*.log 2>/dev/null; then
     finding "plan.learnings-missing.$name" info \
-      "$name has implementation logs but no learnings.md yet" \
-      "run the plan-learn skill for $name when the run ends"
+      "$name has a finished run but no learnings.md yet" \
+      "run the plan-learn skill for $name"
   fi
 }
 
@@ -418,13 +418,25 @@ seen_pairs() {
   ' "$LEARNINGS_FILE"
 }
 
-# "ISSUE-00N <skill|->" for one learnings.md.
+# "ISSUE-00N <skill|-> open|answered" for one learnings.md.
+#
+# `answered` means someone has already asked whether a skill should own this
+# issue and written down the answer, as `**Gap:** answered — <reason>`. The
+# gap report is a recurring question, so it needs a way to be told it has been
+# settled — otherwise it raises the same item on every review until people
+# stop reading the section, which is the decay this whole audit exists to
+# prevent. Same shape as `**Distilled:** declined` for triage: one line,
+# permanent, and a normal outcome rather than a failure to think.
 issue_skills() {
   [ -f "$1" ] || return 0
   awk '
-    function flush() { if (cur != "") print cur, (sk == "" ? "-" : sk); cur = ""; sk = "" }
+    function flush() {
+      if (cur != "") print cur, (sk == "" ? "-" : sk), (ans ? "answered" : "open")
+      cur = ""; sk = ""; ans = 0
+    }
     /^### ISSUE-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
     /^\*\*Skill:\*\*/ { sk = $2 }
+    /^\*\*Gap:\*\*[[:space:]]*answered/ { if (cur != "") ans = 1 }
     /^## / { flush() }
     END { flush() }
   ' "$1"
@@ -827,7 +839,7 @@ cmd_skills() {
 # unowned that touched it — the useful reading, at the cost of one issue
 # appearing under two headings.
 gap_rows() {
-  local d name areas a row issue sk
+  local d name areas a row issue sk state
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     name="$(basename "$d")"
@@ -836,8 +848,11 @@ gap_rows() {
     areas="$(delist "$(fm_raw "$d/README.md" areas)")"
     while IFS= read -r row; do
       [ -n "$row" ] || continue
-      issue="${row%% *}"; sk="${row##* }"
+      issue="$(printf '%s' "$row" | cut -d" " -f1)"
+      sk="$(printf '%s' "$row" | cut -d" " -f2)"
+      state="$(printf '%s' "$row" | cut -d" " -f3)"
       [ "$sk" = "none" ] || continue
+      [ "$state" = "open" ] || continue
       for a in ${areas//,/ }; do
         [ -n "$a" ] && printf '%s %s %s\n' "$a" "$name" "$issue"
       done
@@ -856,9 +871,22 @@ report_gaps() {
 
   # A lesson two different plans have hit, still enforced by nothing. Phase 2
   # deliberately left this unenforceable: "several" is a threshold nobody can
-  # justify, so it is listed rather than failed on.
+  # justify, so it is listed rather than failed on — and, like the gap
+  # section, it can be told the question has been settled, with
+  # `**Mechanize:** declined — <reason>` on the lesson. Some lessons are
+  # judgement that no exit code can carry, and saying so once should be
+  # enough.
+  local declined
+  declined="$(awk '
+    function flush() { if (cur != "" && dec) print cur; cur = ""; dec = 0 }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Mechanize:\*\*[[:space:]]*declined/ { if (cur != "") dec = 1 }
+    END { flush() }
+  ' "$LEARNINGS_FILE" 2>/dev/null)"
+
   recurring="$(lesson_plan_pairs | awk '{ c[$1]++ } END { for (l in c) if (c[l] > 1) print l }' | sort | while IFS= read -r l; do
     [ -n "$l" ] || continue
+    printf '%s\n' "$declined" | grep -qx "$l" && continue
     lesson_states | awk -v l="$l" '$1 == l && $2 == "prose" { print $1 }'
   done)"
 

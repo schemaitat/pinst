@@ -25,6 +25,9 @@ codebase, and getting one wrong blocks a whole phase on someone else's action.
 `gh api repos/<slug>/actions/permissions/workflow` would have shown up front
 that this repo cannot let Actions open a pull request.
 **Status:** prose
+**Mechanize:** declined — no check can tell whether a plan verified its
+assumptions or merely sounded confident; the evidence is the query, and the
+query happens before anything a script can see.
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-001,
 ISSUE-007); again in 260919-vldfei-self-improving-agent-harness (ISSUE-002,
 ISSUE-003), where the unchecked assumptions were about the repo's own scripts
@@ -101,6 +104,9 @@ a regenerated `INDEX.md` — was being violated by the corpus at the moment the
 skills were committed. An exit code is checkable by anyone, at any time,
 without having read the skill.
 **Status:** prose
+**Mechanize:** declined — this is the rule that produces checks, not a rule a
+check can express. `lesson.unenforced` mechanizes its narrow half: a claim of
+enforcement must name something real.
 **Seen in:** the harness audit on `feat/agents-orchestration` (both legacy
 plans predated the format their own skills mandate); again in
 260919-zeuuaj-release-please-binary-artifacts (ISSUE-009); and again in
