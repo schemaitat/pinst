@@ -47,6 +47,7 @@ rather than debugged.
 **Recommendation:** Verify platform-side preconditions with an API call
 during planning, not during implementation. One `gh api` call would have
 turned ASSUMPTION-001 into a fact before the plan was written.
+**Skill:** plan-write
 
 ### ISSUE-002: RISK-004 (ETXTBSY on self-update) does not reproduce
 **What happened:** The plan's Phase 4 opened with a code change to stop
@@ -65,6 +66,7 @@ to fix a failure that does not occur.
 failure, reproduce the failure first. A ten-line experiment retired this one;
 without it, the repo would carry a `sudo rm -rf` forever as insurance against
 nothing.
+**Skill:** plan-write
 
 ### ISSUE-003: `under_home()` compared literal paths, so `$HOME/...` meant sudo
 **What happened:** Adding pinst to its own manifest with
@@ -82,6 +84,8 @@ prefixes, with a unit test. `pinst plan pinst --json` reports
 read twice — once by Rust, once by `sh`. When adding a field like that, check
 every Rust-side inspection of it for the assumption that it is already
 expanded.
+**Skill:** none
+**Gap:** answered — a Rust function compared an unexpanded path literal. Carried by LESSON-004; no instruction would have caught it
 
 ### ISSUE-004: The musl build needed no `cross`, so DEP-002 dropped out
 **What happened:** RISK-001 predicted trouble cross-compiling `aws-lc-rs`
@@ -100,6 +104,8 @@ That removes a Docker image pull from every release.
 **Recommendation:** Reach for `cross` when the *architecture* differs, not
 when the libc does. Validating the build before wiring CI to it cost one
 command and saved a dependency.
+**Skill:** none
+**Gap:** answered — toolchain knowledge about musl versus a foreign architecture. Carried by LESSON-005
 
 ### ISSUE-005: Phases whose verification lives on GitHub cannot close locally
 **What happened:** TASK-003, TASK-007 and TASK-014 — check a repo setting,
@@ -113,6 +119,7 @@ marking which side of that line each task sits on.
 or an admin action, say so in the phase's Done criteria and split the task in
 two: what can be proven locally, and what must be confirmed after landing.
 The local half can then close honestly instead of dragging the phase with it.
+**Skill:** plan-write
 
 ### ISSUE-006: release-please's manifest mode emits no `tag_name`
 **What happened:** The first `release` run on `main` printed its outputs:
@@ -131,6 +138,8 @@ step is the only reason it was caught before a release depended on it.
 them on the first run. It costs three lines and turns a silent skip into a
 visible fact. Keep the step afterwards — the names can change under you on
 the next major version.
+**Skill:** none
+**Gap:** answered — a third-party action's output naming. Carried by LESSON-006, and the dump step that caught it is already in the workflow
 
 ### ISSUE-007: The repo is private, which breaks the entire consumption path
 **What happened:** `gh repo view` reports `PRIVATE`. On a private repo both
@@ -149,6 +158,7 @@ paths or accepting the source-build fallback.
 **Recommendation:** This is LESSON-002 again. A plan that ends in "a machine
 downloads this artifact" must state the repo's visibility as a checked fact,
 because it decides whether the artifact is reachable at all.
+**Skill:** plan-write
 
 ### ISSUE-008: The last mile needs rights the implementing agent does not hold
 **What happened:** With CI green and the release PR open, merging it was
@@ -164,6 +174,7 @@ pushed; phases 3 and 4 wait on a human merging PR #3 and PR #2.
 the end of the plan, with the exact commands written out. A run then ends
 with a short handover rather than stopping mid-phase, and the difference
 between "not written" and "written, awaiting a merge" stays legible.
+**Skill:** plan-write
 
 ## Second session — 2026-09-19, closing the plan out
 
@@ -205,6 +216,7 @@ Internal consistency is not freshness: a checker that only compares a record
 with itself passes happily on a record describing a world that no longer
 exists. Where a cheap local proxy for reality exists — here the append-only
 changelog, written after the fact — check against it.
+**Skill:** plan-write
 
 ### ISSUE-010: A draft release is invisible to release-please, so publishing last became a release loop
 **What happened:** v0.3.0 and v0.4.0 were cut three minutes apart and an empty
@@ -234,6 +246,8 @@ whose changelog contains entries older than the previous release has lost the
 boundary, whatever version number it proposes. Both were diagnosable in one
 command — `npx release-please release-pr --dry-run --debug` prints the
 boundary it found, or says it found none.
+**Skill:** none
+**Gap:** answered — a GitHub object's lifecycle. Carried by LESSON-010
 
 ## Deviations from the plan, for the record
 - **TASK-015/TASK-016 dropped** (ISSUE-002), on an explicit user decision.

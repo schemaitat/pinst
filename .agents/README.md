@@ -80,6 +80,32 @@ The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
 
+### Two fields make the loop measurable
+
+Both are written by `plan-learnings` and read by `scripts/ash.sh`:
+
+- **`**Status:**` on every lesson** in `.ash/LEARNINGS.md` — `prose`,
+  `mechanized` or `retired`. A `mechanized` lesson also carries
+  **`**Check:**`**, naming the finding id that now enforces it
+  (`phase.logged-not-done`, `wire.missing` — an id, not a description). That
+  id must exist somewhere under `scripts/`, in *either* checker: `ash.sh`
+  owns the corpus invariants and `agents-wire.sh` owns the skill projection,
+  and a lesson may be mechanized by either. `ash.sh check` reports
+  `lesson.unenforced` when the id is nowhere to be found, because a lesson
+  claiming enforcement it does not have is worse than one honestly marked
+  `prose` — it tells the next reader the problem is handled.
+- **`**Skill:**` on every issue** in a plan's `learnings.md` — the skill whose
+  *instructions* would have had to change to prevent it, or `none`. Read by
+  skill it is the failure tally in `ash.sh skills`; read by the plan's `areas`
+  it is the missing-skill candidate list.
+
+`Status:` exists so the file has an end state instead of only growing, and so
+one question becomes answerable: how much of what we learned is actually
+enforced? Today that is 2 of 10. The other eight are not a backlog — most
+lessons are judgement that no exit code can carry — but a lesson sitting at
+`prose` across several plans is a candidate for a check rather than for louder
+prose.
+
 ## Routing
 
 | The request | Entry point |
@@ -169,9 +195,127 @@ They are the only checks in here that compare the corpus against a record of
 what actually shipped, and they exist because plan `260919-zeuuaj` sat `In
 Progress` for a day with its own changelog recording all four phases as done.
 
+Two more keep the distillation loop honest, over the fields described under
+"Two fields make the loop measurable" above:
+
+- `learnings.untriaged` — a plan's `learnings.md` records an `ISSUE-NNN` that
+  no lesson's `Seen in:` line references. This is the cadence: a plan closing
+  starts the clock, and the clock stops when someone actually decides —
+  promote it, add it to an existing lesson, or write `**Distilled:** declined
+  — <reason>` on the issue, which silences it permanently. Three outcomes, one
+  of them free, because a check that cries wolf is a check that gets deleted.
+- `lesson.unenforced` — a lesson marked `**Status:** mechanized` whose
+  `**Check:**` id no script under `scripts/` emits (or which names no id at
+  all). An `error`, not a warning: a lesson claiming enforcement it does not
+  have is worse than one honestly marked `prose`, because it tells the next
+  reader the problem is handled.
+
 Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
 `remediation` string, exactly like `pinst doctor` — match on the id, don't
 parse the prose.
+
+## Grading the skills
+
+`just review` runs the invariants and then `scripts/ash.sh skills`, which
+grades each skill **on the artifacts it leaves in the repo** — never on
+whether anyone invoked it. Each skill declares its own contract in its
+frontmatter:
+
+```yaml
+produces: 'every commit in this repo''s history parses as a Conventional Commit'
+evidence: 'echo $(git log --format=%s $ASH_RANGE | grep -cE ...) $(git log ...)'
+```
+
+`evidence:` is a shell one-liner printing `<conforming> <total>`. It is run
+twice — once with `ASH_WINDOW=20` and `ASH_RANGE=-n 20`, once with both empty
+for all time — so a regression shows up while it is still one commit old
+instead of being buried under a hundred conformant ones. A skill that produces
+no artifact says `produces: none` with `kind: reference`; `pinst` is the only
+one, and that exemption is written down rather than inferred from silence.
+
+The measure lives in the skill because the skill is the only thing that knows
+what it is for. Put it in the script and the two drift — which is the failure
+this whole audit exists to catch. It is also code: `evidence:` is executed, so
+review it like any other line in `qc`.
+
+**A low rate is a conversation, not a failure.** The only findings here are
+structural — `skill.no-contract` when a skill says nothing about what it
+produces, `skill.evidence-failed` when the measure would not run. A measure
+that cannot run reports `unmeasured` and never `0`, because a zero meaning
+"offline" is worse than a gap that admits it.
+
+Read the `issues` column against the rate. A skill at 100% conformance with
+six issues naming it is producing perfectly-shaped artifacts by a procedure
+that keeps going wrong, and it is the most interesting row in the table.
+
+### Invocation counts are a second opinion
+
+```sh
+scripts/ash.sh skills --transcripts ~/.claude/projects
+```
+
+Off unless asked for, and nothing in `qc` may ever depend on it. With the flag
+the report gains `fired` and `last seen`, counted from a runtime's own session
+transcripts — **two** record shapes, because a skill has two front doors: a
+`Skill` tool call carrying `input.skill`, and a slash command, which appears
+as a `<command-name>` marker in user content. Counting only the first misses
+`/cc` and `/pr` entirely.
+
+These counts do not prove a skill was followed, and their absence does not
+prove it was not. The evidence is blunt: `plan-implement` recorded **zero**
+invocations of either shape before 2026-09-20 while having written a complete
+run log — `run_start` through `run_end`, 18 `task_done` events — on the 19th.
+Grading by invocation would have called the busiest lifecycle skill dead. So
+they decorate the table; the artifact rates decide.
+
+Everything in this path fails soft. An unreadable directory, a malformed line
+or an unrecognised schema degrades to `unmeasured` and never changes the exit
+code, because it reads an undocumented format owned by someone else's release
+cycle. And it emits **derived counts only** — a skill name is printed only
+after matching a directory in `.agents/skills`, so nothing typed into a
+conversation can reach the output, and nothing here writes into `.ash/`.
+
+## The review cadence
+
+```sh
+just review        # invariants, the per-skill report, the gaps, the agenda
+/distil            # …and act on what it says
+```
+
+Run it when a plan closes, and whenever `qc` reports `learnings.untriaged`.
+That is the whole schedule, and it is deliberate: **the corpus is the clock.**
+
+A wall-clock cadence — a cron, a scheduled agent, a weekly reminder — fires
+into silence on a quiet week and misses four plans on a busy one, and it lives
+in one person's account rather than in the repo, so a fresh clone does not
+inherit it. An `learnings.untriaged` finding fires exactly when there is
+something to distil, stays until someone decides, and everyone who runs `qc`
+sees it. If a clock is ever wanted anyway, it is one recipe — but it would be
+a second trigger for something that already has one.
+
+The agenda's last section is the part no exit code can settle: which recurring
+work has no skill to do it. It is reported and never enforced, because a
+missing skill is a judgement about what is worth automating and `qc` should
+not fail over an opinion.
+
+**Every recurring question can be told it has been answered.** A report that
+asks something on every run, with no way to record the reply, decays into
+noise at exactly the rate people read it. There are three markers, all the
+same shape — one line, permanent, and a normal outcome rather than a failure
+to think:
+
+| Marker | Written on | Silences |
+|--------|-----------|----------|
+| `**Distilled:** declined — <reason>` | an issue | `learnings.untriaged` |
+| `**Gap:** answered — <reason>` | an issue | the gap report |
+| `**Mechanize:** declined — <reason>` | a lesson | "recurring, unenforced" |
+
+They answer different questions about the same record — *has anyone distilled
+this*, *should a skill own this*, *should a check enforce this* — so an issue
+can carry two of them with different reasons. Most recorded issues are domain
+surprises: a toolchain, an API, a permission, a GitHub object's lifecycle. No
+instruction would have prevented them, `LEARNINGS.md` is already the right
+home, and saying so once should be enough.
 
 ## Delegating
 

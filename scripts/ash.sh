@@ -4,6 +4,8 @@
 #
 #   scripts/ash.sh index [--check]   regenerate (or verify) .ash/INDEX.md
 #   scripts/ash.sh check             validate every corpus invariant
+#   scripts/ash.sh skills            grade each skill against its own contract
+#     ... --transcripts DIR          also count invocations (opt-in, off by default)
 #   scripts/ash.sh new-id [DATE]     mint a plan id: <yymmdd>-<6 letters>
 #
 # Why this exists: the skills state a dozen invariants in prose ("the id must
@@ -19,9 +21,20 @@ ASH_DIR="${ASH_DIR:-.ash}"
 PLANS_DIR="$ASH_DIR/plans"
 INDEX_FILE="$ASH_DIR/INDEX.md"
 LOG_FILE="$ASH_DIR/CHANGELOG.log"
+LEARNINGS_FILE="$ASH_DIR/LEARNINGS.md"
 JSON=0
 
 FIND_ID=(); FIND_SEV=(); FIND_MSG=(); FIND_REM=()
+
+# Spliced into the JSON envelope by report(), for subcommands that carry a
+# payload as well as findings. Must end in a comma when set.
+EXTRA_JSON=""
+
+SKILLS_DIR="${SKILLS_DIR:-.agents/skills}"
+WIRED_DIR="${WIRED_DIR:-.claude/skills}"
+SKILLS_WINDOW="${ASH_SKILLS_WINDOW:-20}"
+COMMANDS_DIR="${COMMANDS_DIR:-.claude/commands}"
+TRANSCRIPTS=""
 
 finding() { FIND_ID+=("$1"); FIND_SEV+=("$2"); FIND_MSG+=("$3"); FIND_REM+=("$4"); }
 
@@ -48,6 +61,19 @@ fm() { fm_block "$1" | awk -v k="$2" -F': *' '$1==k {sub(/^[^:]*: */,""); print;
 fm_raw() { fm_block "$1" | awk -v k="$2" '$0 ~ "^"k":" {sub(/^[^:]*:[[:space:]]*/,""); print; exit}'; }
 
 unquote() { local v="$1"; v="${v%\"}"; v="${v#\"}"; printf '%s' "$v"; }
+
+# Frontmatter values that hold shell commands are single-quoted YAML scalars,
+# where an embedded quote is written twice. Double quotes would not do: the
+# commands are full of backslashes, and YAML treats those as escapes inside
+# double quotes but as literals inside single ones.
+sq_unquote() {
+  local v="$1"
+  case "$v" in
+    "'"*"'") v="${v#\'}"; v="${v%\'}"; v="$(printf '%s' "$v" | sed "s/''/'/g")" ;;
+    *) v="$(unquote "$v")" ;;
+  esac
+  printf '%s' "$v"
+}
 
 # `[a, b, c]` -> `a, b, c`
 delist() { local v="$1"; v="${v#[}"; v="${v%]}"; printf '%s' "$v"; }
@@ -341,11 +367,193 @@ check_learnings() {
     finding "plan.learnings-missing.$name" warning \
       "$name is Done but has no learnings.md" \
       "run the plan-learn skill for $name"
-  elif [ -d "$d/logs" ] && [ -n "$(find "$d/logs" -type f -print -quit)" ]; then
+  elif [ -d "$d/logs" ] && grep -qh '"event":"run_end"' "$d"/logs/*.log 2>/dev/null; then
     finding "plan.learnings-missing.$name" info \
-      "$name has implementation logs but no learnings.md yet" \
-      "run the plan-learn skill for $name when the run ends"
+      "$name has a finished run but no learnings.md yet" \
+      "run the plan-learn skill for $name"
   fi
+}
+
+# --- distillation -----------------------------------------------------------
+# A plan closing is what starts the clock on distilling what it taught. These
+# two checks are the clock: an issue nobody has decided about keeps `qc` red,
+# and a lesson claiming to be enforced has to name a check that exists.
+#
+# Deliberately no wall-clock schedule. The trigger is a plan closing, not a
+# Tuesday — a weekly job fires into silence on a quiet week, misses four plans
+# on a busy one, and lives in one person's account rather than in the repo.
+
+# Every (plan id, issue id) pair referenced from a lesson's `Seen in:` line.
+# The line is free prose and often wraps, so the whole tail of the block is
+# buffered and both kinds of id are pulled out of it. A buffer naming two
+# plans yields the cross-product, which can only *silence* a finding — the
+# safe direction, given a check that cries wolf is a check that gets deleted.
+#
+# No `{n}` intervals in the patterns: mawk has not always supported them, and
+# these scripts are meant to run on a machine that has just been bootstrapped.
+seen_pairs() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush(   tmp, n, m, i, j) {
+      if (buf == "") return
+      n = 0; m = 0
+      tmp = buf
+      while (match(tmp, /[0-9][0-9][0-9][0-9][0-9][0-9]-[a-z][a-z][a-z][a-z][a-z][a-z]/)) {
+        plans[++n] = substr(tmp, RSTART, RLENGTH)
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      tmp = buf
+      while (match(tmp, /ISSUE-[0-9]+/)) {
+        issues[++m] = substr(tmp, RSTART, RLENGTH)
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      for (i = 1; i <= n; i++) for (j = 1; j <= m; j++) print plans[i], issues[j]
+      buf = ""; delete plans; delete issues
+    }
+    /^### LESSON-/ { flush(); inseen = 0 }
+    /^\*\*Seen in:\*\*/ { inseen = 1 }
+    inseen { buf = buf " " $0 }
+    /^[[:space:]]*$/ { if (inseen) { flush(); inseen = 0 } }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
+}
+
+# "ISSUE-00N <skill|-> open|answered" for one learnings.md.
+#
+# `answered` means someone has already asked whether a skill should own this
+# issue and written down the answer, as `**Gap:** answered — <reason>`. The
+# gap report is a recurring question, so it needs a way to be told it has been
+# settled — otherwise it raises the same item on every review until people
+# stop reading the section, which is the decay this whole audit exists to
+# prevent. Same shape as `**Distilled:** declined` for triage: one line,
+# permanent, and a normal outcome rather than a failure to think.
+issue_skills() {
+  [ -f "$1" ] || return 0
+  awk '
+    function flush() {
+      if (cur != "") print cur, (sk == "" ? "-" : sk), (ans ? "answered" : "open")
+      cur = ""; sk = ""; ans = 0
+    }
+    /^### ISSUE-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Skill:\*\*/ { sk = $2 }
+    /^\*\*Gap:\*\*[[:space:]]*answered/ { if (cur != "") ans = 1 }
+    /^## / { flush() }
+    END { flush() }
+  ' "$1"
+}
+
+# "ISSUE-00N open|declined" for one learnings.md.
+issue_states() {
+  [ -f "$1" ] || return 0
+  awk '
+    function flush() { if (cur != "") print cur, (dec ? "declined" : "open"); cur = ""; dec = 0 }
+    /^### ISSUE-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Distilled:\*\*[[:space:]]*declined/ { if (cur != "") dec = 1 }
+    /^## / { flush() }
+    END { flush() }
+  ' "$1"
+}
+
+# "<plan dir name> <ISSUE-NNN>" for every issue nobody has decided about.
+# Computed once and read twice — by `check`, which turns each into a finding,
+# and by the review agenda, which counts them.
+untriaged_issues() {
+  local pairs d name rest id lf state issue st
+  pairs="$(seen_pairs)"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+    lf="$d/learnings.md"
+    [ -f "$lf" ] || continue
+    rest="${name#*-}"; id="${name%%-*}-${rest%%-*}"
+    while IFS= read -r state; do
+      [ -n "$state" ] || continue
+      issue="${state%% *}"; st="${state##* }"
+      [ "$st" = "open" ] || continue
+      printf '%s\n' "$pairs" | grep -qx "$id $issue" && continue
+      printf '%s %s\n' "$name" "$issue"
+    done <<< "$(issue_states "$lf")"
+  done <<< "$(plan_dirs)"
+}
+
+check_distillation() {
+  local row name issue
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    name="${row%% *}"; issue="${row##* }"
+    finding "learnings.untriaged.$name.$issue" warning \
+      "$PLANS_DIR/$name/learnings.md records $issue but no lesson in $LEARNINGS_FILE references it" \
+      "run the plan-learn skill: promote it, add it to an existing lesson'\''s 'Seen in:' line, or write '\''**Distilled:** declined — <reason>'\'' on the issue"
+  done <<< "$(untriaged_issues)"
+}
+
+# A lesson may be mechanized by either checker — ash.sh owns the corpus
+# invariants, agents-wire.sh owns the skill projection — so the id is looked
+# for across scripts/ rather than in this file alone.
+check_lessons() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  local line lesson st ck
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    lesson="$(printf '%s' "$line" | cut -d" " -f1)"
+    st="$(printf '%s' "$line" | cut -d" " -f2)"
+    ck="$(printf '%s' "$line" | cut -d" " -f3)"
+    [ "$st" = "mechanized" ] || continue
+    if [ -z "$ck" ] || [ "$ck" = "-" ]; then
+      finding "lesson.unenforced.$lesson" error \
+        "$LEARNINGS_FILE marks $lesson mechanized but names no '\''**Check:**'\'' finding id" \
+        "add the finding id that enforces it, or set '\''**Status:** prose'\''"
+      continue
+    fi
+    grep -rqF "$ck" scripts/ 2>/dev/null && continue
+    finding "lesson.unenforced.$lesson" error \
+      "$LEARNINGS_FILE says $lesson is mechanized by '\''$ck'\'', which no script under scripts/ emits" \
+      "point '\''**Check:**'\'' at a finding id that exists, or set '\''**Status:** prose'\''"
+  done <<< "$(lesson_states)"
+}
+
+# "LESSON-00N <plan id>" for every plan a lesson's `Seen in:` line cites.
+lesson_plan_pairs() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush(   tmp, seen) {
+      if (cur == "" || buf == "") { buf = ""; return }
+      tmp = buf
+      while (match(tmp, /[0-9][0-9][0-9][0-9][0-9][0-9]-[a-z][a-z][a-z][a-z][a-z][a-z]/)) {
+        p = substr(tmp, RSTART, RLENGTH)
+        if (!((cur SUBSEP p) in seen)) { seen[cur SUBSEP p] = 1; print cur, p }
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      buf = ""
+    }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); inseen = 0; next }
+    /^\*\*Seen in:\*\*/ { inseen = 1 }
+    inseen { buf = buf " " $0 }
+    /^[[:space:]]*$/ { if (inseen) { flush(); inseen = 0 } }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
+}
+
+# "LESSON-00N status check-or-dash" for every lesson.
+lesson_states() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush() { if (cur != "") print cur, (st == "" ? "-" : st), (ck == "" ? "-" : ck); cur = ""; st = ""; ck = "" }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Status:\*\*/ { st = $2 }
+    /^\*\*Check:\*\*/ { ck = $2 }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
+}
+
+count_lessons() { lesson_states | grep -c . || true; }
+count_issues() {
+  local n=0 f
+  for f in "$PLANS_DIR"/*/learnings.md; do
+    [ -f "$f" ] || continue
+    n=$((n + $(issue_states "$f" | grep -c . || true)))
+  done
+  printf '%s' "$n"
 }
 
 # --- index ------------------------------------------------------------------
@@ -374,6 +582,358 @@ render_index() {
   done <<< "$(plan_dirs)"
 }
 
+# --- the skill audit --------------------------------------------------------
+# Skills are graded on the artifacts they leave in the repo, never on whether
+# anyone invoked them. A skill declares in its own frontmatter what it
+# produces and the command that measures it, because the skill is the only
+# place that knows what it is for — put the measure in this script and the two
+# drift, which is the failure this whole audit exists to catch.
+#
+# Nothing in here belongs in `check`. These are rates and tallies, and
+# report() exits 3 on a finding of any severity, so a number that got
+# interesting would fail `just qc`. Findings here are structural only: a skill
+# with no contract, or a measure that would not run.
+
+# How many recorded issues name each skill, from the `**Skill:**` line that
+# plan-learnings writes. Prints "name count" per skill that appears.
+skill_tally() {
+  local f
+  for f in "$PLANS_DIR"/*/learnings.md; do
+    [ -f "$f" ] || continue
+    awk '/^\*\*Skill:\*\*/ { print $2 }' "$f"
+  done | sort | uniq -c | awk '{ print $2, $1 }'
+}
+
+# Runs one `evidence:` command and echoes "<conforming> <total>", or nothing
+# when it could not be measured. ASH_RANGE is git-ready ("-n 20" or empty) and
+# ASH_WINDOW is the bare number, so a command can use whichever fits it.
+run_evidence() {
+  local cmd="$1" window="$2" out rc
+  local runner=(sh -c "$cmd")
+  command -v timeout >/dev/null 2>&1 && runner=(timeout 30 sh -c "$cmd")
+  set +e
+  out="$(ASH_WINDOW="$window" ASH_RANGE="${window:+-n $window}" "${runner[@]}" 2>/dev/null)"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || return 1
+  printf '%s' "$out" | grep -qE '^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$' || return 1
+  printf '%s' "$out" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'
+}
+
+pct() {
+  local n="$1" d="$2"
+  [ "$d" -gt 0 ] 2>/dev/null || { printf 'n/a'; return; }
+  printf '%d%%' $(( n * 100 / d ))
+}
+
+# --- invocation evidence (opt-in) -------------------------------------------
+# Counts how often each skill was actually invoked, from a runtime's own
+# session transcripts. Off unless --transcripts names a directory, and never
+# depended on by anything in `qc`: the path reads an undocumented format owned
+# by someone else's release cycle, outside the repo, on one vendor's machine.
+#
+# It is a second opinion, never the system of record. Counting invocations
+# alone would have graded plan-implement as dead — it shows zero invocations
+# across every transcript here while having written a complete run log.
+#
+# Two record shapes, because a skill has two front doors: a `Skill` tool call
+# carrying `input.skill`, and a slash command, which appears as a
+# <command-name> marker in user content. Counting only the first misses /cc
+# and /pr entirely.
+#
+# SEC-001: the only strings this prints are skill names it already knew and
+# ISO dates. A name is emitted only after matching the set of directories in
+# .agents/skills, so nothing typed into a conversation can reach stdout, and
+# nothing here writes to .ash/.
+transcript_counts() {
+  local dir="$1"
+  [ -d "$dir" ] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "$dir" "$SKILLS_DIR" "$COMMANDS_DIR" <<'PYEOF' 2>/dev/null
+import collections, glob, json, os, re, sys
+
+root, skills_dir, cmds_dir = sys.argv[1:4]
+try:
+    known = {d for d in os.listdir(skills_dir)
+             if os.path.isdir(os.path.join(skills_dir, d))}
+except OSError:
+    sys.exit(1)
+
+# A command file names its skill by the path it tells the agent to read.
+cmd_map = {}
+for f in glob.glob(os.path.join(cmds_dir, "*.md")):
+    try:
+        text = open(f, errors="replace").read()
+    except OSError:
+        continue
+    m = re.search(r"\.agents/skills/([a-z0-9-]+)/", text)
+    if m and m.group(1) in known:
+        cmd_map[os.path.basename(f)[:-3]] = m.group(1)
+
+MARKER = re.compile(r"<command-name>/?([a-z0-9:_-]+)</command-name>")
+counts, last = collections.Counter(), {}
+
+def bump(skill, day):
+    counts[skill] += 1
+    if day and (skill not in last or day > last[skill]):
+        last[skill] = day
+
+def scan_text(text, day):
+    for name in MARKER.findall(text or ""):
+        if name in cmd_map:
+            bump(cmd_map[name], day)
+
+for path in glob.glob(os.path.join(root, "*", "*.jsonl")):
+    try:
+        fh = open(path, errors="replace")
+    except OSError:
+        continue
+    with fh:
+        for line in fh:
+            if "Skill" not in line and "command-name" not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(rec, dict):
+                continue
+            day = (rec.get("timestamp") or "")[:10]
+            content = (rec.get("message") or {}).get("content")
+            if isinstance(content, str):
+                scan_text(content, day)
+            elif isinstance(content, list):
+                for c in content:
+                    if not isinstance(c, dict):
+                        continue
+                    if c.get("type") == "tool_use" and c.get("name") == "Skill":
+                        skill = (c.get("input") or {}).get("skill")
+                        if skill in known:
+                            bump(skill, day)
+                    elif c.get("type") == "text":
+                        scan_text(c.get("text"), day)
+
+for skill in sorted(counts):
+    print(skill, counts[skill], last.get(skill, "-"))
+PYEOF
+}
+
+cmd_skills() {
+  local rows_json="" sep="" dir name file produces evidence kind wired
+  local win all wn wt an at
+  local counts="" have_counts=0 regressions=""
+
+  if [ -n "$TRANSCRIPTS" ]; then
+    if counts="$(transcript_counts "$TRANSCRIPTS")"; then
+      have_counts=1
+    else
+      finding "skills.transcripts-unreadable" warning \
+        "could not read invocation counts from $TRANSCRIPTS" \
+        "check the path, or drop --transcripts — nothing else depends on it"
+      have_counts=2
+    fi
+  fi
+
+  if [ ! -d "$SKILLS_DIR" ]; then
+    finding "skills.missing" error "$SKILLS_DIR does not exist" \
+      "run this from the repo root"
+    return
+  fi
+
+  if [ "$JSON" -ne 1 ]; then
+    if [ "$have_counts" -eq 0 ]; then
+      printf '%-22s %-6s %-22s %-22s %s\n' \
+        "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues"
+    else
+      printf '%-22s %-6s %-22s %-22s %-7s %-6s %s\n' \
+        "skill" "wired" "conforming (last $SKILLS_WINDOW)" "all-time" "issues" "fired" "last seen"
+    fi
+  fi
+
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    name="$(basename "$dir")"
+    file="$dir/SKILL.md"
+    [ -f "$file" ] || continue
+
+    produces="$(sq_unquote "$(fm_raw "$file" produces)")"
+    evidence="$(sq_unquote "$(fm_raw "$file" evidence)")"
+    kind="$(sq_unquote "$(fm_raw "$file" kind)")"
+    wired="no"; [ -e "$WIRED_DIR/$name" ] && wired="yes"
+
+    local tally
+    tally="$(skill_tally | awk -v n="$name" '$1 == n { print $2 }')"
+    [ -n "$tally" ] || tally=0
+
+    if [ -z "$produces" ]; then
+      finding "skill.no-contract.$name" warning \
+        "$file declares no 'produces:' — nothing says what this skill is supposed to leave behind" \
+        "add 'produces:' and 'evidence:' to its frontmatter, or 'kind: reference' if it produces nothing"
+      win="no contract"; all="no contract"; wn=0; wt=0; an=0; at=0
+    elif [ "$produces" = "none" ] || [ "$kind" = "reference" ]; then
+      win="reference (exempt)"; all="-"; wn=0; wt=0; an=0; at=0
+    elif [ -z "$evidence" ]; then
+      finding "skill.no-contract.$name" warning \
+        "$file says what it produces but gives no 'evidence:' command to measure it" \
+        "add an 'evidence:' one-liner printing '<conforming> <total>'"
+      win="no measure"; all="no measure"; wn=0; wt=0; an=0; at=0
+    else
+      local r
+      if r="$(run_evidence "$evidence" "$SKILLS_WINDOW")"; then
+        wn="${r%% *}"; wt="${r##* }"; win="$wn/$wt $(pct "$wn" "$wt")"
+      else
+        finding "skill.evidence-failed.$name" warning \
+          "the 'evidence:' command for $name did not run, or printed something other than two integers" \
+          "run the 'evidence:' one-liner in $file by hand and see what it prints"
+        wn=0; wt=0; win="unmeasured"
+      fi
+      if r="$(run_evidence "$evidence" "")"; then
+        an="${r%% *}"; at="${r##* }"; all="$an/$at $(pct "$an" "$at")"
+        if [ "$wt" -gt 0 ] && [ "$at" -gt 0 ] && [ $(( wn * 100 / wt )) -lt $(( an * 100 / at )) ]; then
+          regressions="$regressions${regressions:+, }$name"
+        fi
+      else
+        an=0; at=0; all="unmeasured"
+      fi
+    fi
+
+    local fired="-" seen="-"
+    if [ "$have_counts" -eq 1 ]; then
+      fired="$(printf '%s\n' "$counts" | awk -v n="$name" '$1 == n { print $2 }')"
+      seen="$(printf '%s\n' "$counts" | awk -v n="$name" '$1 == n { print $3 }')"
+      [ -n "$fired" ] || { fired=0; seen="never"; }
+    elif [ "$have_counts" -eq 2 ]; then
+      fired="unmeasured"; seen="-"
+    fi
+
+    if [ "$JSON" -ne 1 ]; then
+      if [ "$have_counts" -eq 0 ]; then
+        printf '%-22s %-6s %-22s %-22s %s\n' "$name" "$wired" "$win" "$all" "$tally"
+      else
+        printf '%-22s %-6s %-22s %-22s %-7s %-6s %s\n' \
+          "$name" "$wired" "$win" "$all" "$tally" "$fired" "$seen"
+      fi
+    fi
+
+    local inv_json=""
+    [ "$have_counts" -eq 0 ] || inv_json=",\"invocations\":\"$(jesc "$fired")\",\"last_invoked\":\"$(jesc "$seen")\""
+
+    rows_json="$rows_json$sep{\"name\":\"$(jesc "$name")\",\"wired\":$([ "$wired" = yes ] && echo true || echo false),\"produces\":\"$(jesc "$produces")\",\"windowed\":{\"conforming\":$wn,\"total\":$wt,\"label\":\"$(jesc "$win")\"},\"all_time\":{\"conforming\":$an,\"total\":$at,\"label\":\"$(jesc "$all")\"},\"issues\":$tally$inv_json}"
+    sep=","
+  done <<< "$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)"
+
+  EXTRA_JSON="\"skills\":[$rows_json],"
+
+  report_gaps "$regressions"
+}
+
+# --- gaps -------------------------------------------------------------------
+# The last question: which work keeps being done with no skill to do it.
+#
+# Reported, never enforced. A missing skill is a judgement about what is worth
+# automating, and a finding would mean `qc` failing over an opinion. The
+# numbers order the conversation; they do not settle it.
+
+# "<area> <plan> <ISSUE-NNN>" for every issue attributed to no skill. An issue
+# counts once per area its plan declares, so an area accumulates everything
+# unowned that touched it — the useful reading, at the cost of one issue
+# appearing under two headings.
+gap_rows() {
+  local d name areas a row issue sk state
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+    [ -f "$d/learnings.md" ] || continue
+    [ -f "$d/README.md" ] || continue
+    areas="$(delist "$(fm_raw "$d/README.md" areas)")"
+    while IFS= read -r row; do
+      [ -n "$row" ] || continue
+      issue="$(printf '%s' "$row" | cut -d" " -f1)"
+      sk="$(printf '%s' "$row" | cut -d" " -f2)"
+      state="$(printf '%s' "$row" | cut -d" " -f3)"
+      [ "$sk" = "none" ] || continue
+      [ "$state" = "open" ] || continue
+      for a in ${areas//,/ }; do
+        [ -n "$a" ] && printf '%s %s %s\n' "$a" "$name" "$issue"
+      done
+    done <<< "$(issue_skills "$d/learnings.md")"
+  done <<< "$(plan_dirs)"
+}
+
+report_gaps() {
+  local regressions="$1"
+  local gaps agenda="" n untriaged_n recurring gap_json="" sep=""
+
+  gaps="$(gap_rows | sort | awk '
+    { area = $1; issues[area] = issues[area] (issues[area] == "" ? "" : ",") $3; n[area]++ }
+    END { for (a in n) print n[a], a, issues[a] }
+  ' | sort -rn)"
+
+  # A lesson two different plans have hit, still enforced by nothing. Phase 2
+  # deliberately left this unenforceable: "several" is a threshold nobody can
+  # justify, so it is listed rather than failed on — and, like the gap
+  # section, it can be told the question has been settled, with
+  # `**Mechanize:** declined — <reason>` on the lesson. Some lessons are
+  # judgement that no exit code can carry, and saying so once should be
+  # enough.
+  local declined
+  declined="$(awk '
+    function flush() { if (cur != "" && dec) print cur; cur = ""; dec = 0 }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Mechanize:\*\*[[:space:]]*declined/ { if (cur != "") dec = 1 }
+    END { flush() }
+  ' "$LEARNINGS_FILE" 2>/dev/null)"
+
+  recurring="$(lesson_plan_pairs | awk '{ c[$1]++ } END { for (l in c) if (c[l] > 1) print l }' | sort | while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    printf '%s\n' "$declined" | grep -qx "$l" && continue
+    lesson_states | awk -v l="$l" '$1 == l && $2 == "prose" { print $1 }'
+  done)"
+
+  untriaged_n="$(untriaged_issues | grep -c . || true)"
+
+  if [ "$JSON" -ne 1 ]; then
+    printf '\n## Gaps — recorded issues no skill owns\n'
+    if [ -z "$gaps" ]; then
+      printf '  none\n'
+    else
+      printf '%s\n' "$gaps" | while IFS=" " read -r count area ids; do
+        printf '  %-14s %s issue(s)  %s\n' "$area" "$count" "$ids"
+      done
+    fi
+  fi
+
+  while IFS=" " read -r count area ids; do
+    [ -n "$area" ] || continue
+    gap_json="$gap_json$sep{\"area\":\"$(jesc "$area")\",\"issues\":$count,\"ids\":\"$(jesc "$ids")\"}"
+    sep=","
+  done <<< "$gaps"
+
+  [ "$untriaged_n" -eq 0 ] || agenda="$agenda$untriaged_n issue(s) waiting on a decision — /distil, or scripts/ash.sh check to list them
+"
+  [ -z "$regressions" ] || agenda="$agenda""windowed rate below all-time: $regressions — look at what changed recently
+"
+  [ -z "$gaps" ] || agenda="$agenda$(printf '%s\n' "$gaps" | head -1 | awk '{ print $2 " has " $1 " issue(s) no skill owns — is there a skill missing here?" }')
+"
+  [ -z "$recurring" ] || agenda="$agenda""recurring and still unenforced: $(printf '%s' "$recurring" | tr '\n' ' ') — candidates for a check
+"
+
+  if [ "$JSON" -ne 1 ]; then
+    printf '\n## Agenda\n'
+    if [ -z "$agenda" ]; then
+      printf '  nothing to act on\n'
+    else
+      printf '%s' "$agenda" | sed 's/^/  - /'
+    fi
+  fi
+
+  n="$(printf '%s' "$agenda" | grep -c . || true)"
+  EXTRA_JSON="$EXTRA_JSON\"gaps\":[$gap_json],\"agenda_items\":$n,"
+  [ "$n" -eq 0 ] || finding "review.agenda" info \
+    "$n item(s) on the review agenda" \
+    "run /distil, or read the Agenda section above"
+}
+
 # --- reporting --------------------------------------------------------------
 
 report() {
@@ -398,8 +958,10 @@ report() {
         "$(jesc "${FIND_MSG[$i]}")" "$(jesc "${FIND_REM[$i]}")"
       sep=","
     done
-    printf '],"errors":[],"summary":{"plans":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
-      "$(plan_dirs | grep -c . || true)" "$total" "$errors" "$warnings" "$infos"
+    printf '],%s"errors":[],"summary":{"plans":%s,"lessons":%s,"issues":%s,"findings":%s,"error":%s,"warning":%s,"info":%s}}\n' \
+      "$EXTRA_JSON" \
+      "$(plan_dirs | grep -c . || true)" "$(count_lessons)" "$(count_issues)" \
+      "$total" "$errors" "$warnings" "$infos"
   else
     for i in $(find_indices); do
       printf '%-7s %s\n         %s\n         fix: %s\n' \
@@ -422,22 +984,31 @@ cmd="${1:-}"
 [ $# -eq 0 ] || shift
 check_only=0
 positional=""
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --json) JSON=1 ;;
     --check) check_only=1 ;;
+    --transcripts)
+      shift
+      [ $# -gt 0 ] || { printf 'ash: --transcripts needs a directory\n' >&2; usage; }
+      TRANSCRIPTS="$1"
+      ;;
+    --transcripts=*) TRANSCRIPTS="${1#--transcripts=}" ;;
     -h|--help) usage ;;
-    --*) printf 'ash: unknown flag %s\n' "$arg" >&2; usage ;;
+    --*) printf 'ash: unknown flag %s\n' "$1" >&2; usage ;;
     *)
-      [ -z "$positional" ] || { printf 'ash: unexpected argument %s\n' "$arg" >&2; usage; }
-      positional="$arg"
+      [ -z "$positional" ] || { printf 'ash: unexpected argument %s\n' "$1" >&2; usage; }
+      positional="$1"
       ;;
   esac
+  shift
 done
 
 case "$cmd" in
   check)
     check_corpus
+    check_lessons
+    check_distillation
     # A stale index is a corpus problem like any other, so `check` catches it
     # without the caller having to remember a second command.
     if [ -f "$INDEX_FILE" ]; then
@@ -451,6 +1022,10 @@ case "$cmd" in
         "run: scripts/ash.sh index"
     fi
     report check "corpus clean ($(plan_dirs | grep -c . || true) plans)"
+    ;;
+  skills)
+    cmd_skills
+    report skills "every skill has a contract"
     ;;
   index)
     if [ "$check_only" -eq 1 ]; then

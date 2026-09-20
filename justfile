@@ -102,3 +102,18 @@ index:
 harness:
     scripts/agents-wire.sh --check
     scripts/ash.sh check
+
+# The review pass. Deliberately NOT in `qc`: `skills` reports rates and
+# tallies, and report() exits 3 on a finding of any severity, so a number
+# that got interesting would fail the build and the check would get deleted.
+# Invariants gate commits; measurements start conversations.
+#
+# Both halves always run — a failing `check` must not hide the report — and
+# the worst exit code wins, so 3 still means "there is something to act on".
+[doc("The harness review: corpus invariants, then the graded per-skill report")]
+review:
+    #!/usr/bin/env bash
+    rc=0
+    scripts/ash.sh check || rc=$?
+    scripts/ash.sh skills || rc=$?
+    exit $rc
