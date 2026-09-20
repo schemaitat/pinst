@@ -168,7 +168,11 @@ fn report(
     )
 }
 
-/// One row of the skill report, as `--json` carries it.
+/// One row of the skill report, carried in `summary.skills` by `--json`.
+///
+/// Not in `items`: that slot holds findings for every command in this family,
+/// so an agent branching on exit code 3 finds the reason in the same place
+/// each time.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct SkillReportItem {
     pub name: String,
@@ -273,11 +277,7 @@ fn skills(ctx: &Ctx, corpus: &Corpus, args: &HarnessSkillsArgs) -> Result<ExitCo
     } else {
         Status::Issues
     };
-    let mut summary = check::summary(corpus, &report.findings);
-    if let Some(map) = summary.as_object_mut() {
-        map.insert("gaps".to_string(), serde_json::to_value(&gaps)?);
-        map.insert("agenda_items".to_string(), report.agenda.len().into());
-    }
+    let summary = skills_summary(corpus, &report, &items, &gaps)?;
 
     if !ctx.json && report.findings.is_empty() {
         ctx.note("harness: every skill has a contract");
@@ -286,8 +286,14 @@ fn skills(ctx: &Ctx, corpus: &Corpus, args: &HarnessSkillsArgs) -> Result<ExitCo
         print_findings(&report.findings);
     }
 
+    // `items` is findings, here as in `check` and as in `pinst doctor` — the
+    // exit code says there is something to act on, so the thing to act on has
+    // to be in the payload. Putting the skill rows there instead left a
+    // `status: issues` envelope whose reason appeared nowhere in it, which is
+    // what the scheduled distillation found when it tried to read this.
+    // The report itself is `summary.skills`, beside the counts it belongs to.
     ctx.finish(
-        Envelope::new("harness skills", status, items)
+        Envelope::new("harness skills", status, report.findings)
             .dry_run(ctx.dry_run)
             .summary(summary),
     )
@@ -306,6 +312,28 @@ fn print_findings(findings: &[Finding]) {
         println!("{mark} {} {}", finding.id, finding.message);
         println!("         fix: {}", finding.remediation);
     }
+}
+
+/// The `summary` object `skills --json` carries.
+///
+/// A free function so the envelope's shape can be tested. It was not, and a
+/// `status: issues` envelope shipped whose findings appeared nowhere in it —
+/// caught only when the scheduled distillation tried to read
+/// `agenda_items` out of it.
+fn skills_summary(
+    corpus: &Corpus,
+    report: &skills::Report,
+    rows: &[SkillReportItem],
+    gaps: &[GapItem],
+) -> Result<serde_json::Value> {
+    let mut summary = check::summary(corpus, &report.findings);
+    if let Some(map) = summary.as_object_mut() {
+        map.insert("skills".to_string(), serde_json::to_value(rows)?);
+        map.insert("gaps".to_string(), serde_json::to_value(gaps)?);
+        map.insert("agenda_items".to_string(), report.agenda.len().into());
+        map.insert("agenda".to_string(), serde_json::to_value(&report.agenda)?);
+    }
+    Ok(summary)
 }
 
 fn render_table(report: &skills::Report) {
@@ -377,5 +405,71 @@ fn render_gaps(report: &skills::Report) {
         for item in &report.agenda {
             println!("  - {item}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::harness::root::CorpusRoot;
+
+    /// The envelope contract for `skills`, which nothing checked until a
+    /// consumer arrived and could not read it.
+    ///
+    /// Two properties matter and neither is obvious from the call site:
+    /// `items` carries the findings, so an exit code of 3 always has a
+    /// reason in the payload; and the counts a caller branches on sit under
+    /// `summary`, where `pinst schema output` says command-specific counts
+    /// live.
+    #[test]
+    fn the_skills_envelope_puts_findings_in_items_and_counts_in_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".ash/plans")).unwrap();
+        let skill = dir.path().join(".agents/skills/silent");
+        std::fs::create_dir_all(&skill).unwrap();
+        // No `produces:`, so this skill has no contract and is a finding.
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: silent\ndescription: x\n---\n",
+        )
+        .unwrap();
+
+        let corpus = Corpus::load(CorpusRoot::new(dir.path())).unwrap();
+        let report = skills::run(
+            &corpus,
+            &skills::Options {
+                run_evidence: false,
+                ..skills::Options::default()
+            },
+        );
+        let rows: Vec<SkillReportItem> = report
+            .skills
+            .iter()
+            .map(|row| SkillReportItem {
+                name: row.name.clone(),
+                wired: row.wired,
+                produces: row.produces.clone(),
+                windowed: (&row.windowed).into(),
+                all_time: (&row.all_time).into(),
+                issues: row.issues,
+                invocations: row.invocations,
+                last_invoked: row.last_invoked.clone(),
+            })
+            .collect();
+
+        let summary = skills_summary(&corpus, &report, &rows, &[]).unwrap();
+        let envelope = Envelope::new("harness skills", Status::Issues, report.findings.clone())
+            .summary(summary);
+        let value = serde_json::to_value(&envelope).unwrap();
+
+        // The reason for the exit code is in the payload.
+        assert_eq!(value["status"], "issues");
+        assert_eq!(value["items"][0]["id"], "skill.no-contract.silent");
+        assert!(value["items"][0]["remediation"].as_str().is_some());
+
+        // ...and the report and its counts are where a caller looks for them.
+        assert_eq!(value["summary"]["skills"][0]["name"], "silent");
+        assert_eq!(value["summary"]["findings"], 1);
+        assert!(value["summary"]["agenda_items"].is_number());
     }
 }

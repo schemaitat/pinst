@@ -45,9 +45,24 @@ the working tree, and what can only be confirmed afterwards.
 unfinished, and the distinction between "not written" and "written, awaiting a
 merge" is lost exactly when someone picks the work back up.
 **Status:** prose
+**Mechanize:** declined — the only half a script can see is hollow. A check can
+require the two headings to exist; it cannot read a criterion and know which
+side of the line it belongs on, so it would have passed every phase that
+produced this lesson — each would have written its merge-gated criterion under
+"provable in the tree" and satisfied the check. Mandating the split across all
+29 existing phase files would also make `None.` the answer in most of them, and
+a check whose satisfying answer is boilerplate measures the boilerplate.
+Enforced as prose instead, in the skill that writes Done criteria: `plan-write`
+now carries the rule, the blocked-task corollary from 260920-impoxu (ISSUE-006)
+and the step that returns the outcome to the phase afterwards.
+`phase.logged-not-done` (LESSON-009) stays the mechanical backstop for the half
+that goes stale.
 **Seen in:** 260919-zeuuaj-release-please-binary-artifacts (ISSUE-005,
 ISSUE-008, and again as ISSUE-009 — the lesson was written during that plan
-and still not applied to its own phases, which is what let them go stale)
+and still not applied to its own phases, which is what let them go stale);
+again in 260920-impoxu-daily-distil-action (ISSUE-006), where the blocked half
+was a phase's first task rather than its last, and the credential it waits on
+belongs to a person rather than to a merge
 
 ### LESSON-004: A manifest value that reaches a shell is read twice
 **Lesson:** Manifest fields interpolated into shell commands (paths,
@@ -187,7 +202,11 @@ that parses, a plan that carries its ADR sections, a run log with a matching
 none of them changes because you read it.
 **Status:** mechanized
 **Check:** skill.no-contract
-**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005)
+**Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005); again in
+260920-impoxu-daily-distil-action (ISSUE-010), which found the missing half:
+the artifact has to be *attributable*. `create-pr` was graded on every merged
+pull request, three of which release-please had opened, so a skill running at
+7/8 reported 7/11 and looked like it was decaying.
 
 ### LESSON-013: Make the corpus the clock, not the calendar
 **Lesson:** When work needs doing "regularly", find the event in the record
@@ -285,6 +304,78 @@ parameter version is shorter, needs no lock, and removes the possibility of a
 test reaching the developer's real `~/.cache` at all. The awkward test was a
 design problem one level up, not a testing problem.
 **Status:** prose
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
+
+### LESSON-019: `set -euo pipefail` makes two everyday `grep` idioms lie
+**Lesson:** In a `set -euo pipefail` script, `var="$(... | grep ...)"` aborts
+the whole script when grep matches nothing, and `printf ... | grep -q` reports
+failure when it *does* match. Write `var="$(cmd || true)"` for the first, and
+feed an early-exiting reader a here-string (`grep -qx "$x" <<< "$list"`) rather
+than a pipe for the second.
+**Why:** Both failures point the wrong way. The first aborts with no output at
+all — `set -e` is silent — so an empty result from legitimate data reads as a
+crash with no clue attached. The second is worse: `grep -q` exits on its first
+match, the writer upstream dies of `SIGPIPE`, and `pipefail` promotes 141 to
+the pipeline's status, so a *successful* lookup comes back as a failure, on
+whichever item grep happened to stop at. It presents as an intermittent finding
+against correct input — flakiness in the data, apparently, rather than a bug in
+the checker. Every enforcement script in this repo is bash with this exact
+preamble, so both idioms are one careless line away at all times.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-001, ISSUE-002) — both
+inside one 200-line guard, in the same afternoon
+
+### LESSON-020: A check over a working tree must look at what was created, not only what changed
+**Lesson:** When a guard inspects a diff, union `git diff --name-only` with
+`git ls-files --others --exclude-standard` before deciding the tree is clean.
+Write the test for a brand-new file first; the version that only sees
+modifications passes every test built from edits.
+**Why:** `git diff` says nothing about untracked files, and the artifacts worth
+guarding against are usually created rather than modified — a new document, a
+new directory, a file dropped somewhere it does not belong. A path allowlist
+built on `git diff` alone therefore polices exactly the case that is already
+visible in review, and misses the one that is not.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-003, and again as
+ISSUE-008 two hours later, in the second place in the same plan that reads a
+diff — the lesson was already written when the repeat was introduced)
+
+### LESSON-021: Automating a step inherits every constraint the manual step had
+**Lesson:** Before writing automation for something a skill already covers,
+read that skill and satisfy it as written. Editing a workflow file does not
+feel like doing the thing the workflow does, and that is exactly when its
+rules get skipped.
+**Why:** The distillation workflow titled its pull request
+`[260920-impoxu] Distil the corpus`, following `plan-write`'s rule for PR
+titles. `create-pr` overrides that rule and explains why: this repo is
+squash-only, so a squashed PR title becomes the commit subject on `main`, and
+release-please reads those. An unparseable title produces no version bump and
+no changelog entry — and nothing fails. No red job, no error, just a repo that
+quietly stops releasing. The bug was caught only because an unrelated task
+required reading `create-pr` an hour later. Two skills contradicting each other
+is survivable; the one that owns the artifact wins, and the automation has to
+know which that is.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-009)
+
+### LESSON-022: A shared counter collides wherever a random id would not
+**Lesson:** Any identifier minted by "highest existing number plus one" in a
+file that parallel branches all append to will collide. `LESSON-NNN` in this
+file is the remaining instance. Until it is minted like a plan id, resolve a
+collision by letting whichever side reached `main` first keep its numbers, and
+grep the whole corpus for references to the ones you renumber.
+**Why:** The plan id carries six random letters for exactly this reason, and
+`.agents/README.md` argues it at length: two sessions in parallel worktrees
+compute the same "next" value, both use it, and the collision only surfaces at
+merge — by which point the identifier is already written into commit footers
+and cross-references. `LESSON-NNN` reproduces that failure one directory away
+from the explanation of why it was avoided. It surfaced the first time two
+plans were distilled on the same day: `260920-impoxu` and `260920-tensvp` both
+minted 015, 016 and 017 for different lessons. The renumbering is manual and
+silent, which is the part worth fixing — nothing checks that every lesson id is
+unique or that a reference to one still resolves.
+**Status:** prose
+**Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012)
 **Mechanize:** declined — the trigger is "this test feels awkward", which is
 not a property of the source. A check could flag `set_var` in tests, but both
 sightings so far were something else: a process-wide default in one, a plain
@@ -296,7 +387,7 @@ environment variable but a plain `const` read inside the function — a
 30-second timeout that made the test proving it works take 30 seconds. Same
 tell: the test is awkward because the value is ambient.
 
-### LESSON-019: Compare a port against the incumbent on broken input, not on healthy input
+### LESSON-023: Compare a port against the incumbent on broken input, not on healthy input
 **Lesson:** When reimplementing something that already works, keep both
 versions runnable and diff them on deliberately broken input for as long as
 the old one exists. Agreement on the happy path is nearly free and proves
@@ -313,7 +404,7 @@ empty set is what a clean corpus looks like.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-003)
 
-### LESSON-020: Two implementations that write one file must agree byte for byte
+### LESSON-024: Two implementations that write one file must agree byte for byte
 **Lesson:** During a changeover where old and new both generate the same
 artifact, treat byte-identical output as a hard constraint of every phase
 before the cutover — attribution lines, comments and all. Change the bytes in
@@ -330,7 +421,7 @@ that broke it, so this is not something more care at writing time would catch
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-002)
 
-### LESSON-021: A check that searches text can be satisfied by the text describing it
+### LESSON-025: A check that searches text can be satisfied by the text describing it
 **Lesson:** Any check that proves something exists by grepping the tree can be
 satisfied by documentation *about* that check. Exclude prose from the search,
 and prove the check works the only way that counts: delete what it is supposed
@@ -345,7 +436,7 @@ silent. A passing check is not evidence until it has been seen to fail.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007)
 
-### LESSON-022: A deletion that still compiles has not been verified
+### LESSON-026: A deletion that still compiles has not been verified
 **Lesson:** After removing code programmatically, compare the test count
 before and after. Locate the bounds with a unique anchor and assert on the
 lines about to go, rather than slicing from the first match of a generic
@@ -360,7 +451,7 @@ which is exactly the class of edit where "it builds" is worth nothing.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-008)
 
-### LESSON-023: A sweep filtered by file type only finds the callers you remembered
+### LESSON-027: A sweep filtered by file type only finds the callers you remembered
 **Lesson:** When deleting or renaming something other files invoke, grep the
 whole tree with no `--include` filter and read every hit. Write the *check*
 for leftovers the same way — a Done criterion that greps `*.md` and the
@@ -375,7 +466,7 @@ annoying place to notice.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
 
-### LESSON-024: CI that restates the gate instead of calling it will drift from it
+### LESSON-028: CI that restates the gate instead of calling it will drift from it
 **Lesson:** When a workflow duplicates the steps of a local quality gate, that
 duplication is an unenforced claim that the two are identical. Either call the
 gate (`just qc`) or accept that every change to it is a two-file change, and
@@ -390,7 +481,7 @@ copy here is executable, which makes it look maintained.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
 
-### LESSON-025: A documented degradation is a test specification
+### LESSON-029: A documented degradation is a test specification
 **Lesson:** When a plan writes down that something degrades in a hostile
 environment — no network, no auth, a missing binary — that sentence is
 telling you what a test must arrange or avoid depending on. Reproduce the
@@ -407,7 +498,7 @@ notice.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-009)
 
-### LESSON-026: A write to an external system is verified by reading it back
+### LESSON-030: A write to an external system is verified by reading it back
 **Lesson:** Never pipe a command through `tail` or `head` when its exit code
 is what you are checking — `$?` becomes the pipe's last stage and is almost
 always 0. Capture the output to a file, or test `${PIPESTATUS[0]}`. And for

@@ -249,6 +249,13 @@ and an agenda. Then, in this order:
    trigger description and what it would produce. Writing one unasked is how a
    harness accumulates skills nobody invokes.
 
+   Running unattended — from `.github/workflows/distil.yml`, where there is no
+   user to propose *to* — a proposal goes in `.distil-report.md` at the repo
+   root, which the workflow lifts into the pull request body. The rule does not
+   soften because nobody is watching; it just needs somewhere to land. Record
+   the matching `**Gap:** answered — ...` on the issue as well, or the gap
+   section recomputes and raises the same group tomorrow (LESSON-014).
+
 Report what you triaged, what you reclassified, and what you proposed.
 
 ## Step 5 — Report back

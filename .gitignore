@@ -1,2 +1,11 @@
 /target
 /dist
+
+# Scratch files the unattended /distil run writes at the repo root. None is
+# ever committed — the commit step names its paths explicitly — but the
+# dry-run patch is built with `git add -N .`, which picked pr-body.md up and
+# showed a reviewer a change the real run would never make.
+/.distil-report.md
+/pr-body.md
+/distil.patch
+/preflight.out

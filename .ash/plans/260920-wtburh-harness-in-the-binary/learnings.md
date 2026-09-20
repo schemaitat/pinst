@@ -94,7 +94,7 @@ through both. When porting, diff against the incumbent on real data and on
 deliberately broken data, not on a fixture you wrote to match your own mental
 model.
 **Skill:** none
-**Gap:** answered — a coding bug in a scanner. No instruction prevents one; the comparison harness that caught it is the durable answer, and that is now LESSON-019.
+**Gap:** answered — a coding bug in a scanner. No instruction prevents one; the comparison harness that caught it is the durable answer, and that is now LESSON-023.
 
 ### ISSUE-004: `lesson.unenforced` had to diverge from the script to be correct
 **What happened:** The bash check grepped `scripts/` relative to the working
@@ -168,7 +168,7 @@ can be satisfied by the text describing the check. Test it the only way that
 works: delete the thing it is supposed to find and confirm the check fires.
 A passing check is not evidence until you have seen it fail.
 **Skill:** none
-**Gap:** answered — a subtle property of text-matching checks, now LESSON-021. Knowing it is the fix; no procedure would have surfaced it.
+**Gap:** answered — a subtle property of text-matching checks, now LESSON-025. Knowing it is the fix; no procedure would have surfaced it.
 
 ### ISSUE-008: a programmatic deletion truncated a file, and it still compiled
 **What happened:** Removing the comparison oracle from `check.rs` with a
@@ -186,7 +186,7 @@ count before and after — a green build says nothing about how much of the file
 survived. Prefer bounds located by searching for a unique anchor and asserted
 before the edit, over any slice from a first match.
 **Skill:** none
-**Gap:** answered — an editing mishap. LESSON-022 records the guard; a skill for 'how to delete code carefully' would be a skill nobody invokes.
+**Gap:** answered — an editing mishap. LESSON-026 records the guard; a skill for 'how to delete code carefully' would be a skill nobody invokes.
 
 ### ISSUE-009: a contract test asserted the network was part of the contract
 **What happened:** CI failed on `skill.evidence-failed.create-pr` in a test
@@ -229,7 +229,7 @@ whole tree with no `--include` filter and read every hit, rather than
 enumerating the file types you expect to find. The types you enumerate are
 the ones you already remembered.
 **Skill:** none
-**Gap:** answered — a sweep is a one-off; the durable answer is LESSON-023,
+**Gap:** answered — a sweep is a one-off; the durable answer is LESSON-027,
 not a skill.
 
 ### ISSUE-011: piping a command through `tail` threw away the exit code I needed
