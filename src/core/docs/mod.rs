@@ -9,7 +9,9 @@
 //! Scope is the manifest: a page whose name matches no declared tool is a
 //! repo bug, and `cargo test` is where it is caught.
 
+pub mod capture;
 pub mod page;
+pub mod seed;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -66,6 +68,16 @@ impl Catalogue {
 
     pub fn is_empty(&self) -> bool {
         self.pages.is_empty()
+    }
+
+    /// Where a page would be written. `None` when the catalogue came from the
+    /// binary: there is no tree to write into, which is what `docs adopt`
+    /// refuses on.
+    pub fn page_path(&self, tool: &str) -> Option<std::path::PathBuf> {
+        match &self.source {
+            Source::Tree(root) => Some(root.join(format!("{tool}.toml"))),
+            Source::Embedded => None,
+        }
     }
 }
 
@@ -224,6 +236,21 @@ mod tests {
         assert!(catalogue.source.is_tree());
         assert_eq!(catalogue.len(), 1);
         assert!(catalogue.get("just").is_some());
+    }
+
+    #[test]
+    fn an_embedded_catalogue_has_nowhere_to_write_a_page() {
+        assert!(embedded().page_path("fd").is_none());
+    }
+
+    #[test]
+    fn a_tree_catalogue_writes_pages_beside_the_ones_it_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalogue = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        assert_eq!(
+            catalogue.page_path("fd").unwrap(),
+            dir.path().join("fd.toml")
+        );
     }
 
     #[test]

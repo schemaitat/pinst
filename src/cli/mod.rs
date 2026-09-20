@@ -162,12 +162,26 @@ pub enum DocsAction {
     Show(DocsShowArgs),
     /// Report which tools have a page, and which are still drafts.
     Status,
+    /// Seed a draft page from a tool's own help output.
+    Adopt(DocsAdoptArgs),
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct DocsShowArgs {
     /// The tool to look up. Must be a tool the manifest declares.
     pub tool: String,
+    /// Re-run the tool's help instead of answering from the cache.
+    #[arg(long)]
+    pub refresh: bool,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct DocsAdoptArgs {
+    /// The tool to seed a page for.
+    pub tool: String,
+    /// Re-run the tool's help instead of seeding from the cache.
+    #[arg(long)]
+    pub refresh: bool,
 }
 
 #[derive(Debug, Args, Clone)]

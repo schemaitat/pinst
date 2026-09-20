@@ -70,6 +70,7 @@ summary = "zsh framework the .zshrc is built on"
 tags = ["shell"]
 requires = ["zsh", "git", "curl"]
 detect = { command = "[ -d \"$HOME/.oh-my-zsh\" ]" }
+help_cmd = ""   # a framework, not a command: nothing to capture
 # Uses the sh -c form rather than a pipe: the omz installer reads --unattended
 # from $1, which `curl | sh -s --` would not deliver the same way.
 install = { method = "shell", command = "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" \"\" --unattended" }
@@ -80,6 +81,7 @@ summary = "oh-my-zsh plugin referenced by .zshrc's plugins array"
 tags = ["shell"]
 requires = ["oh-my-zsh"]
 detect = { command = "[ -d \"${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions\" ]" }
+help_cmd = ""   # a zsh plugin, not a command: nothing to capture
 install = { method = "git_clone", url = "https://github.com/zsh-users/zsh-autosuggestions", dest = "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions", depth = 1 }
 
 [[tool]]
@@ -158,6 +160,9 @@ summary = "Node version manager"
 tags = ["dev"]
 requires = ["curl"]
 detect = { command = "[ -s \"$HOME/.nvm/nvm.sh\" ]" }
+# A shell function, not a binary — `pinst docs` has to source it before nvm
+# will say anything.
+help_cmd = "bash -c '. \"$HOME/.nvm/nvm.sh\" && nvm --help'"
 install = { method = "curl_script", url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh", shell = "bash", github_repo = "nvm-sh/nvm" }
 
 [[tool]]
@@ -198,6 +203,7 @@ name = "git-credential-manager"
 summary = ".gitconfig sets [credential] helper = manager"
 tags = ["git"]
 detect = { command = "command -v git-credential-manager || command -v git-credential-manager-core", version_cmd = "git-credential-manager --version" }
+help_cmd = "git-credential-manager --help"
 install = { method = "manual", note = "No apt package on Ubuntu. Install from https://github.com/git-ecosystem/git-credential-manager/blob/release/docs/install.md#linux" }
 upgrade = { method = "github_release", repo = "git-ecosystem/git-credential-manager" }
 

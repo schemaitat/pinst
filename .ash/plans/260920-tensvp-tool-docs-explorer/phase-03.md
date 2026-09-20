@@ -2,7 +2,7 @@
 id: 260920-tensvp
 slug: tool-docs-explorer
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — Capture what is not written yet, and adopt it
@@ -22,32 +22,32 @@ no consumer to shape it — and before search, because a captured page is
 content search will index.
 
 ## Steps
-- [ ] TASK-015: `src/core/manifest.rs` — optional `help_cmd: Option<String>`
+- [x] TASK-015: `src/core/manifest.rs` — optional `help_cmd: Option<String>`
       on `Tool`, run with `sh -c` like `detect.command`. Default when absent:
       `<detect.bin> --help`; no `bin` and no `help_cmd` means capture is not
       possible for that tool, which is a reportable state, not an error.
       Why on `Tool` rather than inside `detect`: `detect` answers "is it here
       and at what version", and help is a different question about the same
       binary.
-- [ ] TASK-016: `src/core/docs/capture.rs` (new) — run the help command with a
+- [x] TASK-016: `src/core/docs/capture.rs` (new) — run the help command with a
       timeout (tokio, already a dependency), a hard cap on captured bytes, and
       `NO_COLOR=1`/`TERM=dumb` in the child environment; truncate rather than
       fail when the cap is hit, recording that it was truncated.
       Why the env forcing: a tool that detects a pipe and emits ANSI anyway
       would put escape sequences into a page and into an agent's context.
-- [ ] TASK-017: `src/core/docs/capture.rs` — cache to
+- [x] TASK-017: `src/core/docs/capture.rs` — cache to
       `${XDG_CACHE_HOME:-$HOME/.cache}/pinst/docs/<tool>.txt` with the probed
       version recorded alongside, and treat a version mismatch as a miss.
       Why version-keyed: it is the one cache key that invalidates exactly when
       the answer changes, and pinst already probes the version for every tool.
-- [ ] TASK-018: `src/cli/commands/docs.rs` — wire the fallback into `show`:
+- [x] TASK-018: `src/cli/commands/docs.rs` — wire the fallback into `show`:
       a known tool with no page captures instead (fresh capture behind
       `--refresh`), and the item reports `source: "page" | "captured"` so a
       consumer can tell authored prose from a dump of `--help`. A tool with
       no page and no capture path keeps the phase-2 exit 3 and its remediation.
       Why a distinct `source` field rather than faking a page: the two have
       very different reliability, and collapsing them would hide that (RISK-003).
-- [ ] TASK-019: `src/cli/commands/docs.rs` — `adopt <tool>`: write the capture
+- [x] TASK-019: `src/cli/commands/docs.rs` — `adopt <tool>`: write the capture
       into `docs/tools/<tool>.toml` as `status = "draft"` with the raw text in
       `help` and `what` seeded from the manifest `summary`. Refuse when the
       source is `Embedded` (there is no tree to write into) and refuse to
@@ -56,13 +56,13 @@ content search will index.
       require `--yes` to overwrite an existing draft.
       Why it mirrors `config adopt`: the machine-seeds-the-repo round-trip
       already exists here, and reusing its rules means one set of expectations.
-- [ ] TASK-020: `manifest.toml` — `help_cmd` for the tools whose help is not
+- [x] TASK-020: `manifest.toml` — `help_cmd` for the tools whose help is not
       `<bin> --help`, and nothing for the ones that have no CLI at all
       (`oh-my-zsh`, `zsh-autosuggestions`, `build-essential`), which are
       page-only by nature.
       Why: each of these was a guess until run; the task is to run the command
       for all 26 and record what actually answers (LESSON-001).
-- [ ] TASK-021: tests — a fake executable in a `tempfile` dir exercising:
+- [x] TASK-021: tests — a fake executable in a `tempfile` dir exercising:
       successful capture, cache hit without re-running, version change busting
       the cache, a command that exceeds the timeout, and output past the cap
       being truncated rather than erroring. `adopt` tested against a temp tree

@@ -8,14 +8,14 @@
 //! unwritten page is a normal state and a check that fires on the normal state
 //! is a check that gets switched off.
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Context, Result};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
-use crate::cli::{DocsAction, DocsArgs, DocsShowArgs};
-use crate::core::docs::Catalogue;
+use crate::cli::{DocsAction, DocsAdoptArgs, DocsArgs, DocsShowArgs};
 use crate::core::docs::page::ToolDoc;
+use crate::core::docs::{Catalogue, capture, seed};
 use crate::core::manifest::Tool;
 use crate::core::{probe, usage};
 
@@ -26,6 +26,10 @@ use crate::core::{probe, usage};
 pub enum DocSource {
     /// A page under `docs/tools/`.
     Page,
+    /// The tool's own `--help`, captured from this machine. Written for
+    /// someone who already knows they want this tool — worth answering with,
+    /// worth trusting less.
+    Captured,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -72,8 +76,30 @@ pub async fn run(ctx: &Ctx, args: &DocsArgs) -> Result<ExitCode> {
     }
 
     match &args.action {
-        DocsAction::Show(show) => self::show(ctx, &loaded.manifest, &catalogue, show).await,
+        // The cache location is resolved once, here, and passed down: it is
+        // ambient state otherwise, and ambient state is what makes a test
+        // reach into the developer's real home directory.
+        DocsAction::Show(show) => {
+            self::show(
+                ctx,
+                &loaded.manifest,
+                &catalogue,
+                &capture::cache_dir()?,
+                show,
+            )
+            .await
+        }
         DocsAction::Status => status(ctx, &loaded.manifest, &catalogue).await,
+        DocsAction::Adopt(adopt) => {
+            self::adopt(
+                ctx,
+                &loaded.manifest,
+                &catalogue,
+                &capture::cache_dir()?,
+                adopt,
+            )
+            .await
+        }
     }
 }
 
@@ -81,38 +107,185 @@ async fn show(
     ctx: &Ctx,
     manifest: &crate::core::manifest::Manifest,
     catalogue: &Catalogue,
+    cache_dir: &std::path::Path,
     args: &DocsShowArgs,
 ) -> Result<ExitCode> {
     let tool = lookup(manifest, &args.tool)?;
     let probe = probe::probe_tool(tool).await;
 
-    let Some(page) = catalogue.get(&tool.name) else {
+    // An authored page always wins: it was written for this question, and the
+    // capture was not.
+    if let Some(page) = catalogue.get(&tool.name) {
+        if !ctx.json {
+            render(page, &probe.version);
+        }
+        return ctx.finish(Envelope::new(
+            "docs show",
+            Status::Ok,
+            vec![ShowItem {
+                source: DocSource::Page,
+                installed: probe.installed,
+                version: probe.version,
+                page: page.clone(),
+            }],
+        ));
+    }
+
+    let captured =
+        capture::capture(tool, probe.version.as_deref(), args.refresh, cache_dir).await?;
+
+    let Some(captured) = captured else {
         // Nothing failed: the command ran, and found something to act on.
         if !ctx.json {
             println!("{}  {}", tool.name, tool.summary);
-            println!("no page yet — {}", remediation(&tool.name));
+            println!("no page yet — {}", remediation(tool));
         }
         return ctx.finish(
             Envelope::<ShowItem>::new("docs show", Status::Issues, Vec::new()).errors(vec![
-                format!("{}: no docs page. {}", tool.name, remediation(&tool.name)),
+                format!("{}: no docs page. {}", tool.name, remediation(tool)),
             ]),
         );
     };
 
+    let page = seed::synthesize(tool, &captured);
     if !ctx.json {
-        render(page, &probe.version);
+        ctx.note(format!(
+            "no page for {} — showing `{}`; {}",
+            tool.name,
+            captured.command,
+            remediation(tool)
+        ));
+        render(&page, &probe.version);
     }
 
+    // Exit 0: the question was answered. That it was answered by the tool
+    // rather than by a page is what `source` is for.
     ctx.finish(Envelope::new(
         "docs show",
         Status::Ok,
         vec![ShowItem {
-            source: DocSource::Page,
+            source: DocSource::Captured,
             installed: probe.installed,
             version: probe.version,
-            page: page.clone(),
+            page,
         }],
     ))
+}
+
+/// What `adopt` did, or would have done under `--dry-run`.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct AdoptItem {
+    pub tool: String,
+    pub path: String,
+    /// The help command the seed came from.
+    pub command: String,
+    pub bytes: usize,
+    /// True when `--dry-run` meant nothing was written.
+    pub planned: bool,
+}
+
+async fn adopt(
+    ctx: &Ctx,
+    manifest: &crate::core::manifest::Manifest,
+    catalogue: &Catalogue,
+    cache_dir: &std::path::Path,
+    args: &DocsAdoptArgs,
+) -> Result<ExitCode> {
+    let tool = lookup(manifest, &args.tool)?;
+
+    // Refusals first, before running anything: a command that cannot write
+    // should not spend a subprocess finding that out.
+    let Some(path) = catalogue.page_path(&tool.name) else {
+        return refuse(
+            ctx,
+            format!(
+                "{}: the catalogue is embedded in the binary, so there is no tree to write into. \
+                 Run adopt from a checkout of this repo.",
+                tool.name
+            ),
+        );
+    };
+
+    if let Some(existing) = catalogue.get(&tool.name) {
+        if existing.status == crate::core::docs::page::PageStatus::Authored {
+            return refuse(
+                ctx,
+                format!(
+                    "{}: docs/tools/{}.toml is authored; adopt would replace written prose with \
+                     captured help. Edit the page instead.",
+                    tool.name, tool.name
+                ),
+            );
+        }
+        if !ctx.yes && !ctx.dry_run {
+            return refuse(
+                ctx,
+                format!(
+                    "{}: docs/tools/{}.toml already exists as a draft. Re-seed it with --yes.",
+                    tool.name, tool.name
+                ),
+            );
+        }
+    }
+
+    let probe = probe::probe_tool(tool).await;
+    let captured =
+        capture::capture(tool, probe.version.as_deref(), args.refresh, cache_dir).await?;
+
+    let Some(captured) = captured else {
+        return refuse(
+            ctx,
+            format!(
+                "{}: nothing to adopt — {}. {}",
+                tool.name,
+                match capture::help_command(tool) {
+                    Some(command) => format!("`{command}` produced no output"),
+                    None => "the manifest declares no help command and no bin".to_string(),
+                },
+                remediation(tool)
+            ),
+        );
+    };
+
+    let body = seed::render(tool, &captured);
+    if !ctx.dry_run {
+        std::fs::write(&path, &body).with_context(|| format!("writing {}", path.display()))?;
+    }
+
+    if !ctx.json {
+        if ctx.dry_run {
+            println!("would write {} ({} bytes)", path.display(), body.len());
+        } else {
+            println!("wrote {} ({} bytes)", path.display(), body.len());
+            println!("it is a draft: read it, add recipes you have run, then mark it authored");
+        }
+    }
+
+    ctx.finish(
+        Envelope::new(
+            "docs adopt",
+            Status::Ok,
+            vec![AdoptItem {
+                tool: tool.name.clone(),
+                path: path.display().to_string(),
+                command: captured.command,
+                bytes: body.len(),
+                planned: ctx.dry_run,
+            }],
+        )
+        .dry_run(ctx.dry_run),
+    )
+}
+
+/// A refusal is something to act on, not a failure of the command: exit 3,
+/// with the reason in `errors[]` where an agent already looks.
+fn refuse(ctx: &Ctx, reason: String) -> Result<ExitCode> {
+    if !ctx.json {
+        println!("{reason}");
+    }
+    ctx.finish(
+        Envelope::<AdoptItem>::new("docs adopt", Status::Issues, Vec::new()).errors(vec![reason]),
+    )
 }
 
 async fn status(
@@ -228,8 +401,13 @@ fn lookup<'m>(manifest: &'m crate::core::manifest::Manifest, name: &str) -> Resu
         .ok_or_else(|| usage(format!("unknown tool '{name}'")))
 }
 
-fn remediation(tool: &str) -> String {
-    format!("write docs/tools/{tool}.toml")
+/// What to do about a tool with no page — which depends on whether the
+/// machine has anything to seed one from.
+fn remediation(tool: &Tool) -> String {
+    match capture::help_command(tool) {
+        Some(_) => format!("run `pinst docs adopt {}` to seed a draft", tool.name),
+        None => format!("write docs/tools/{}.toml by hand", tool.name),
+    }
 }
 
 /// The human rendering: intent first, then the command lines, because that is
@@ -301,6 +479,22 @@ name = "fd"
 summary = "Fast find"
 detect = { command = "false" }
 install = { method = "apt", packages = ["fd-find"] }
+
+# Nothing on the machine, and nothing to ask: the only case that has to end in
+# exit 3 rather than a capture.
+[[tool]]
+name = "oh-my-zsh"
+summary = "A framework, not a command"
+detect = { command = "false" }
+help_cmd = ""
+install = { method = "apt", packages = ["zsh"] }
+
+[[tool]]
+name = "seedable"
+summary = "Answers when asked"
+detect = { command = "true" }
+help_cmd = "echo 'usage: seedable [OPTIONS]'"
+install = { method = "apt", packages = ["seedable"] }
 "#;
 
     fn manifest() -> Manifest {
@@ -331,49 +525,102 @@ install = { method = "apt", packages = ["fd-find"] }
     fn show_args(tool: &str) -> DocsShowArgs {
         DocsShowArgs {
             tool: tool.to_string(),
+            refresh: false,
+        }
+    }
+
+    fn adopt_args(tool: &str) -> DocsAdoptArgs {
+        DocsAdoptArgs {
+            tool: tool.to_string(),
+            refresh: false,
         }
     }
 
     #[tokio::test]
     async fn a_tool_with_a_page_exits_zero() {
+        let cache = tempfile::tempdir().unwrap();
         let (_dir, catalogue) = catalogue(&[("ripgrep", r#"what = "Fast grep.""#)]);
-        let code = show(&ctx(), &manifest(), &catalogue, &show_args("ripgrep"))
-            .await
-            .unwrap();
+        let code = show(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &show_args("ripgrep"),
+        )
+        .await
+        .unwrap();
         assert_eq!(code, ExitCode::Success);
     }
 
     #[tokio::test]
-    async fn a_manifest_tool_with_no_page_is_something_to_act_on_not_a_failure() {
+    async fn a_tool_with_neither_a_page_nor_any_help_is_something_to_act_on() {
+        let cache = tempfile::tempdir().unwrap();
         let (_dir, catalogue) = catalogue(&[]);
-        let code = show(&ctx(), &manifest(), &catalogue, &show_args("fd"))
-            .await
-            .unwrap();
+        let code = show(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &show_args("oh-my-zsh"),
+        )
+        .await
+        .unwrap();
         assert_eq!(code, ExitCode::Issues);
     }
 
     #[tokio::test]
-    async fn a_name_the_manifest_does_not_declare_is_a_usage_error() {
+    async fn a_tool_with_no_page_but_a_help_command_answers_from_the_capture() {
+        let cache = tempfile::tempdir().unwrap();
         let (_dir, catalogue) = catalogue(&[]);
-        let err = show(&ctx(), &manifest(), &catalogue, &show_args("cowsay"))
-            .await
-            .unwrap_err();
+
+        // Exit 0: the question was answered. `source: captured` in the item is
+        // what says it was answered by the tool rather than by a page.
+        let code = show(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &show_args("seedable"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::Success);
+    }
+
+    #[tokio::test]
+    async fn a_name_the_manifest_does_not_declare_is_a_usage_error() {
+        let cache = tempfile::tempdir().unwrap();
+        let (_dir, catalogue) = catalogue(&[]);
+        let err = show(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &show_args("cowsay"),
+        )
+        .await
+        .unwrap_err();
         assert!(
             err.downcast_ref::<UsageError>().is_some(),
             "an unknown tool must map to exit 2, not 1: {err:#}"
         );
     }
 
-    #[tokio::test]
-    async fn the_remediation_names_the_file_to_write() {
-        let (_dir, catalogue) = catalogue(&[]);
-        // The exit-3 path is only useful if it says what to do about it; the
-        // envelope carries this same string in `errors[]`.
-        assert_eq!(remediation("fd"), "write docs/tools/fd.toml");
-        let code = show(&ctx(), &manifest(), &catalogue, &show_args("fd"))
-            .await
-            .unwrap();
-        assert_eq!(code, ExitCode::Issues);
+    #[test]
+    fn the_remediation_depends_on_whether_anything_can_be_seeded_from() {
+        // The exit-3 path is only useful if it says what to do about it, and
+        // "run adopt" is wrong advice for a tool that answers nothing.
+        let manifest = manifest();
+        let seedable = lookup(&manifest, "seedable").unwrap();
+        let silent = lookup(&manifest, "oh-my-zsh").unwrap();
+        assert_eq!(
+            remediation(seedable),
+            "run `pinst docs adopt seedable` to seed a draft"
+        );
+        assert_eq!(
+            remediation(silent),
+            "write docs/tools/oh-my-zsh.toml by hand"
+        );
     }
 
     #[tokio::test]
@@ -393,6 +640,165 @@ install = { method = "apt", packages = ["fd-find"] }
         assert_eq!(code, ExitCode::Success);
     }
 
+    #[tokio::test]
+    async fn adopt_writes_a_draft_page_that_the_catalogue_can_load() {
+        let cache = tempfile::tempdir().unwrap();
+        let (dir, catalogue) = catalogue(&[]);
+
+        let code = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::Success);
+
+        // The seed has to be a page the loader accepts — a draft nobody can
+        // read back is worse than no draft.
+        let reloaded = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        let page = reloaded.get("seedable").unwrap();
+        assert_eq!(page.status, crate::core::docs::page::PageStatus::Draft);
+        assert!(page.help.as_deref().unwrap().contains("usage: seedable"));
+    }
+
+    #[tokio::test]
+    async fn adopt_under_dry_run_writes_nothing() {
+        let cache = tempfile::tempdir().unwrap();
+        let (dir, catalogue) = catalogue(&[]);
+
+        let mut ctx = ctx();
+        ctx.dry_run = true;
+        let code = adopt(
+            &ctx,
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(code, ExitCode::Success);
+        assert!(!dir.path().join("seedable.toml").exists());
+    }
+
+    #[tokio::test]
+    async fn adopt_refuses_when_the_catalogue_came_out_of_the_binary() {
+        // There is no tree to write into, and the refusal has to come before
+        // anything is run.
+        let cache = tempfile::tempdir().unwrap();
+        let catalogue = Catalogue::load_from(Source::Embedded).unwrap();
+        let code = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::Issues);
+    }
+
+    #[tokio::test]
+    async fn adopt_refuses_to_replace_authored_prose_with_captured_help() {
+        let cache = tempfile::tempdir().unwrap();
+        let (dir, catalogue) = catalogue(&[(
+            "seedable",
+            "what = \"Written by a person.\"\nstatus = \"authored\"\n",
+        )]);
+        let code = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(code, ExitCode::Issues);
+        let after = std::fs::read_to_string(dir.path().join("seedable.toml")).unwrap();
+        assert!(after.contains("Written by a person."), "{after}");
+    }
+
+    #[tokio::test]
+    async fn adopt_needs_yes_to_re_seed_an_existing_draft() {
+        let cache = tempfile::tempdir().unwrap();
+        let (dir, catalogue) = catalogue(&[("seedable", r#"what = "An earlier draft.""#)]);
+
+        let refused = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(refused, ExitCode::Issues);
+        assert!(
+            std::fs::read_to_string(dir.path().join("seedable.toml"))
+                .unwrap()
+                .contains("An earlier draft.")
+        );
+
+        let mut ctx = ctx();
+        ctx.yes = true;
+        let code = adopt(
+            &ctx,
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("seedable"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::Success);
+        assert!(
+            std::fs::read_to_string(dir.path().join("seedable.toml"))
+                .unwrap()
+                .contains("usage: seedable")
+        );
+    }
+
+    #[tokio::test]
+    async fn adopt_refuses_when_there_is_nothing_to_capture() {
+        let cache = tempfile::tempdir().unwrap();
+        let (dir, catalogue) = catalogue(&[]);
+
+        let code = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("oh-my-zsh"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::Issues);
+        assert!(!dir.path().join("oh-my-zsh.toml").exists());
+    }
+
+    #[tokio::test]
+    async fn adopt_of_an_unknown_tool_is_a_usage_error() {
+        let cache = tempfile::tempdir().unwrap();
+        let (_dir, catalogue) = catalogue(&[]);
+        let err = adopt(
+            &ctx(),
+            &manifest(),
+            &catalogue,
+            cache.path(),
+            &adopt_args("cowsay"),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.downcast_ref::<UsageError>().is_some(), "{err:#}");
+    }
+
     #[test]
     fn coverage_classifies_every_tool_and_counts_the_gaps() {
         let (_dir, catalogue) = catalogue(&[
@@ -401,7 +807,7 @@ install = { method = "apt", packages = ["fd-find"] }
         ]);
         let (items, orphans) = coverage(&manifest(), &catalogue, &Default::default());
 
-        assert_eq!(items.len(), 2);
+        assert_eq!(items.len(), manifest().tools.len());
         assert_eq!(items[0].name, "ripgrep");
         assert_eq!(items[0].page, "authored");
         assert_eq!(items[1].page, "draft", "an unmarked page is a draft");
