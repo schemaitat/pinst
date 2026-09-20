@@ -2,7 +2,7 @@
 id: 260920-wtburh
 slug: harness-in-the-binary
 phase: 1
-status: In Progress
+status: Done
 ---
 
 # Phase 1 — The corpus model, and `pinst harness new-id`
@@ -24,43 +24,43 @@ one the `/plan` command invokes on every single planning session, which makes
 the cutover for it observable immediately.
 
 ## Steps
-- [ ] TASK-001: rebase this branch onto `origin/main` (`e96fac0`) — Why: the
+- [x] TASK-001: rebase this branch onto `origin/main` (`e96fac0`) — Why: the
       `docs` subsystem, `build.rs` and `src/core/source.rs` landed there, and
       this plan mirrors their layout (ASSUMPTION-001). Nothing below is
       meaningful against `0cc43ca`.
-- [ ] TASK-002: `src/core/harness/root.rs` (FILE-002) — a `CorpusRoot` that
+- [x] TASK-002: `src/core/harness/root.rs` (FILE-002) — a `CorpusRoot` that
       resolves in three steps: an explicit path, then `$PINST_ASH_DIR`, then a
       walk up from the working directory for the first ancestor containing a
       `.ash` directory. Why: deliberately *not* `core::source::resolve`
       (ALT-007) — that requires a `manifest.toml` neighbour and falls back to
       the binary's own ancestors, so it would find pinst's checkout while the
       user stands in another repo.
-- [ ] TASK-003: `src/core/harness/frontmatter.rs` (FILE-003) — parse the block
+- [x] TASK-003: `src/core/harness/frontmatter.rs` (FILE-003) — parse the block
       between the first two `---` lines into an ordered map. Accept `key:
       scalar`, `key: 'single-quoted with '' escapes'`, `key: "double
       quoted"`, and `key: [a, b, c]`. Return a typed error naming the line
       number for anything else — a nested mapping, a block scalar, a
       multi-line list. Why: RISK-003 — the LESSON-008 failure was a parser
       that skipped what it did not understand, so this one refuses.
-- [ ] TASK-004: `src/core/harness/frontmatter.rs` — a test that parses every
+- [x] TASK-004: `src/core/harness/frontmatter.rs` — a test that parses every
       `.ash/plans/*/README.md`, every `phase-*.md` and every
       `.agents/skills/*/SKILL.md` in the real tree and asserts no error. Why:
       this is what pins the "accepted subset" to reality rather than to an
       author's guess, and it is the test that would have caught LESSON-008's
       six invalid files.
-- [ ] TASK-005: `src/core/harness/id.rs` (FILE-004) — `mint_id(date:
+- [x] TASK-005: `src/core/harness/id.rs` (FILE-004) — `mint_id(date:
       Option<&str>) -> String` producing `<yymmdd>-<six lowercase letters>`,
       the letter half from the OS RNG, the date half defaulting to today UTC
       and otherwise rendered from an ISO `YYYY-MM-DD`. Why: `yymmdd` so string
       order is date order, random so parallel worktrees cannot collide — both
       rationales already written down in `.agents/README.md` and preserved as
       doc comments here.
-- [ ] TASK-006: `src/core/harness/corpus.rs` (FILE-005) and
+- [x] TASK-006: `src/core/harness/corpus.rs` (FILE-005) and
       `src/core/harness/mod.rs` (FILE-001) — a `Corpus` that enumerates plan
       directories under `<root>/.ash/plans`, splits each name into `id` and
       `slug`, loads its `README.md` frontmatter, its `phase-NN.md` files, and
       the presence of `learnings.md`. No findings yet; this phase only models.
-- [ ] TASK-007: `src/core/mod.rs` (FILE-011), `src/cli/mod.rs` (FILE-012),
+- [x] TASK-007: `src/core/mod.rs` (FILE-011), `src/cli/mod.rs` (FILE-012),
       `src/cli/commands/mod.rs` (FILE-014) and `src/cli/commands/harness.rs`
       (FILE-013) — declare the module, add `Commands::Harness(HarnessArgs)`
       with a `HarnessAction` enum, its `name()` arm returning `"harness"`, and
@@ -68,7 +68,7 @@ the cutover for it observable immediately.
       are added by the phases that own them. Why: `harness` must not call
       `super::load_manifest` (CON-002) — it is the first family besides
       `schema` with no manifest.
-- [ ] TASK-008: `src/cli/commands/harness.rs` — `new-id` prints the bare id on
+- [x] TASK-008: `src/cli/commands/harness.rs` — `new-id` prints the bare id on
       stdout in human mode and an `Envelope` with one item in `--json` mode.
       Why: `scripts/ash.sh new-id` prints a bare line today and `/plan`
       substitutes it directly into a prompt; a JSON wrapper on the default

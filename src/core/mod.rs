@@ -8,6 +8,7 @@ pub mod doctor;
 pub mod engine;
 pub mod exec;
 pub mod graph;
+pub mod harness;
 pub mod manifest;
 pub mod plan;
 pub mod probe;
