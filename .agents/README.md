@@ -80,6 +80,14 @@ The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
 
+The corpus-wide pass that closes it — `plan-learnings` Step 6, reached by
+`/distil` — has a second entry point that needs no human:
+`.github/workflows/distil.yml` runs it daily and opens a pull request with
+whatever it decided. The schedule only polls; `scripts/distil-guard.sh
+preflight` asks the corpus whether there is anything to distil, and a clean
+one ends the run before a model is ever started. That is LESSON-013 surviving
+a cron line — the corpus is still the clock.
+
 ### Two fields make the loop measurable
 
 Both are written by `plan-learnings` and read by `scripts/ash.sh`:
@@ -113,6 +121,7 @@ prose.
 | "plan this", "write it up", "how should we do X" | `/plan` → `plan-write` |
 | "implement plan 3", "continue", "do phase 2" | `/implement` → `plan-implement` |
 | "what did we learn", "post-mortem this" | `/learn` → `plan-learnings` |
+| "distil the corpus", "triage the untriaged" | `/distil` → `plan-learnings` Step 6 |
 | "commit this" | `/cc` → `conventional-commits` |
 | "open a PR", "ship this branch", "get this reviewed" | `/pr` → `create-pr` |
 | "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
