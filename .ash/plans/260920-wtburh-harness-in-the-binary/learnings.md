@@ -3,7 +3,7 @@ id: 260920-wtburh
 slug: harness-in-the-binary
 updated: 2026-09-20
 areas: [cli, harness, agents]
-issue_count: 8
+issue_count: 10
 ---
 
 # Learnings — the harness moves into the binary (260920-wtburh-harness-in-the-binary)
@@ -183,3 +183,47 @@ survived. Prefer bounds located by searching for a unique anchor and asserted
 before the edit, over any slice from a first match.
 **Skill:** none
 **Gap:** answered — an editing mishap. LESSON-022 records the guard; a skill for 'how to delete code carefully' would be a skill nobody invokes.
+
+### ISSUE-009: a contract test asserted the network was part of the contract
+**What happened:** CI failed on `skill.evidence-failed.create-pr` in a test
+that `just qc` passed locally.
+**Root cause:** `create-pr` measures itself with `gh pr list`, so its measure
+needs an authenticated `gh`. The plan predicted this exactly — DEP-003 and
+RISK-003 say the measure "degrades to `unmeasured` when it is absent or the
+network is" — and then I wrote a test asserting the real corpus produces no
+structural findings *while running the measures*. It passed here only because
+`gh` happens to be authenticated on this machine.
+**Fix applied:** Both real-corpus tests now pass `run_evidence: false`. What
+they assert is that each skill *declares* a usable measure, which is a
+property of the repo; whether it can run is a property of the machine. They
+also got hermetic and faster (2.38s → 0.21s).
+**Recommendation:** When a plan writes down that something degrades in a
+hostile environment, that sentence is a test specification — the test must
+either arrange the degradation or avoid depending on it. Reproduce it locally
+by shadowing the binary with a failing stub, which is a two-line script and
+catches the whole class before CI does.
+**Skill:** none
+**Gap:** answered — knowing that a test is environment-dependent is the fix,
+and no instruction encodes which of a repo's measures touch the network.
+
+### ISSUE-010: CI kept calling the deleted script, and the local sweep could not see it
+**What happened:** After the harness step went green on tests, CI failed with
+`scripts/ash.sh: No such file or directory`. `.github/workflows/ci.yml`
+duplicates the four `qc` steps inline rather than calling `just qc`, so
+rewiring the justfile left the workflow behind.
+**Root cause:** Two causes, and the second is the interesting one. The
+immediate one is that phase 5's own sweep — TEST-025 — grepped `--include='*.md'
+--include=justfile` and never looked at `*.yml`. The deeper one is that the
+workflow's header comment claims "a green CI and a green `just qc` mean the
+same thing" while the file restates the steps by hand, so the claim is prose
+with nothing enforcing it, and it was false for two pushes.
+**Fix applied:** The Harness step calls `cargo run --quiet -- harness check`,
+and the comment now says outright that spelling the steps out here is what
+lets the file drift, so change one and change the other.
+**Recommendation:** When removing a file that anything might invoke, grep the
+whole tree with no `--include` filter and read every hit, rather than
+enumerating the file types you expect to find. The types you enumerate are
+the ones you already remembered.
+**Skill:** none
+**Gap:** answered — a sweep is a one-off; the durable answer is LESSON-023,
+not a skill.

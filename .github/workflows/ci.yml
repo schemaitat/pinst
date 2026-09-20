@@ -50,7 +50,12 @@ jobs:
       # skills in .agents/ are wired into the directory the runtime actually
       # reads, and that the .ash/ plan corpus is internally consistent; either
       # exits 3 if it has drifted.
+      #
+      # Spelling the steps out here instead of calling `just qc` is what lets
+      # this file drift from the justfile, and it did: the corpus half became
+      # `pinst harness check` and this step went on calling a script that no
+      # longer exists. Change one, change the other.
       - name: Harness
         run: |
           scripts/agents-wire.sh --check
-          scripts/ash.sh check
+          cargo run --quiet -- harness check

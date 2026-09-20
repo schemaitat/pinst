@@ -359,3 +359,50 @@ a truncated Rust file indistinguishable from an intact one to the compiler,
 which is exactly the class of edit where "it builds" is worth nothing.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-008)
+
+### LESSON-023: A sweep filtered by file type only finds the callers you remembered
+**Lesson:** When deleting or renaming something other files invoke, grep the
+whole tree with no `--include` filter and read every hit. Write the *check*
+for leftovers the same way — a Done criterion that greps `*.md` and the
+justfile is a criterion that passes while CI is broken.
+**Why:** Retiring `scripts/ash.sh` swept the justfile, both plan skills, two
+slash commands and both READMEs, and left `.github/workflows/ci.yml` calling
+it — because the phase's own verification step filtered on `*.md` and
+`justfile`. The filter was written from the same memory that did the sweep, so
+it could only confirm what had already been thought of. CI found it two pushes
+later, which is the cheapest place it could still have gone wrong and the most
+annoying place to notice.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
+
+### LESSON-024: CI that restates the gate instead of calling it will drift from it
+**Lesson:** When a workflow duplicates the steps of a local quality gate, that
+duplication is an unenforced claim that the two are identical. Either call the
+gate (`just qc`) or accept that every change to it is a two-file change, and
+say so in the file where the copy lives.
+**Why:** `ci.yml` opens by stating that its steps mirror `qc` "so a green CI
+and a green `just qc` mean the same thing", and then restates them by hand to
+avoid depending on `just`. That is a reasonable trade, but it made the claim
+false the moment the justfile's harness recipe changed, and nothing local
+could detect it: `just qc` was green on the very commit CI could not run. The
+same shape as LESSON-008 — an invariant asserted in prose — except the second
+copy here is executable, which makes it look maintained.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-010)
+
+### LESSON-025: A documented degradation is a test specification
+**Lesson:** When a plan writes down that something degrades in a hostile
+environment — no network, no auth, a missing binary — that sentence is
+telling you what a test must arrange or avoid depending on. Reproduce the
+hostile case locally by shadowing the binary with a stub that exits non-zero;
+it is two lines and it catches the class before CI does.
+**Why:** This plan's DEP-003 said the `create-pr` conformance measure
+"degrades to `unmeasured` when it is absent or the network is" — and a test
+was then written asserting the real corpus produces no findings *while
+running that measure*. It passed locally only because `gh` happened to be
+authenticated, and failed on the first CI run. The risk was not unforeseen;
+it was foreseen, written down, and then not carried into the test that
+depended on it, which is the more common failure and the harder one to
+notice.
+**Status:** prose
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-009)
