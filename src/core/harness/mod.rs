@@ -22,6 +22,7 @@ pub mod evidence;
 pub mod frontmatter;
 pub mod id;
 pub mod index;
+pub mod renumber;
 pub mod root;
 pub mod skills;
 pub mod transcripts;

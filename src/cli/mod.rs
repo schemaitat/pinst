@@ -243,6 +243,8 @@ pub enum HarnessAction {
     Skills(HarnessSkillsArgs),
     /// Mint a plan id: <yymmdd>-<six letters>.
     NewId(HarnessNewIdArgs),
+    /// Move a lesson to a free LESSON-NNN, taking this branch's citations.
+    RenumberLesson(HarnessRenumberLessonArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -264,6 +266,27 @@ pub struct HarnessSkillsArgs {
     /// and never depended on: it corroborates, it does not decide.
     #[arg(long, value_name = "DIR")]
     pub transcripts: Option<PathBuf>,
+}
+
+/// The remedy for `lesson.duplicate-id`, which until now was "grep the corpus
+/// by hand" (LESSON-022).
+///
+/// The lesson is named by a substring of its *title*, not by its id: both
+/// headings in a collision carry the same id, so an id could not say which of
+/// them to move.
+#[derive(Debug, Args, Clone)]
+pub struct HarnessRenumberLessonArgs {
+    /// A substring of the heading's title, case-insensitive. Must match
+    /// exactly one heading.
+    #[arg(long)]
+    pub title: String,
+    /// Move it to this id instead of the next free one.
+    #[arg(long, value_name = "LESSON-NNN")]
+    pub to: Option<String>,
+    /// Take the merge-base against this ref when deciding which citations
+    /// this branch introduced. Defaults to `main`.
+    #[arg(long, value_name = "REF")]
+    pub against: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]

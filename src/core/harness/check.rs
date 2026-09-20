@@ -447,8 +447,55 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
         return;
     }
     let shown = corpus.relative(&file);
+    let lessons = model::read_lessons(&file);
 
-    for lesson in model::read_lessons(&file) {
+    // LESSON-022: a shared counter minted by hand collides across parallel
+    // branches, and nothing used to notice — the renumbering that followed
+    // was manual and silent both times it happened.
+    //
+    // One finding per colliding id, not one per extra heading: three headings
+    // sharing a number are one problem, and emitting it twice under the same
+    // finding id would give an agent two rows it cannot tell apart. Reported
+    // at the *second* occurrence so the order stays the document's.
+    let mut defined: BTreeSet<&str> = BTreeSet::new();
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    for lesson in &lessons {
+        if defined.insert(lesson.id.as_str()) || !reported.insert(lesson.id.as_str()) {
+            continue;
+        }
+        let id = &lesson.id;
+        let group: Vec<&model::Lesson> = lessons.iter().filter(|l| &l.id == id).collect();
+        findings.push(error(
+            format!("lesson.duplicate-id.{id}"),
+            format!(
+                "{shown} has {} '### {id}' headings: {}",
+                group.len(),
+                group
+                    .iter()
+                    .map(|l| shown_title(l))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            renumber_remediation(id, &group),
+        ));
+    }
+
+    if let Ok(text) = std::fs::read_to_string(&file) {
+        let mut cited: BTreeSet<String> = BTreeSet::new();
+        for reference in model::lesson_ids(&text) {
+            if cited.insert(reference.clone()) && !defined.contains(reference.as_str()) {
+                findings.push(error(
+                    format!("lesson.dangling-reference.{reference}"),
+                    format!(
+                        "{shown} cites {reference}, which no '### {reference}' heading defines"
+                    ),
+                    "fix the typo, or write the lesson it was meant to cite",
+                ));
+            }
+        }
+    }
+
+    for lesson in &lessons {
         if lesson.status.as_deref() != Some("mechanized") {
             continue;
         }
@@ -473,6 +520,47 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
             )),
             Some(_) => {}
         }
+    }
+}
+
+/// How `lesson.duplicate-id` tells the reader to fix it.
+///
+/// It names each colliding heading by its **title**, because that is what
+/// `renumber::locate` matches on and it is the only thing that tells two
+/// headings sharing a number apart. Naming the id instead — which a title can
+/// never contain — produced a remediation whose command failed every time it
+/// was followed.
+fn renumber_remediation(id: &str, group: &[&model::Lesson]) -> String {
+    let usable: Vec<&str> = group
+        .iter()
+        .map(|lesson| lesson.title.as_str())
+        .filter(|title| !title.is_empty())
+        .collect();
+    if usable.is_empty() {
+        return format!(
+            "give the '### {id}' headings distinct titles, then run: \
+             pinst harness renumber-lesson --title \"<that title>\""
+        );
+    }
+    let commands: Vec<String> = usable
+        .iter()
+        .map(|title| format!("pinst harness renumber-lesson --title \"{title}\""))
+        .collect();
+    format!(
+        "renumber whichever one did not reach main first — {} — adding --dry-run \
+         first to see what it would move",
+        commands.join(", or ")
+    )
+}
+
+/// A lesson's title as a finding should print it, including the untitled case
+/// — which is a real heading shape and must not render as an empty pair of
+/// quotes the reader cannot act on.
+fn shown_title(lesson: &model::Lesson) -> String {
+    if lesson.title.is_empty() {
+        format!("{} (untitled)", lesson.id)
+    } else {
+        format!("'{}'", lesson.title)
     }
 }
 
@@ -672,6 +760,7 @@ fn info(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::harness::renumber;
     use crate::core::harness::root::CorpusRoot;
     use std::collections::BTreeSet;
     use std::path::Path;
@@ -891,6 +980,30 @@ mod tests {
                     );
                 },
             ),
+            case(
+                "lesson.duplicate-id.LESSON-001",
+                "two lessons minted the same number, as happens across parallel branches",
+                |f: &Fixture| {
+                    f.good_plan("260919-qwerty", "thing");
+                    f.write(
+                        ".ash/LEARNINGS.md",
+                        "# Distilled learnings\n\n### LESSON-001: First\n**Status:** prose\n\n\
+                         ### LESSON-001: Second\n**Status:** prose\n",
+                    );
+                },
+            ),
+            case(
+                "lesson.dangling-reference.LESSON-999",
+                "a 'Seen in:' line citing a lesson number nothing defines",
+                |f: &Fixture| {
+                    f.good_plan("260919-qwerty", "thing");
+                    f.write(
+                        ".ash/LEARNINGS.md",
+                        "# Distilled learnings\n\n### LESSON-001: A thing\n**Status:** prose\n\
+                         **Seen in:** also see LESSON-999\n",
+                    );
+                },
+            ),
         ];
 
         for Case {
@@ -919,6 +1032,121 @@ mod tests {
         let fixture = Fixture::new();
         fixture.good_plan("260919-qwerty", "thing");
         assert!(run(&fixture.indexed()).is_empty());
+    }
+
+    /// Every `--title "..."` a remediation suggests, in the order it suggests
+    /// them.
+    fn suggested_titles(remediation: &str) -> Vec<String> {
+        remediation
+            .split("--title \"")
+            .skip(1)
+            .filter_map(|rest| rest.split_once('"').map(|(title, _)| title.to_string()))
+            .collect()
+    }
+
+    /// The remedy is mechanized now too, so the finding has to name the
+    /// command rather than sending the reader back to grepping the corpus —
+    /// the half of LESSON-022 the detection alone left open.
+    ///
+    /// And the command it names has to *work*. This runs `renumber::locate`
+    /// with the exact `--title` the remediation hands the reader, because the
+    /// first version of this test only asserted the string contained some
+    /// words: it named the shared id, which is the one thing a title can never
+    /// contain, so following it failed every time and every assertion passed
+    /// anyway (LESSON-034).
+    #[test]
+    fn the_duplicate_id_remediation_suggests_a_title_that_resolves() {
+        let learnings = "# Distilled learnings\n\n\
+             ### LESSON-001: The one that reached main first\n**Status:** prose\n\n\
+             ### LESSON-001: The one the branch minted\n**Status:** prose\n\n\
+             ### LESSON-002: An unrelated neighbour\n**Status:** prose\n";
+        let fixture = Fixture::new();
+        fixture.good_plan("260919-qwerty", "thing");
+        fixture.write(".ash/LEARNINGS.md", learnings);
+
+        let findings = run(&fixture.indexed());
+        let duplicates: Vec<&Finding> = findings
+            .iter()
+            .filter(|f| f.id == "lesson.duplicate-id.LESSON-001")
+            .collect();
+        assert_eq!(duplicates.len(), 1, "one finding per colliding id");
+        let duplicate = duplicates[0];
+
+        // Both colliding headings are named, by the thing that tells them
+        // apart rather than by the number they share.
+        assert!(
+            duplicate
+                .message
+                .contains("The one that reached main first")
+                && duplicate.message.contains("The one the branch minted"),
+            "{}",
+            duplicate.message
+        );
+
+        let titles = suggested_titles(&duplicate.remediation);
+        assert_eq!(titles.len(), 2, "{}", duplicate.remediation);
+        assert!(
+            duplicate
+                .remediation
+                .contains("pinst harness renumber-lesson"),
+            "{}",
+            duplicate.remediation
+        );
+
+        // The actual bug: run what the remediation told the reader to run.
+        let headings = renumber::headings(learnings);
+        for title in &titles {
+            let found = renumber::locate(&headings, title)
+                .unwrap_or_else(|err| panic!("--title {title:?} does not resolve: {err:#}"));
+            assert_eq!(found.id, "LESSON-001", "--title {title:?}");
+        }
+        // ...and the two suggestions are not the same heading twice.
+        assert_ne!(
+            renumber::locate(&headings, &titles[0]).unwrap().line,
+            renumber::locate(&headings, &titles[1]).unwrap().line
+        );
+    }
+
+    /// Three headings on one number are one problem, and the reader is
+    /// offered all three titles rather than having to find the third.
+    #[test]
+    fn a_three_way_collision_is_one_finding_naming_all_three() {
+        let fixture = Fixture::new();
+        fixture.good_plan("260919-qwerty", "thing");
+        fixture.write(
+            ".ash/LEARNINGS.md",
+            "# Distilled learnings\n\n\
+             ### LESSON-001: First\n**Status:** prose\n\n\
+             ### LESSON-001: Second\n**Status:** prose\n\n\
+             ### LESSON-001: Third\n**Status:** prose\n",
+        );
+
+        let findings = run(&fixture.indexed());
+        let duplicates: Vec<&Finding> = findings
+            .iter()
+            .filter(|f| f.id == "lesson.duplicate-id.LESSON-001")
+            .collect();
+        assert_eq!(duplicates.len(), 1);
+        assert_eq!(suggested_titles(&duplicates[0].remediation).len(), 3);
+    }
+
+    /// The remediation is only useful if the titles in the real file are
+    /// distinguishable, so the corpus itself is the fixture: every lesson has
+    /// a title, and passing that title to the command resolves to that one
+    /// heading and no other.
+    #[test]
+    fn every_lesson_in_the_corpus_is_reachable_by_its_own_title() {
+        let corpus = real();
+        let text = std::fs::read_to_string(corpus.root.learnings_file()).unwrap();
+        let headings = renumber::headings(&text);
+        assert!(headings.len() >= 30, "found only {}", headings.len());
+
+        for heading in &headings {
+            assert!(!heading.title.is_empty(), "{} has no title", heading.id);
+            let found = renumber::locate(&headings, &heading.title)
+                .unwrap_or_else(|err| panic!("{}: {err:#}", heading.id));
+            assert_eq!(found.line, heading.line, "{}", heading.id);
+        }
     }
 
     /// The staleness checks are the ones that compare the corpus against a

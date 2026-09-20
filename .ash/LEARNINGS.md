@@ -308,7 +308,16 @@ parameter version is shorter, needs no lock, and removes the possibility of a
 test reaching the developer's real `~/.cache` at all. The awkward test was a
 design problem one level up, not a testing problem.
 **Status:** prose
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005)
+**Mechanize:** declined — the trigger is "this test feels awkward", which is
+not a property of the source. A check could flag `set_var` in tests, but both
+sightings so far were something else: a process-wide default in one, a plain
+`const` read inside a function in the other. The pattern is recognisable and
+not detectable.
+**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
+260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
+environment variable but a plain `const` read inside the function — a
+30-second timeout that made the test proving it works take 30 seconds. Same
+tell: the test is awkward because the value is ambient.
 
 ### LESSON-019: `set -euo pipefail` makes two everyday `grep` idioms lie
 **Lesson:** In a `set -euo pipefail` script, `var="$(... | grep ...)"` aborts
@@ -366,8 +375,11 @@ know which that is.
 **Lesson:** Any identifier minted by "highest existing number plus one" in a
 file that parallel branches all append to will collide. `LESSON-NNN` in this
 file is the remaining instance. Until it is minted like a plan id, resolve a
-collision by letting whichever side reached `main` first keep its numbers, and
-grep the whole corpus for references to the ones you renumber.
+collision by letting whichever side reached `main` first keep its numbers and
+running `pinst harness renumber-lesson --title "<the other one's title>"` on
+the side that has to move: it renames the heading and rewrites the citations
+this branch itself added, which is the subset a grep of the corpus cannot
+safely decide for you.
 **Why:** The plan id carries six random letters for exactly this reason, and
 `.agents/README.md` argues it at length: two sessions in parallel worktrees
 compute the same "next" value, both use it, and the collision only surfaces at
@@ -377,25 +389,29 @@ from the explanation of why it was avoided. It surfaced the first time two
 plans were distilled on the same day: `260920-impoxu` and `260920-tensvp` both
 minted 015, 016 and 017 for different lessons. The renumbering is manual and
 silent, which is the part worth fixing — nothing checks that every lesson id is
-unique or that a reference to one still resolves.
-**Status:** prose
+unique or that a reference to one still resolves. Both of those are closed
+now, the check first: detection was the easy half, and mechanizing the
+*remedy* took longer because a check only has to say two headings share a
+number, whereas a fix has to know *which* citations of that number mean the
+heading being moved. Reading them off `git diff` against the merge-base is what
+makes that answerable without a person — a branch can only have meant the lines
+it added — and it is why the command scopes its rewrite instead of replacing
+the literal everywhere. A blind replace would quietly repoint the citations
+that predate the collision at the wrong lesson, which is worse than leaving
+them alone, so what falls outside that scope is printed rather than guessed at.
+**Status:** mechanized
+**Check:** lesson.duplicate-id
 **Seen in:** 260920-impoxu-daily-distil-action (ISSUE-012); again the same day
 in 260920-wtburh-harness-in-the-binary, where `main` and an open branch had
 both minted LESSON-019 through LESSON-022 for different lessons. Resolved by
 this lesson's own rule — main's four kept their numbers, the branch's eight
 shifted to 023..030, and a grep of the corpus found four cross-references to
-renumber. Third sighting, and still nothing checks that a lesson id is unique
-or that a reference to one resolves.
-**Mechanize:** declined — the trigger is "this test feels awkward", which is
-not a property of the source. A check could flag `set_var` in tests, but both
-sightings so far were something else: a process-wide default in one, a plain
-`const` read inside a function in the other. The pattern is recognisable and
-not detectable.
-**Seen in:** 260920-tensvp-tool-docs-explorer (ISSUE-005); again in
-260920-wtburh-harness-in-the-binary (ISSUE-005), where it was not an
-environment variable but a plain `const` read inside the function — a
-30-second timeout that made the test proving it works take 30 seconds. Same
-tell: the test is awkward because the value is ambient.
+renumber. Third sighting became the trigger to mechanize it: `harness check`
+now reports `lesson.duplicate-id.<id>` for two headings sharing a number, and
+`lesson.dangling-reference.<id>` for a citation nothing defines — the second
+half this lesson also named ("or that a reference to one resolves") and
+`LESSON-NNN` itself is still what mints the number, so a collision is caught
+at the next `just qc` rather than at the next merge.
 
 ### LESSON-023: Compare a port against the incumbent on broken input, not on healthy input
 **Lesson:** When reimplementing something that already works, keep both
@@ -543,3 +559,55 @@ about either consumer. `just qc` was green, the PR check was green, and the
 pull request exercises. One `just distil-guard preflight` found all of it.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-012)
+
+### LESSON-032: A diff that locates an edit must be taken against the tree the edit lands in
+**Lesson:** When a diff's line numbers will be used to *write* — to rewrite,
+patch or annotate lines — diff against the working tree, not against `HEAD`.
+`merge-base..HEAD` correctly answers "what did this branch add"; it does not
+answer "where is that line now", and the two agree only while the tree is
+clean.
+**Why:** The tools that need this scoping are remedies, and a remedy is run
+in the middle of the mess it exists to clean up — the tree is dirty by
+definition at that moment. A stale line number does not fail: it writes
+successfully to the wrong line, which is the quietest possible outcome. The
+same reasoning argues for a second, cheap guard, since any number can go
+stale for reasons a diff cannot see: check that the line still contains what
+you expected before writing it, and drop it from the report rather than
+editing it if it does not.
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-001)
+
+### LESSON-033: A filter constant carries its first caller's intent, not a general rule
+**Lesson:** Before reusing a skip list, extension filter or exclusion set,
+read *why* each entry is in it. A second caller that matches the shape of the
+walk rarely matches the reason for the exclusions, and inheriting them
+silently narrows the new caller to the wrong set of files.
+**Why:** `check::NOT_SOURCE` skips `.ash` and every `.md` file so that a
+lesson cannot be satisfied by the prose describing it (LESSON-025). Reusing
+it to report where a `LESSON-NNN` citation appears would have excluded
+essentially every citation, since they are markdown inside `.ash` — a
+report that comes back almost empty and looks like good news. The exclusions
+are not "files not worth searching"; they are one finding's definition of
+what counts as enforcement, and that definition does not travel. A filter
+whose entries need a paragraph of justification is a filter whose second
+caller needs its own.
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-002)
+
+### LESSON-034: Test a suggested command by running it, not by matching its text
+**Lesson:** When a check, error or doc emits a command for someone to run,
+the test for it must execute that exact string — or at minimum feed it to the
+function that has to consume it. Asserting that the message *contains* the
+right words proves only that the words are there.
+**Why:** `lesson.duplicate-id` told the reader to run `renumber-lesson
+--title "<the shared id>"`, but `--title` matches a heading's title, which is
+everything *after* the id and so can never contain it. The command failed
+every time it was followed. The test asserted the remediation contained
+"pinst harness renumber-lesson" and "LESSON-001", and both were true of a
+string that did not work — a green test standing exactly where the bug was.
+The fix is cheap and the coverage is real: parse the `--title` value back out
+of the remediation and pass it to `locate`, which turns "the words are right"
+into "the reader's next command succeeds".
+**Status:** prose
+**Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-005), found on
+review rather than by `just qc`

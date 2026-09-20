@@ -334,6 +334,10 @@ pub fn read_issues(path: &Path) -> Vec<Issue> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lesson {
     pub id: String,
+    /// Everything after the id on the heading line, which is the only thing
+    /// that tells two colliding lessons apart — and therefore what
+    /// `lesson.duplicate-id` has to name and `renumber::locate` matches on.
+    pub title: String,
     /// `prose`, `mechanized` or `retired`.
     pub status: Option<String>,
     /// The finding id that enforces it, on a `mechanized` lesson.
@@ -373,11 +377,12 @@ pub fn read_lessons(path: &Path) -> Vec<Lesson> {
     }
 
     for line in text.lines() {
-        if let Some(id) = heading_id(line, "### ", "LESSON-") {
+        if let Some((id, title)) = split_lesson_heading(line) {
             flush(&mut current, &mut buffer, &mut in_seen);
             lessons.extend(current.take());
             current = Some(Lesson {
                 id,
+                title,
                 status: None,
                 check: None,
                 mechanize_declined: false,
@@ -410,6 +415,29 @@ pub fn read_lessons(path: &Path) -> Vec<Lesson> {
     flush(&mut current, &mut buffer, &mut in_seen);
     lessons.extend(current);
     lessons
+}
+
+/// `### LESSON-001: A thing` -> `("LESSON-001", "A thing")`.
+///
+/// The one place that decides where a lesson's id ends and its title begins.
+/// It is shared rather than reimplemented because two callers have to agree
+/// on the answer exactly: `lesson.duplicate-id` suggests a `--title` to pass
+/// to `renumber-lesson`, and `renumber::locate` is what has to find it. They
+/// did not agree once — the finding named the *id*, which is the one string a
+/// title can never contain — and the remediation was a command that always
+/// failed.
+pub(crate) fn split_lesson_heading(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("### ")?.strip_prefix("LESSON-")?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let title = rest[digits.len()..]
+        .trim_start()
+        .trim_start_matches(':')
+        .trim()
+        .to_string();
+    Some((format!("LESSON-{digits}"), title))
 }
 
 /// `### ISSUE-001: Something` -> `ISSUE-001`.
@@ -462,6 +490,25 @@ fn issue_ids(text: &str) -> Vec<String> {
             found.push(format!("ISSUE-{digits}"));
         }
         rest = &rest[at + 6..];
+    }
+    found
+}
+
+/// Every `LESSON-<digits>` in a string, including a lesson's own heading.
+///
+/// Mirrors `issue_ids`: a lesson number is referenced in prose far more often
+/// than the six-letter plan id is, since lessons cross-cite each other
+/// directly (LESSON-022).
+pub(crate) fn lesson_ids(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("LESSON-") {
+        let tail = &rest[at + 7..];
+        let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() {
+            found.push(format!("LESSON-{digits}"));
+        }
+        rest = &rest[at + 7..];
     }
     found
 }
