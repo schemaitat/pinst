@@ -1,7 +1,7 @@
 ---
 id: 260919-vldfei
 slug: self-improving-agent-harness
-status: In Progress
+status: Done
 created: 2026-09-19
 updated: 2026-09-20
 areas: [agents, harness, learnings]
@@ -126,7 +126,7 @@ does not.
 | 2 | Make undistilled learnings a finding | [phase-02.md](phase-02.md) | Done |
 | 3 | Skill contracts and the artifact audit | [phase-03.md](phase-03.md) | Done |
 | 4 | Corroborate with invocation evidence | [phase-04.md](phase-04.md) | Done |
-| 5 | Name the gaps and close the loop | [phase-05.md](phase-05.md) | Proposed |
+| 5 | Name the gaps and close the loop | [phase-05.md](phase-05.md) | Done |
 
 ## Affected Files
 - **FILE-001** `.ash/LEARNINGS.md` — every lesson gains `Status:` and, when

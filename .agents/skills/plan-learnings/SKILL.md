@@ -210,6 +210,44 @@ on one lesson is a useful signal in itself: it marks the problems this
 codebase keeps re-creating, which are the ones worth fixing structurally
 rather than remembering harder.
 
+## Step 6 — The corpus-wide pass
+
+Steps 1–5 start from one plan. This one starts from the whole corpus, and is
+what `/distil` invokes. Run it when a plan closes, and whenever `just qc`
+reports `learnings.untriaged` — there is no schedule, because the trigger is a
+plan closing rather than a Tuesday.
+
+Start from `just review`, which prints the per-skill report, the gap groups
+and an agenda. Then, in this order:
+
+1. **Triage every untriaged issue.** `ash.sh check` names them as
+   `learnings.untriaged.<plan>.<issue>`. Each one ends in exactly one of three
+   states, and "leave it for later" is not among them:
+   - **promote** — it generalizes; add a `LESSON-NNN` with `**Status:**
+     prose`;
+   - **merge** — an existing lesson already says it; append this plan to that
+     lesson's `Seen in:` line, which is the strongest signal in the file that
+     something is systemic;
+   - **decline** — it does not generalize; write `**Distilled:** declined —
+     <reason>` on the issue. Permanent, and one line. Declining is a normal
+     outcome, not a failure to think.
+2. **Reclassify what changed.** A `prose` lesson that a check now enforces
+   becomes `mechanized` with the finding id on `**Check:**`. A lesson that
+   stopped being true becomes `retired` with a reason. `lesson.unenforced`
+   will catch a `Check:` id that names nothing.
+3. **Answer the gap groups.** Each names an area and the issues in it that no
+   skill owns. For each, say one of: *there is a skill missing here, and it
+   would do X*, or *this work is not skill-shaped* — most recorded issues are
+   domain surprises (a toolchain, an API, a permission), and no instruction
+   would have prevented them. Write the answer down in the review's own record
+   rather than only in the conversation, because the gap section recomputes
+   from scratch and will otherwise ask again.
+4. **Propose, do not write.** A new skill is a proposal to the user with its
+   trigger description and what it would produce. Writing one unasked is how a
+   harness accumulates skills nobody invokes.
+
+Report what you triaged, what you reclassified, and what you proposed.
+
 ## Step 5 — Report back
 
 Run `just harness` to confirm the corpus is clean, then tell the user both

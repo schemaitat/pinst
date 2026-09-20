@@ -167,7 +167,6 @@ check_corpus() {
     check_phases "$d" "$name" "$id" "$slug" "$readme"
     check_learnings "$d" "$name"
     check_changelog "$d" "$name" "$id"
-    check_distillation "$d" "$name" "$id"
   done <<< "$(plan_dirs)"
 }
 
@@ -419,6 +418,18 @@ seen_pairs() {
   ' "$LEARNINGS_FILE"
 }
 
+# "ISSUE-00N <skill|->" for one learnings.md.
+issue_skills() {
+  [ -f "$1" ] || return 0
+  awk '
+    function flush() { if (cur != "") print cur, (sk == "" ? "-" : sk); cur = ""; sk = "" }
+    /^### ISSUE-/ { flush(); cur = $2; sub(/:$/, "", cur); next }
+    /^\*\*Skill:\*\*/ { sk = $2 }
+    /^## / { flush() }
+    END { flush() }
+  ' "$1"
+}
+
 # "ISSUE-00N open|declined" for one learnings.md.
 issue_states() {
   [ -f "$1" ] || return 0
@@ -431,23 +442,37 @@ issue_states() {
   ' "$1"
 }
 
-check_distillation() {
-  local d="$1" name="$2" id="$3"
-  local lf="$d/learnings.md"
-  [ -f "$lf" ] || return 0
-
-  local pairs state issue st
+# "<plan dir name> <ISSUE-NNN>" for every issue nobody has decided about.
+# Computed once and read twice — by `check`, which turns each into a finding,
+# and by the review agenda, which counts them.
+untriaged_issues() {
+  local pairs d name rest id lf state issue st
   pairs="$(seen_pairs)"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+    lf="$d/learnings.md"
+    [ -f "$lf" ] || continue
+    rest="${name#*-}"; id="${name%%-*}-${rest%%-*}"
+    while IFS= read -r state; do
+      [ -n "$state" ] || continue
+      issue="${state%% *}"; st="${state##* }"
+      [ "$st" = "open" ] || continue
+      printf '%s\n' "$pairs" | grep -qx "$id $issue" && continue
+      printf '%s %s\n' "$name" "$issue"
+    done <<< "$(issue_states "$lf")"
+  done <<< "$(plan_dirs)"
+}
 
-  while IFS= read -r state; do
-    [ -n "$state" ] || continue
-    issue="${state%% *}"; st="${state##* }"
-    [ "$st" = "open" ] || continue
-    printf '%s\n' "$pairs" | grep -qx "$id $issue" && continue
+check_distillation() {
+  local row name issue
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    name="${row%% *}"; issue="${row##* }"
     finding "learnings.untriaged.$name.$issue" warning \
-      "$lf records $issue but no lesson in $LEARNINGS_FILE references it" \
+      "$PLANS_DIR/$name/learnings.md records $issue but no lesson in $LEARNINGS_FILE references it" \
       "run the plan-learn skill: promote it, add it to an existing lesson'\''s 'Seen in:' line, or write '\''**Distilled:** declined — <reason>'\'' on the issue"
-  done <<< "$(issue_states "$lf")"
+  done <<< "$(untriaged_issues)"
 }
 
 # A lesson may be mechanized by either checker — ash.sh owns the corpus
@@ -473,6 +498,28 @@ check_lessons() {
       "$LEARNINGS_FILE says $lesson is mechanized by '\''$ck'\'', which no script under scripts/ emits" \
       "point '\''**Check:**'\'' at a finding id that exists, or set '\''**Status:** prose'\''"
   done <<< "$(lesson_states)"
+}
+
+# "LESSON-00N <plan id>" for every plan a lesson's `Seen in:` line cites.
+lesson_plan_pairs() {
+  [ -f "$LEARNINGS_FILE" ] || return 0
+  awk '
+    function flush(   tmp, seen) {
+      if (cur == "" || buf == "") { buf = ""; return }
+      tmp = buf
+      while (match(tmp, /[0-9][0-9][0-9][0-9][0-9][0-9]-[a-z][a-z][a-z][a-z][a-z][a-z]/)) {
+        p = substr(tmp, RSTART, RLENGTH)
+        if (!((cur SUBSEP p) in seen)) { seen[cur SUBSEP p] = 1; print cur, p }
+        tmp = substr(tmp, RSTART + RLENGTH)
+      }
+      buf = ""
+    }
+    /^### LESSON-/ { flush(); cur = $2; sub(/:$/, "", cur); inseen = 0; next }
+    /^\*\*Seen in:\*\*/ { inseen = 1 }
+    inseen { buf = buf " " $0 }
+    /^[[:space:]]*$/ { if (inseen) { flush(); inseen = 0 } }
+    END { flush() }
+  ' "$LEARNINGS_FILE"
 }
 
 # "LESSON-00N status check-or-dash" for every lesson.
@@ -662,7 +709,7 @@ PYEOF
 cmd_skills() {
   local rows_json="" sep="" dir name file produces evidence kind wired
   local win all wn wt an at
-  local counts="" have_counts=0
+  local counts="" have_counts=0 regressions=""
 
   if [ -n "$TRANSCRIPTS" ]; then
     if counts="$(transcript_counts "$TRANSCRIPTS")"; then
@@ -730,6 +777,9 @@ cmd_skills() {
       fi
       if r="$(run_evidence "$evidence" "")"; then
         an="${r%% *}"; at="${r##* }"; all="$an/$at $(pct "$an" "$at")"
+        if [ "$wt" -gt 0 ] && [ "$at" -gt 0 ] && [ $(( wn * 100 / wt )) -lt $(( an * 100 / at )) ]; then
+          regressions="$regressions${regressions:+, }$name"
+        fi
       else
         an=0; at=0; all="unmeasured"
       fi
@@ -761,6 +811,99 @@ cmd_skills() {
   done <<< "$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)"
 
   EXTRA_JSON="\"skills\":[$rows_json],"
+
+  report_gaps "$regressions"
+}
+
+# --- gaps -------------------------------------------------------------------
+# The last question: which work keeps being done with no skill to do it.
+#
+# Reported, never enforced. A missing skill is a judgement about what is worth
+# automating, and a finding would mean `qc` failing over an opinion. The
+# numbers order the conversation; they do not settle it.
+
+# "<area> <plan> <ISSUE-NNN>" for every issue attributed to no skill. An issue
+# counts once per area its plan declares, so an area accumulates everything
+# unowned that touched it — the useful reading, at the cost of one issue
+# appearing under two headings.
+gap_rows() {
+  local d name areas a row issue sk
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    name="$(basename "$d")"
+    [ -f "$d/learnings.md" ] || continue
+    [ -f "$d/README.md" ] || continue
+    areas="$(delist "$(fm_raw "$d/README.md" areas)")"
+    while IFS= read -r row; do
+      [ -n "$row" ] || continue
+      issue="${row%% *}"; sk="${row##* }"
+      [ "$sk" = "none" ] || continue
+      for a in ${areas//,/ }; do
+        [ -n "$a" ] && printf '%s %s %s\n' "$a" "$name" "$issue"
+      done
+    done <<< "$(issue_skills "$d/learnings.md")"
+  done <<< "$(plan_dirs)"
+}
+
+report_gaps() {
+  local regressions="$1"
+  local gaps agenda="" n untriaged_n recurring gap_json="" sep=""
+
+  gaps="$(gap_rows | sort | awk '
+    { area = $1; issues[area] = issues[area] (issues[area] == "" ? "" : ",") $3; n[area]++ }
+    END { for (a in n) print n[a], a, issues[a] }
+  ' | sort -rn)"
+
+  # A lesson two different plans have hit, still enforced by nothing. Phase 2
+  # deliberately left this unenforceable: "several" is a threshold nobody can
+  # justify, so it is listed rather than failed on.
+  recurring="$(lesson_plan_pairs | awk '{ c[$1]++ } END { for (l in c) if (c[l] > 1) print l }' | sort | while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    lesson_states | awk -v l="$l" '$1 == l && $2 == "prose" { print $1 }'
+  done)"
+
+  untriaged_n="$(untriaged_issues | grep -c . || true)"
+
+  if [ "$JSON" -ne 1 ]; then
+    printf '\n## Gaps — recorded issues no skill owns\n'
+    if [ -z "$gaps" ]; then
+      printf '  none\n'
+    else
+      printf '%s\n' "$gaps" | while IFS=" " read -r count area ids; do
+        printf '  %-14s %s issue(s)  %s\n' "$area" "$count" "$ids"
+      done
+    fi
+  fi
+
+  while IFS=" " read -r count area ids; do
+    [ -n "$area" ] || continue
+    gap_json="$gap_json$sep{\"area\":\"$(jesc "$area")\",\"issues\":$count,\"ids\":\"$(jesc "$ids")\"}"
+    sep=","
+  done <<< "$gaps"
+
+  [ "$untriaged_n" -eq 0 ] || agenda="$agenda$untriaged_n issue(s) waiting on a decision — /distil, or scripts/ash.sh check to list them
+"
+  [ -z "$regressions" ] || agenda="$agenda""windowed rate below all-time: $regressions — look at what changed recently
+"
+  [ -z "$gaps" ] || agenda="$agenda$(printf '%s\n' "$gaps" | head -1 | awk '{ print $2 " has " $1 " issue(s) no skill owns — is there a skill missing here?" }')
+"
+  [ -z "$recurring" ] || agenda="$agenda""recurring and still unenforced: $(printf '%s' "$recurring" | tr '\n' ' ')— candidates for a check
+"
+
+  if [ "$JSON" -ne 1 ]; then
+    printf '\n## Agenda\n'
+    if [ -z "$agenda" ]; then
+      printf '  nothing to act on\n'
+    else
+      printf '%s' "$agenda" | sed 's/^/  - /'
+    fi
+  fi
+
+  n="$(printf '%s' "$agenda" | grep -c . || true)"
+  EXTRA_JSON="$EXTRA_JSON\"gaps\":[$gap_json],\"agenda_items\":$n,"
+  [ "$n" -eq 0 ] || finding "review.agenda" info \
+    "$n item(s) on the review agenda" \
+    "run /distil, or read the Agenda section above"
 }
 
 # --- reporting --------------------------------------------------------------
@@ -837,6 +980,7 @@ case "$cmd" in
   check)
     check_corpus
     check_lessons
+    check_distillation
     # A stale index is a corpus problem like any other, so `check` catches it
     # without the caller having to remember a second command.
     if [ -f "$INDEX_FILE" ]; then

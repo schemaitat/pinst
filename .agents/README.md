@@ -275,6 +275,29 @@ cycle. And it emits **derived counts only** — a skill name is printed only
 after matching a directory in `.agents/skills`, so nothing typed into a
 conversation can reach the output, and nothing here writes into `.ash/`.
 
+## The review cadence
+
+```sh
+just review        # invariants, the per-skill report, the gaps, the agenda
+/distil            # …and act on what it says
+```
+
+Run it when a plan closes, and whenever `qc` reports `learnings.untriaged`.
+That is the whole schedule, and it is deliberate: **the corpus is the clock.**
+
+A wall-clock cadence — a cron, a scheduled agent, a weekly reminder — fires
+into silence on a quiet week and misses four plans on a busy one, and it lives
+in one person's account rather than in the repo, so a fresh clone does not
+inherit it. An `learnings.untriaged` finding fires exactly when there is
+something to distil, stays until someone decides, and everyone who runs `qc`
+sees it. If a clock is ever wanted anyway, it is one recipe — but it would be
+a second trigger for something that already has one.
+
+The agenda's last section is the part no exit code can settle: which recurring
+work has no skill to do it. It is reported and never enforced, because a
+missing skill is a judgement about what is worth automating and `qc` should
+not fail over an opinion.
+
 ## Delegating
 
 The plan skills are deliberately sequential: `plan-write` enforces a strictly
