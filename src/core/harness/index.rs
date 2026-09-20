@@ -7,11 +7,11 @@
 //! stale one is a `check` finding precisely so a forgotten regeneration
 //! surfaces as an exit code rather than as a quietly wrong table.
 //!
-//! The rendering is byte-compatible with the `render_index` in
-//! `scripts/ash.sh` that it replaces — attribution line included, for as long
-//! as both exist. Two generators writing the same file cannot disagree by so
-//! much as a character without each reporting the other's output as stale,
-//! and `just qc` runs both during the changeover.
+//! The rendering reproduced the `render_index` in `scripts/ash.sh` byte for
+//! byte while both existed — attribution line included, because two
+//! generators writing one file cannot disagree by so much as a character
+//! without each reporting the other's output as stale. The script is gone
+//! now, and the attribution names this command.
 
 use std::path::Path;
 
@@ -20,13 +20,7 @@ use color_eyre::eyre::{Context, Result};
 use super::corpus::{Corpus, Plan};
 
 /// Named in the generated file so whoever opens it knows what to re-run.
-///
-/// Still the bash spelling, deliberately. `scripts/ash.sh` writes this same
-/// file until phase 5 of plan `260920-wtburh` deletes it, and a differing
-/// attribution would have each generator declare the other's index stale —
-/// one of them inside `just qc`. TASK-041 flips this to `pinst harness index`
-/// and regenerates, in the commit that removes the script.
-pub const GENERATOR: &str = "scripts/ash.sh index";
+pub const GENERATOR: &str = "pinst harness index";
 
 /// Renders the whole table from plan frontmatter.
 ///
@@ -118,11 +112,10 @@ mod tests {
         Corpus::load(CorpusRoot::new(env!("CARGO_MANIFEST_DIR"))).unwrap()
     }
 
-    /// The oracle this phase exists for: the incumbent bash generator wrote
-    /// the committed `.ash/INDEX.md`, so reproducing it byte for byte is what
-    /// proves the port did not quietly change a column. Exact, not
-    /// modulo-anything — see `GENERATOR` for why even the attribution matches
-    /// until the script is gone.
+    /// The committed index must be exactly what this renders. It began as
+    /// the bash generator's output, which is what proved the port did not
+    /// quietly change a column; now it is the regression test that keeps the
+    /// renderer and the file in the repo from drifting apart.
     #[test]
     fn reproduces_the_committed_index_byte_for_byte() {
         let corpus = real();

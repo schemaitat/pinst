@@ -130,21 +130,21 @@ surfaced. `none` means no skill covers this work, and `none` is the honest
 answer most of the time: a musl toolchain surprise or a GitHub permission is
 not a skill-shaped problem. Write the field on every issue, because it is read
 two ways and neither can be recovered from prose afterwards. Grouped by skill
-it is the per-skill failure tally in `scripts/ash.sh skills`; grouped by the
+it is the per-skill failure tally in `pinst harness skills`; grouped by the
 plan's `areas` it is the missing-skill candidate list. You were there; a later
 heuristic was not.
 
 If a run genuinely produced no issues, still write the file with an empty
 `## Issues` section (`None — implementation went as planned.`) rather than
 skipping the file — a missing file and a clean run should look different
-to someone checking later. `scripts/ash.sh check` enforces exactly that
+to someone checking later. `pinst harness check` enforces exactly that
 distinction: a plan marked `Done` with no `learnings.md` is a finding
 (`plan.learnings-missing.<plan>`), and `just qc` runs it.
 
 When appending to an existing file, insert new `ISSUE-NNN` entries after
 the existing ones (continuing the numbering) and update `## Summary` if
 the new run changes the overall picture; leave prior entries untouched.
-The `id` in frontmatter must match the plan's directory; `scripts/ash.sh
+The `id` in frontmatter must match the plan's directory; `pinst harness
 check` reports it as `plan.id-mismatch.<plan>` if it drifts.
 
 ## Step 4b — Promote what generalizes to `.ash/LEARNINGS.md`
@@ -188,7 +188,7 @@ not just the anecdote it came from>
   starts here.
 - **`mechanized`** — a check now enforces it, named on the `**Check:**` line
   by its finding id (`phase.logged-not-done`, not a description of it). That
-  id must exist in `scripts/`; `ash.sh check` reports `lesson.unenforced` when
+  id must exist in `scripts/`; `pinst harness check` reports `lesson.unenforced` when
   it does not, because a lesson claiming enforcement it does not have is worse
   than one honestly marked `prose` — it tells the next reader the problem is
   handled.
@@ -201,7 +201,7 @@ not just the anecdote it came from>
 it makes answerable: *how much of what we learned is actually enforced?* A
 lesson sitting at `prose` across several plans is a candidate for a check, not
 a candidate for louder prose — LESSON-008 is exactly that observation, and
-`ash.sh skills` lists those lessons under "recurring, unenforced" so they stop
+`pinst harness skills` lists those lessons under "recurring, unenforced" so they stop
 being invisible.
 
 When a lesson already in the file recurs in a new plan, don't add a second
@@ -220,7 +220,7 @@ plan closing rather than a Tuesday.
 Start from `just review`, which prints the per-skill report, the gap groups
 and an agenda. Then, in this order:
 
-1. **Triage every untriaged issue.** `ash.sh check` names them as
+1. **Triage every untriaged issue.** `pinst harness check` names them as
    `learnings.untriaged.<plan>.<issue>`. Each one ends in exactly one of three
    states, and "leave it for later" is not among them:
    - **promote** — it generalizes; add a `LESSON-NNN` with `**Status:**

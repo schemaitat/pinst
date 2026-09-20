@@ -8,7 +8,7 @@ description: Write an ADR-style implementation plan into .ash/plans/
 - Current branch: !`git branch --show-current`
 - Working tree: !`git status --short || echo "(clean)"`
 - Existing plans: !`cat .ash/INDEX.md 2>/dev/null || echo "(no .ash/INDEX.md yet — this would be the first plan)"`
-- A freshly minted plan id, ready to use: !`scripts/ash.sh new-id`
+- A freshly minted plan id, ready to use: !`pinst harness new-id`
 - Accumulated learnings, to account for *before* choosing an approach: !`cat .ash/LEARNINGS.md 2>/dev/null || echo "(none yet)"`
 
 ## Your task

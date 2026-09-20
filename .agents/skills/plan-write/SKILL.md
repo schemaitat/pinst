@@ -88,7 +88,7 @@ forward" below), so it must stay stable even if the plan is later abandoned.
 1. Mint it:
 
    ```sh
-   scripts/ash.sh new-id        # -> 260919-qwerty
+   pinst harness new-id        # -> 260919-qwerty
    ```
 
    (The `/plan` command already runs this and puts the result in context.)
@@ -345,7 +345,7 @@ still failing.
 
 These two are on you: linearity and declared-exactly-once are properties of
 the *reasoning*, and no script can tell a well-ordered plan from a badly
-ordered one. `scripts/ash.sh check` covers the mechanical half afterwards
+ordered one. `pinst harness check` covers the mechanical half afterwards
 (phase numbering, frontmatter, status mirrors) — it is not a substitute for
 this step.
 
@@ -374,7 +374,7 @@ forever.
 **Never hand-edit it — regenerate it:**
 
 ```sh
-just index          # or: scripts/ash.sh index
+just index          # or: pinst harness index
 ```
 
 That script rewrites the table whole from every `.ash/plans/*/README.md`
@@ -385,7 +385,7 @@ rather than patching the table.
 
 Regenerating is mechanical for a reason: a hand-maintained index drifts out
 of sync and then confidently reports things that aren't true, which is worse
-than having no index at all. `scripts/ash.sh check` treats a stale index as
+than having no index at all. `pinst harness check` treats a stale index as
 a finding, and `just qc` runs it, so a forgotten regeneration surfaces as a
 failing check rather than as a quietly wrong table.
 

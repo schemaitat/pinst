@@ -29,7 +29,7 @@ already written into commit footers and can no longer be changed. The date
 half is `yymmdd`, most-significant-first, so string order is date order and
 `ls .ash/plans/` comes out chronological with no sort key.
 
-Mint one with `scripts/ash.sh new-id`; never derive one by counting.
+Mint one with `pinst harness new-id`; never derive one by counting.
 
 Everything else named here is projection or enforcement.
 
@@ -82,26 +82,27 @@ only reason the corpus is worth keeping rather than just being history.
 
 ### Two fields make the loop measurable
 
-Both are written by `plan-learnings` and read by `scripts/ash.sh`:
+Both are written by `plan-learnings` and read by `pinst harness`:
 
 - **`**Status:**` on every lesson** in `.ash/LEARNINGS.md` — `prose`,
   `mechanized` or `retired`. A `mechanized` lesson also carries
   **`**Check:**`**, naming the finding id that now enforces it
   (`phase.logged-not-done`, `wire.missing` — an id, not a description). That
-  id must exist somewhere under `scripts/`, in *either* checker: `ash.sh`
-  owns the corpus invariants and `agents-wire.sh` owns the skill projection,
-  and a lesson may be mechanized by either. `ash.sh check` reports
+  id must exist somewhere under `src/` or `scripts/`, in *either* checker:
+  `pinst harness check` owns the corpus invariants and
+  `scripts/agents-wire.sh` owns the skill projection, and a lesson may be
+  mechanized by either. `pinst harness check` reports
   `lesson.unenforced` when the id is nowhere to be found, because a lesson
   claiming enforcement it does not have is worse than one honestly marked
   `prose` — it tells the next reader the problem is handled.
 - **`**Skill:**` on every issue** in a plan's `learnings.md` — the skill whose
   *instructions* would have had to change to prevent it, or `none`. Read by
-  skill it is the failure tally in `ash.sh skills`; read by the plan's `areas`
+  skill it is the failure tally in `pinst harness skills`; read by the plan's `areas`
   it is the missing-skill candidate list.
 
 `Status:` exists so the file has an end state instead of only growing, and so
 one question becomes answerable: how much of what we learned is actually
-enforced? Today that is 2 of 10. The other eight are not a backlog — most
+enforced? Today that is 4 of 18. The other fourteen are not a backlog — most
 lessons are judgement that no exit code can carry — but a lesson sitting at
 `prose` across several plans is a candidate for a check rather than for louder
 prose.
@@ -165,12 +166,23 @@ fine and found things to act on.
 ```sh
 just harness                      # both of the below
 scripts/agents-wire.sh --check    # every skill wired, names match their dirs
-scripts/ash.sh check              # the corpus invariants
-scripts/ash.sh check --json       # ... as a machine-readable envelope
+pinst harness check               # the corpus invariants
+pinst harness check --json        # ... as a machine-readable envelope
 just index                        # regenerate .ash/INDEX.md
 ```
 
-`ash.sh check` enforces what the skills previously only asserted in prose:
+The corpus half is a pinst subcommand rather than a script, so a machine
+that installed the release binary gets these checks with nothing to clone —
+which is also why it discovers the corpus by walking up from the working
+directory for a `.ash/`, not by looking beside pinst's own `manifest.toml`.
+It runs against whatever repo you are standing in.
+
+Skill projection is still bash, deliberately: `agents-wire.sh` writes
+symlinks into a vendor directory and has nothing to do with the corpus. So
+`just harness` is one binary and one script, and "the harness needs no
+`scripts/`" is true of the corpus checks and not yet of the recipe.
+
+`pinst harness check` enforces what the skills previously only asserted in prose:
 indices unique, quoted, and matching their directory; required frontmatter
 present; `status` a legal value; no `## Status` section duplicating
 frontmatter; phase files numbered `01..N` with no gaps; each phase's status
@@ -216,7 +228,7 @@ parse the prose.
 
 ## Grading the skills
 
-`just review` runs the invariants and then `scripts/ash.sh skills`, which
+`just review` runs the invariants and then `pinst harness skills`, which
 grades each skill **on the artifacts it leaves in the repo** — never on
 whether anyone invoked it. Each skill declares its own contract in its
 frontmatter:
@@ -251,7 +263,7 @@ that keeps going wrong, and it is the most interesting row in the table.
 ### Invocation counts are a second opinion
 
 ```sh
-scripts/ash.sh skills --transcripts ~/.claude/projects
+pinst harness skills --transcripts ~/.claude/projects
 ```
 
 Off unless asked for, and nothing in `qc` may ever depend on it. With the flag

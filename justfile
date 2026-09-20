@@ -86,22 +86,30 @@ dist target="x86_64-unknown-linux-musl":
 # --- the agent harness -----------------------------------------------------
 # Source of truth is .agents/ (skills) and .ash/ (the plan corpus). These
 # recipes are what keeps both honest; see .agents/README.md.
+#
+# The corpus half is `pinst harness` now, not a script: a machine that
+# installed the release binary gets the same checks with nothing to clone.
+# Skill projection is still bash, because `agents-wire.sh` writes symlinks
+# into a vendor directory and has nothing to do with the corpus.
 
 # Without this the skills in .agents/ are inert: no runtime reads that path.
 [doc("Wire .agents/skills into .claude/skills; run after adding or renaming one")]
 wire:
     scripts/agents-wire.sh
 
+# Needs a build now that the generator lives in the binary. Inside `qc` that
+# is free — `harness` runs after `test`, so the tree is already compiled — but
+# a bare `just index` on a cold checkout pays for it once.
 [doc("Regenerate .ash/INDEX.md from the plan frontmatter (never hand-edit it)")]
 index:
-    scripts/ash.sh index
+    cargo run --quiet -- harness index
 
 # Exit code 3 means "found things to act on", the same verdict pinst itself
 # gives — so this fails `qc` until the corpus is clean again.
 [doc("Validate the harness: skills wired, plan corpus consistent")]
 harness:
     scripts/agents-wire.sh --check
-    scripts/ash.sh check
+    cargo run --quiet -- harness check
 
 # The review pass. Deliberately NOT in `qc`: `skills` reports rates and
 # tallies, and report() exits 3 on a finding of any severity, so a number
@@ -114,6 +122,6 @@ harness:
 review:
     #!/usr/bin/env bash
     rc=0
-    scripts/ash.sh check || rc=$?
-    scripts/ash.sh skills || rc=$?
+    cargo run --quiet -- harness check || rc=$?
+    cargo run --quiet -- harness skills || rc=$?
     exit $rc

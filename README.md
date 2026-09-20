@@ -84,7 +84,8 @@ pinst update pinst
 | `pinst doctor [--fix]` | Diagnose tools and configs; `--fix` repairs the safe subset |
 | `pinst apply` | Converge everything, then diagnose |
 | `pinst bootstrap` | `apply` for a fresh machine (the `default` profile) |
-| `pinst schema manifest\|output\|docs` | JSON Schemas, derived from the code |
+| `pinst harness check\|index\|skills\|new-id` | Validate the `.ash/` plan corpus of whatever repo you are in |
+| `pinst schema manifest\|output\|docs\|harness` | JSON Schemas, derived from the code |
 | `pinst tui` | Dashboard: tools, findings, upgrades, docs; `/` searches, `e` edits a config |
 
 Global flags: `--json`, `--dry-run`, `--yes`/`-y`, `--quiet`/`-q`,

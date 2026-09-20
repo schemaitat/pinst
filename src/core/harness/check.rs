@@ -31,10 +31,19 @@ use super::corpus::{self as model, Corpus, Plan};
 use super::id;
 use super::index::{self, IndexState};
 
-/// Where a lesson's `**Check:**` id may live. `ash.sh` owns nothing now, but
-/// `agents-wire.sh` still owns the skill projection, so a lesson may be
-/// mechanized by either the Rust checks or the remaining script.
-const CHECK_SOURCES: [&str; 2] = ["src", "scripts"];
+/// Directories a `**Check:**` search never descends into.
+///
+/// `.ash` is the important one and the only subtle one: the `**Check:**`
+/// line *is* in `LEARNINGS.md`, so searching the corpus would find every id
+/// inside its own declaration and the check could never fire. The other two
+/// are skipped for speed.
+///
+/// The same trap applies to prose anywhere else in the repo: this search
+/// cannot tell a finding id in a comment from one in a `finding()` call, so
+/// writing a real id into a doc comment here would quietly satisfy the
+/// lesson that names it. Refer to them by shape, not by name — which is why
+/// this paragraph does not contain one.
+const NOT_SOURCE: [&str; 3] = [".ash", ".git", "target"];
 
 /// Runs every invariant. Order matches the bash implementation's so two
 /// reports read the same way side by side.
@@ -456,9 +465,9 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
             Some(check) if !emitted_somewhere(corpus, check) => findings.push(error(
                 id,
                 format!(
-                    "{shown} says {} is mechanized by '{check}', which nothing under {} emits",
-                    lesson.id,
-                    CHECK_SOURCES.join("/ or ")
+                    "{shown} says {} is mechanized by '{check}', which nothing in this repo \
+                     emits",
+                    lesson.id
                 ),
                 "point '**Check:**' at a finding id that exists, or set '**Status:** prose'",
             )),
@@ -467,18 +476,29 @@ fn check_lessons(corpus: &Corpus, findings: &mut Vec<Finding>) {
     }
 }
 
-/// Whether any source file under the checked roots contains this finding id
-/// as a literal.
+/// Whether any file in the repo — outside the corpus itself — contains this
+/// finding id as a literal.
 ///
-/// A plain substring search over the tree, exactly as `grep -rqF` was. It is
-/// why ids must stay contiguous literals in the source: an id built by
-/// concatenation is invisible here, and the lesson that names it would be
-/// reported as unenforced.
+/// A plain substring search, exactly as `grep -rqF` was, and the reason ids
+/// must stay contiguous literals: an id built by concatenation is invisible
+/// here, and the lesson naming it would be reported as unenforced although
+/// the check exists.
+///
+/// The search covers the whole repo rather than a fixed `src/` and
+/// `scripts/`: those are this project's layout, and `pinst harness` runs
+/// against whatever repo the caller is standing in — a lesson mechanized by
+/// something in `tools/` or `lib/` is not this command's business to
+/// disbelieve.
+///
+/// Documentation is excluded, though. An id *emitted* by a check is in code;
+/// an id in a `.md` file is someone writing about the check, and a lesson
+/// satisfied by the prose describing it would be enforced by nothing at all.
 fn emitted_somewhere(corpus: &Corpus, check: &str) -> bool {
-    CHECK_SOURCES
-        .iter()
-        .any(|dir| contains_literal(&corpus.root.path().join(dir), check))
+    contains_literal(corpus.root.path(), check)
 }
+
+/// Extensions that are documentation rather than something that runs.
+const NOT_CODE: [&str; 3] = ["md", "txt", "log"];
 
 fn contains_literal(dir: &std::path::Path, needle: &str) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -486,11 +506,24 @@ fn contains_literal(dir: &std::path::Path, needle: &str) -> bool {
     };
     for entry in entries.flatten() {
         let path = entry.path();
+        let name = entry.file_name();
+        if NOT_SOURCE.iter().any(|skip| name == *skip) {
+            continue;
+        }
         if path.is_dir() {
             if contains_literal(&path, needle) {
                 return true;
             }
-        } else if std::fs::read_to_string(&path)
+            continue;
+        }
+        if path
+            .extension()
+            .map(|ext| NOT_CODE.iter().any(|skip| ext == *skip))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        if std::fs::read_to_string(&path)
             .map(|text| text.contains(needle))
             .unwrap_or(false)
         {
@@ -750,39 +783,18 @@ mod tests {
             index::write(&corpus).unwrap();
             corpus
         }
-
-        /// What `scripts/ash.sh check` says about this same fixture.
-        ///
-        /// `ASH_DIR` is the one knob it needs: everything else it reads —
-        /// `scripts/` for `lesson.unenforced` — it resolves against the
-        /// working directory, which stays the repo.
-        fn script_ids(&self) -> BTreeSet<String> {
-            let output = std::process::Command::new("scripts/ash.sh")
-                .args(["check", "--json"])
-                .current_dir(env!("CARGO_MANIFEST_DIR"))
-                .env("ASH_DIR", self.path().join(".ash"))
-                .output()
-                .expect("scripts/ash.sh should be runnable");
-            let json: serde_json::Value =
-                serde_json::from_slice(&output.stdout).expect("it emits a JSON envelope");
-            json["items"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|item| item["id"].as_str().unwrap().to_string())
-                .collect()
-        }
     }
 
-    /// Each fixture breaks exactly one invariant, and both implementations
-    /// must name it.
+    /// Each fixture breaks exactly one invariant, and the checker must name
+    /// it.
     ///
-    /// This test has a shelf life on purpose: phase 5 deletes
-    /// `scripts/ash.sh`, and with it the oracle. It is written to be removed
-    /// then rather than adapted, because a comparison with nothing to compare
-    /// against is a fixture pretending to be a check.
+    /// Until the cutover these ran against `scripts/ash.sh` too, which is how
+    /// the port was shown to reproduce the incumbent finding-for-finding —
+    /// and it earned its keep, catching a plan-id scanner that matched
+    /// nothing. That oracle went with the script; the fixtures stay, because
+    /// what they guard now is this implementation against itself.
     #[test]
-    fn broken_corpora_produce_the_same_findings_as_the_script() {
+    fn each_broken_corpus_produces_its_finding() {
         /// One deliberately broken corpus, and the finding it must produce.
         struct Case {
             expected: &'static str,
@@ -892,29 +904,21 @@ mod tests {
             let corpus = fixture.indexed();
 
             let ours = ids(&run(&corpus));
-            let theirs = fixture.script_ids();
-
             assert!(
                 ours.contains(expected),
                 "{description}: expected {expected}, got {ours:?}"
             );
-            assert_eq!(
-                ours, theirs,
-                "{description}: the port and scripts/ash.sh disagree"
-            );
         }
     }
 
-    /// The clean case, through both implementations, so the comparison is not
-    /// only ever made on broken input.
+    /// The clean case, so the fixtures are not only ever exercised on broken
+    /// input — a checker that fires on a healthy corpus is exactly how
+    /// checkers get switched off.
     #[test]
-    fn a_healthy_fixture_is_silent_in_both_implementations() {
+    fn a_healthy_fixture_is_silent() {
         let fixture = Fixture::new();
         fixture.good_plan("260919-qwerty", "thing");
-        let corpus = fixture.indexed();
-
-        assert!(run(&corpus).is_empty());
-        assert!(fixture.script_ids().is_empty());
+        assert!(run(&fixture.indexed()).is_empty());
     }
 
     /// The staleness checks are the ones that compare the corpus against a
@@ -940,7 +944,6 @@ mod tests {
             ours.contains("phase.logged-not-done.260919-qwerty-thing.1"),
             "{ours:?}"
         );
-        assert_eq!(ours, fixture.script_ids());
     }
 
     /// The finding this port adds: a document the strict parser refuses. The

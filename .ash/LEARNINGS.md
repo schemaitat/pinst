@@ -126,7 +126,7 @@ handed off to someone else — a merge, an admin action, a deploy — the last
 item in the handover is returning the outcome to the record, and something
 mechanical has to notice when that did not happen. Point the check at
 whatever local artifact is written *after* the fact; in this repo that is the
-append-only `.ash/CHANGELOG.log`, which is why `ash.sh check` now compares it
+append-only `.ash/CHANGELOG.log`, which is why `pinst harness check` now compares it
 against every phase's status.
 **Why:** The corpus reported `corpus clean (3 plans)` for a full day while it
 told its next reader to merge two already-merged PRs and to expect a version

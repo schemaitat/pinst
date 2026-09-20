@@ -2,7 +2,7 @@
 id: 260920-wtburh
 slug: harness-in-the-binary
 phase: 5
-status: Proposed
+status: Done
 ---
 
 # Phase 5 — Cutover: retire the script, rewire the callers
@@ -22,48 +22,48 @@ moment the comparison is finished and the second copy becomes the drift
 ALT-003 was rejected for.
 
 ## Steps
-- [ ] TASK-032: delete the comparison tests from phases 3 and 4 (TASK-022 and
+- [x] TASK-032: delete the comparison tests from phases 3 and 4 (TASK-022 and
       the `ash.sh` half of TEST-019) — Why: after TASK-033 there is nothing
       for them to compare against, and a test whose oracle has been deleted is
       a fixture pretending to be a check.
-- [ ] TASK-033: delete `scripts/ash.sh` (FILE-017).
-- [ ] TASK-034: `justfile` (FILE-016) — `index` becomes `cargo run --quiet --
+- [x] TASK-033: delete `scripts/ash.sh` (FILE-017).
+- [x] TASK-034: `justfile` (FILE-016) — `index` becomes `cargo run --quiet --
       harness index`; `harness` becomes `scripts/agents-wire.sh --check` plus
       `cargo run --quiet -- harness check`; `review` runs `harness check` then
       `harness skills`, keeping the worst exit code. Why: RISK-002 — note on
       the `index` recipe that it now needs a build, and keep the `qc` ordering
       (`fmt-check lint test harness`) so the build is already warm by the time
       `harness` runs.
-- [ ] TASK-035: `justfile` — the `review` recipe keeps running both halves
+- [x] TASK-035: `justfile` — the `review` recipe keeps running both halves
       regardless of the first's exit code and returns the worst. Why: a
       failing `check` must not hide the report; this is existing behaviour and
       the easiest thing to lose while rewriting the recipe body.
-- [ ] TASK-036: `.agents/skills/plan-write/SKILL.md` (FILE-019) — Step 2's
+- [x] TASK-036: `.agents/skills/plan-write/SKILL.md` (FILE-019) — Step 2's
       `scripts/ash.sh new-id` becomes `pinst harness new-id`, and Step 7's
       `scripts/ash.sh index` / `check` references follow. Why: this file's own
       `evidence:` one-liner does not touch `ash.sh`, so the frontmatter needs
       no change — only the prose does.
-- [ ] TASK-037: `.agents/skills/plan-learnings/SKILL.md` (FILE-020) — the
+- [x] TASK-037: `.agents/skills/plan-learnings/SKILL.md` (FILE-020) — the
       `check` and `skills` references, plus a sentence recording that a
       lesson's `**Check:**` id is now searched for under `src/` as well as
       `scripts/` (TASK-020). Why: the skill is where an author learns what
       makes a `mechanized` claim valid, and the valid set just widened.
-- [ ] TASK-038: `.claude/commands/plan.md` (FILE-021) and
+- [x] TASK-038: `.claude/commands/plan.md` (FILE-021) and
       `.claude/commands/implement.md` (FILE-022) — the pre-loaded `new-id` and
       `check` calls. Why: these run on every planning and implementation
       session; a stale command here fails at the start of the next plan rather
       than at review.
-- [ ] TASK-039: `.agents/README.md` (FILE-018) — every `scripts/ash.sh …`
+- [x] TASK-039: `.agents/README.md` (FILE-018) — every `scripts/ash.sh …`
       invocation in "The checks", "Grading the skills", "Invocation counts"
       and "The review cadence", and the `new-id` line under the plan-id
       explanation. Why: this is the file an agent reads to learn the harness;
       it names the script eleven times.
-- [ ] TASK-040: `README.md` (FILE-024) — add `harness` to the command table
+- [x] TASK-040: `README.md` (FILE-024) — add `harness` to the command table
       alongside `docs`, `doctor` and the rest, described as the corpus checks
       rather than as machine state. Why: the user-facing promise this plan
       makes is "a downloaded binary offers the same corpus checks", and the
       README is where that promise is discoverable.
-- [ ] TASK-041: run `cargo run -- harness index` to regenerate `.ash/INDEX.md`
+- [x] TASK-041: run `cargo run -- harness index` to regenerate `.ash/INDEX.md`
       (FILE-023), whose attribution comment now names the new generator, then
       `just qc`. Why: phase 2 deliberately deferred this so the tree never
       carried an index naming a command that did not fully exist; the
