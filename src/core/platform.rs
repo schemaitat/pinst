@@ -59,15 +59,18 @@ impl Platform {
     }
 
     /// Whether an install method not overridden for this platform can still
-    /// be attempted as written. `apt` is the only method today that names a
-    /// platform; every other method (`cargo`, `curl_script`, `shell`,
-    /// `github_release`, `nvm`, `git_clone`, `brew`, `manual`) is portable by
-    /// construction — a method being portable does not mean every *use* of
-    /// it is (see `neovim`'s Linux-only release asset), which is why some
-    /// tools carry an explicit override even though their method admits
-    /// them.
+    /// be attempted as written. `apt` and `brew` are the only methods that
+    /// name a platform — Linux has no `brew`, macOS has no `apt` — and every
+    /// other method (`cargo`, `curl_script`, `shell`, `github_release`,
+    /// `nvm`, `git_clone`, `manual`) is portable by construction. A method
+    /// being portable does not mean every *use* of it is (see `neovim`'s
+    /// Linux-only release asset), which is why some tools carry an explicit
+    /// override even though their method admits them.
     pub fn admits(self, install: &Install) -> bool {
-        !matches!((self, install), (Platform::MacOS, Install::Apt { .. }))
+        !matches!(
+            (self, install),
+            (Platform::MacOS, Install::Apt { .. }) | (Platform::Linux, Install::Brew { .. })
+        )
     }
 }
 
@@ -95,8 +98,7 @@ mod tests {
 
     #[test]
     fn explicit_platform_wins_over_everything() {
-        // SAFETY: tests run single-threaded within this process's env-var
-        // usage is scoped to this test and reset immediately after.
+        let _guard = crate::core::source::test_env_lock();
         unsafe {
             std::env::set_var("PINST_PLATFORM", "macos");
         }
@@ -109,6 +111,7 @@ mod tests {
 
     #[test]
     fn env_var_wins_over_host_when_no_explicit_flag() {
+        let _guard = crate::core::source::test_env_lock();
         unsafe {
             std::env::set_var("PINST_PLATFORM", "macos");
         }
@@ -121,6 +124,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_host_with_nothing_set() {
+        let _guard = crate::core::source::test_env_lock();
         unsafe {
             std::env::remove_var("PINST_PLATFORM");
         }
@@ -130,6 +134,7 @@ mod tests {
 
     #[test]
     fn unrecognized_env_var_is_a_usage_error() {
+        let _guard = crate::core::source::test_env_lock();
         unsafe {
             std::env::set_var("PINST_PLATFORM", "solaris");
         }
@@ -153,5 +158,15 @@ mod tests {
         };
         assert!(Platform::Linux.admits(&cargo));
         assert!(Platform::MacOS.admits(&cargo));
+    }
+
+    #[test]
+    fn brew_is_macos_only() {
+        let brew = Install::Brew {
+            formulae: vec!["x".into()],
+            cask: false,
+        };
+        assert!(!Platform::Linux.admits(&brew));
+        assert!(Platform::MacOS.admits(&brew));
     }
 }

@@ -27,6 +27,7 @@ pub fn build_install_plan(
 ) -> Result<Plan> {
     let mut plan = Plan::default();
     let mut apt_update_added = false;
+    let mut brew_update_added = false;
 
     for tool in tools {
         // `tools` is expected to already be platform-filtered by
@@ -76,6 +77,17 @@ pub fn build_install_plan(
                         }]),
                     );
                 }
+                // Same latch, mirrored for brew: one `brew update` per run,
+                // emitted just before the first brew install.
+                if matches!(effective.install, Install::Brew { .. }) && !brew_update_added {
+                    brew_update_added = true;
+                    plan.push(
+                        Step::new("brew:update", StepKind::BrewUpdate, "refresh brew formulae")
+                            .actions(vec![Action::Shell {
+                                command: "brew update".to_string(),
+                            }]),
+                    );
+                }
 
                 let confirm = requires_confirmation(effective.install);
                 plan.push(
@@ -109,6 +121,7 @@ pub fn build_upgrade_plan(
 
     let mut plan = Plan::default();
     let mut apt_update_added = false;
+    let mut brew_update_added = false;
 
     for tool in tools {
         let Resolved::Supported(effective) = tool.resolve(platform) else {
@@ -157,6 +170,16 @@ pub fn build_upgrade_plan(
                 .actions(vec![Action::Shell {
                     command: "sudo apt-get update -qq".to_string(),
                 }]),
+            );
+        }
+        if matches!(effective.install, Install::Brew { .. }) && !brew_update_added {
+            brew_update_added = true;
+            plan.push(
+                Step::new("brew:update", StepKind::BrewUpdate, "refresh brew formulae").actions(
+                    vec![Action::Shell {
+                        command: "brew update".to_string(),
+                    }],
+                ),
             );
         }
 
@@ -439,6 +462,60 @@ mod tests {
             })
             .unwrap();
         assert!(updates[0] < first_apt);
+    }
+
+    // TEST-011: mirrors the apt test above, for brew — one `brew update`
+    // per run, strictly before the first brew install step.
+    #[test]
+    fn brew_update_is_emitted_once_before_the_first_brew_install() {
+        let manifest = manifest::embedded().unwrap();
+        let tools = select(&manifest, &Selection::default(), Platform::MacOS)
+            .unwrap()
+            .tools;
+        let plan = build_install_plan(&tools, &probes(&[], &tools), Platform::MacOS).unwrap();
+
+        let updates: Vec<usize> = plan
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.kind == StepKind::BrewUpdate)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(updates.len(), 1, "one refresh per run, not per package");
+
+        let first_brew = plan
+            .steps
+            .iter()
+            .position(|s| {
+                s.kind == StepKind::Install
+                    && s.actions.iter().any(|a| match a {
+                        Action::Shell { command } => command.contains("brew install"),
+                        _ => false,
+                    })
+            })
+            .unwrap();
+        assert!(updates[0] < first_brew);
+    }
+
+    // TEST-012: pinst plan --platform macos orders homebrew before every
+    // tool that requires it, and pinst plan --platform linux drops it as
+    // unsupported.
+    #[test]
+    fn homebrew_orders_before_its_dependents_and_is_unsupported_on_linux() {
+        let manifest = manifest::embedded().unwrap();
+
+        let macos = select(&manifest, &Selection::default(), Platform::MacOS).unwrap();
+        let names: Vec<&str> = macos.tools.iter().map(|t| t.name.as_str()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n).unwrap();
+        assert!(pos("homebrew") < pos("ripgrep"));
+        assert!(pos("homebrew") < pos("direnv"));
+        assert!(pos("homebrew") < pos("delta"));
+
+        let linux = select(&manifest, &Selection::default(), Platform::Linux).unwrap();
+        assert!(
+            linux.unsupported.iter().any(|u| u.name == "homebrew"),
+            "homebrew has no linux install path"
+        );
     }
 
     #[test]

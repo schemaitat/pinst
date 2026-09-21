@@ -196,6 +196,13 @@ pub enum Install {
         #[serde(default)]
         depth: Option<u32>,
     },
+    /// `brew install [--cask] <formulae>`. Homebrew refuses to run as root,
+    /// so this method's executor never prefixes `sudo`.
+    Brew {
+        formulae: Vec<String>,
+        #[serde(default)]
+        cask: bool,
+    },
     /// No automated install path; doctor reports it with the note.
     Manual {
         note: String,
@@ -223,6 +230,9 @@ pub enum UpgradeSpec {
         repo: String,
     },
     Nvm {},
+    Brew {
+        formula: String,
+    },
     /// Explicitly opt out of upgrade checking (e.g. rustup self-manages).
     None {},
 }
@@ -270,6 +280,15 @@ fn derive_upgrade_spec(name: &str, install: &Install) -> UpgradeSpec {
         },
         Install::GithubRelease { repo, .. } => UpgradeSpec::GithubRelease { repo: repo.clone() },
         Install::Nvm { .. } => UpgradeSpec::Nvm {},
+        Install::Brew { formulae, .. } => UpgradeSpec::Brew {
+            // The formula that names the tool, not necessarily the whole
+            // package: a brew install can list more than one formula, but
+            // the upgrade check tracks the one the tool is named after.
+            formula: formulae
+                .first()
+                .cloned()
+                .unwrap_or_else(|| name.to_string()),
+        },
         Install::Shell { .. } | Install::GitClone { .. } | Install::Manual { .. } => {
             UpgradeSpec::None {}
         }
@@ -277,7 +296,9 @@ fn derive_upgrade_spec(name: &str, install: &Install) -> UpgradeSpec {
 }
 
 /// True when `install` offers no verifiable version pinning, so doctor
-/// reports it as unpinnable rather than implying a guarantee.
+/// reports it as unpinnable rather than implying a guarantee. Brew is not
+/// included: unlike a piped installer it reports an exact installed
+/// version, which is what this is actually distinguishing.
 fn install_is_unpinnable(install: &Install) -> bool {
     matches!(install, Install::CurlScript { .. } | Install::Shell { .. })
 }
@@ -291,6 +312,7 @@ fn install_method_name(install: &Install) -> &'static str {
         Install::GithubRelease { .. } => "github_release",
         Install::Nvm { .. } => "nvm",
         Install::GitClone { .. } => "git_clone",
+        Install::Brew { .. } => "brew",
         Install::Manual { .. } => "manual",
     }
 }
@@ -354,12 +376,18 @@ impl Tool {
             Resolved::Supported(effective) => effective,
             Resolved::Unsupported(_) => return None,
         };
-        if let Some(over) = self.platform_overrides.get(platform.key())
-            && let Some(explicit) = &over.upgrade
-        {
+        let over = self.platform_overrides.get(platform.key());
+        if let Some(explicit) = over.and_then(|o| o.upgrade.as_ref()) {
             return Some(explicit.clone());
         }
-        if let Some(explicit) = &self.upgrade {
+        // The tool-level `upgrade` override was written for the *base*
+        // install method. When this platform's override replaces `install`
+        // without also restating `upgrade`, that base override no longer
+        // describes the effective method — `delta`'s base `upgrade = apt`
+        // must not leak into its macOS `brew` resolution — so it is only
+        // inherited when this platform kept the base install unchanged.
+        let install_overridden = over.is_some_and(|o| o.install.is_some());
+        if !install_overridden && let Some(explicit) = &self.upgrade {
             return Some(explicit.clone());
         }
         Some(derive_upgrade_spec(&self.name, effective.install))
@@ -727,6 +755,25 @@ mod tests {
             rust.resolve(Platform::MacOS),
             Resolved::Supported(_)
         ));
+    }
+
+    // TEST-010: delta's macOS override changes `install` but not `upgrade`,
+    // so the derived spec must follow the *effective* install (brew,
+    // formula "git-delta") rather than either the tool's base apt upgrade
+    // override or the tool's own name.
+    #[test]
+    fn upgrade_spec_follows_the_effective_install_not_the_base_override() {
+        let manifest = embedded().unwrap();
+        let delta = manifest.tool("delta").unwrap();
+
+        assert!(matches!(
+            delta.upgrade_spec_for(Platform::Linux).unwrap(),
+            UpgradeSpec::Apt { .. }
+        ));
+        match delta.upgrade_spec_for(Platform::MacOS).unwrap() {
+            UpgradeSpec::Brew { formula } => assert_eq!(formula, "git-delta"),
+            other => panic!("expected UpgradeSpec::Brew, got {other:?}"),
+        }
     }
 
     // TEST-003: validate() rejects an unrecognized platform key, and an

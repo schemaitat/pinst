@@ -161,7 +161,7 @@ check it mechanically.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | Platform becomes a value pinst can reason about | [phase-01.md](phase-01.md) | Done |
-| 2 | Homebrew as an install method | [phase-02.md](phase-02.md) | Proposed |
+| 2 | Homebrew as an install method | [phase-02.md](phase-02.md) | Done |
 | 3 | A manifest and configs that cover macOS | [phase-03.md](phase-03.md) | Proposed |
 | 4 | Build and publish the Darwin artifacts | [phase-04.md](phase-04.md) | Proposed |
 | 5 | Install it on a Mac, and keep it working | [phase-05.md](phase-05.md) | Proposed |

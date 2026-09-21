@@ -21,6 +21,27 @@ schema_version = 1
 # --- base ------------------------------------------------------------------
 
 [[tool]]
+name = "homebrew"
+summary = "macOS package manager; what the brew install method uses"
+tags = ["base"]
+requires = ["curl"]
+detect = { command = "command -v brew", bin = "brew", version_cmd = "brew --version" }
+# The `shell` method, not `curl_script`: NONINTERACTIVE is read from the
+# environment by the installer script itself, not from an argument, and
+# curl_script's `args` are appended after `--` as positional arguments —
+# there is no way to express an env-var prefix through it.
+install = { method = "shell", command = "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"" }
+upgrade = { method = "github_release", repo = "Homebrew/brew" }
+
+  # This tool exists only to be Homebrew's own manifest entry, so — unlike
+  # every other [tool.platform.macos] block below — the override goes on
+  # the *Linux* side: there is no apt/dpkg package to install it with, and
+  # `manual` would misreport a machine that will simply never need it as
+  # having something outstanding to do.
+  [tool.platform.linux]
+  unsupported = "Homebrew only runs on macOS"
+
+[[tool]]
 name = "curl"
 summary = "HTTP client used by most of the other installers"
 tags = ["base"]
@@ -91,6 +112,10 @@ tags = ["shell"]
 detect = { command = "command -v direnv", bin = "direnv", version_cmd = "direnv --version" }
 install = { method = "apt", packages = ["direnv"] }
 
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["direnv"] }
+
 [[tool]]
 name = "oh-my-posh"
 summary = "Prompt engine; .zshrc initializes it with the catppuccin theme"
@@ -107,6 +132,10 @@ summary = "Fast grep; telescope live_grep depends on it"
 tags = ["editor", "dev"]
 detect = { command = "command -v rg", bin = "rg", version_cmd = "rg --version" }
 install = { method = "apt", packages = ["ripgrep"] }
+
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["ripgrep"] }
 
 [[tool]]
 name = "fd"
@@ -197,6 +226,15 @@ tags = ["git"]
 detect = { command = "command -v delta", bin = "delta", version_cmd = "delta --version" }
 install = { method = "apt", packages = ["git-delta"] }
 upgrade = { method = "apt", package = "git-delta" }
+
+  # The formula is "git-delta", not "delta" — brew's namespace already has a
+  # different, unrelated "delta". Deriving the upgrade spec from `install`
+  # (rather than the tool's own name, as the apt entry above did before
+  # this override existed) is exactly why this tool was chosen to prove the
+  # substitution mechanism in Phase 2's tests.
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["git-delta"] }
 
 [[tool]]
 name = "git-credential-manager"

@@ -2,7 +2,7 @@
 id: 260920-qcrrqs
 slug: macos-support
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Homebrew as an install method
@@ -30,7 +30,7 @@ must exist and be tested before thirteen manifest entries depend on it.
 
 ## Steps
 
-- [ ] TASK-009: `src/core/manifest.rs` (FILE-003) — add
+- [x] TASK-009: `src/core/manifest.rs` (FILE-003) — add
       `Install::Brew { formulae: Vec<String>, #[serde(default)] cask: bool }`
       and `UpgradeSpec::Brew { formula: String }`, plus the `method_name`
       (`"brew"`) and `upgrade_spec` arms. `is_unpinnable` stays false for
@@ -41,16 +41,16 @@ must exist and be tested before thirteen manifest entries depend on it.
       and nothing else. Brew is not unpinnable: unlike a piped installer it
       reports an exact installed version, which is what `is_unpinnable`
       actually distinguishes.
-- [ ] TASK-010: `src/core/exec/brew.rs` (FILE-007) — implement `Executor`:
+- [x] TASK-010: `src/core/exec/brew.rs` (FILE-007) — implement `Executor`:
       `install` emits `brew install [--cask] <formulae>`; `upgrade` emits
       `brew upgrade [--cask] <formulae>`. Never prefix `sudo`.
       Why: Homebrew refuses to run as root and exits non-zero with a message
       about it (RISK-002, SEC-002). The `Runner` is the single place pinst
       touches the system and applies no elevation of its own, so this holds as
       long as the emitted command text does not ask for it.
-- [ ] TASK-011: `src/core/exec/mod.rs` (FILE-008) — `mod brew;` and the
+- [x] TASK-011: `src/core/exec/mod.rs` (FILE-008) — `mod brew;` and the
       `Install::Brew { .. } => Box::new(brew::Brew)` arm in `executor_for`.
-- [ ] TASK-012: `src/core/plan.rs` (FILE-010) and `src/core/engine.rs`
+- [x] TASK-012: `src/core/plan.rs` (FILE-010) and `src/core/engine.rs`
       (FILE-009) — add `StepKind::BrewUpdate`, and in both
       `build_install_plan` and the upgrade plan emit a single
       `brew update` step with id `brew:update` immediately before the first
@@ -60,7 +60,7 @@ must exist and be tested before thirteen manifest entries depend on it.
       `pinst plan --json` output, and the schema contract is additive-only
       (CON-005). Two variants also keep the rendered plan honest about which
       package manager is being refreshed.
-- [ ] TASK-013: `src/core/upgrade/strategies.rs` (FILE-011) — add
+- [x] TASK-013: `src/core/upgrade/strategies.rs` (FILE-011) — add
       `brew_latest(formula)` shelling out to
       `brew info --json=v2 --formula <formula>`, reading
       `.formulae[0].versions.stable`, and returning `None` on any failure.
@@ -69,7 +69,7 @@ must exist and be tested before thirteen manifest entries depend on it.
       rather than erroring matches every other strategy in this file — an
       upgrade report is advisory and one unreachable source must not hide the
       others.
-- [ ] TASK-014: `src/core/upgrade/mod.rs` (FILE-012) — extend the existing
+- [x] TASK-014: `src/core/upgrade/mod.rs` (FILE-012) — extend the existing
       version normalization so a brew revision suffix (`14.1.0_1`) compares
       equal to the upstream version it decorates, the way apt epoch/revision
       decoration already does.
@@ -78,7 +78,7 @@ must exist and be tested before thirteen manifest entries depend on it.
       gets ignored and then deleted (LESSON-011). The apt path proves the
       shape of the fix is already understood here; this is the second caller,
       not a new idea.
-- [ ] TASK-015: `manifest.toml` (FILE-013) — add the `homebrew` tool:
+- [x] TASK-015: `manifest.toml` (FILE-013) — add the `homebrew` tool:
       `detect = { command = "command -v brew", bin = "brew", version_cmd = "brew --version" }`,
       installed by `curl_script` against Homebrew's official installer with
       `NONINTERACTIVE=1`, and marked `unsupported` on Linux via
@@ -88,7 +88,7 @@ must exist and be tested before thirteen manifest entries depend on it.
       `nvm` precedes `node`. Marking it unsupported on Linux uses the
       mechanism from Phase 1 in the direction that is easy to forget: the
       override block is not a macOS-only feature.
-- [ ] TASK-016: `manifest.toml` (FILE-013) — give exactly three tools a
+- [x] TASK-016: `manifest.toml` (FILE-013) — give exactly three tools a
       `[tool.platform.macos]` block using `method = "brew"`, each
       `requires = ["homebrew"]`: `ripgrep`, `direnv` and `delta` (formula
       `git-delta`).

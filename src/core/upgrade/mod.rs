@@ -83,6 +83,24 @@ fn upstream_of(candidate: &str) -> &str {
     without_epoch.split('-').next().unwrap_or(without_epoch)
 }
 
+/// Homebrew decorates a formula's version with a revision suffix when it
+/// rebuilds the same upstream release — `14.1.0_1` — the way apt decorates
+/// with an epoch and a distro revision. Only the part before `_` is
+/// comparable with what `--version` reports; stripping the whole string
+/// unconditionally would be wrong for a formula whose upstream version
+/// itself contains an underscore, so this only strips a *trailing*
+/// `_<digits>` revision marker.
+fn brew_upstream_of(candidate: &str) -> &str {
+    match candidate.rsplit_once('_') {
+        Some((base, revision))
+            if !revision.is_empty() && revision.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            base
+        }
+        _ => candidate,
+    }
+}
+
 fn compare(
     tool: &Tool,
     spec: &UpgradeSpec,
@@ -90,11 +108,13 @@ fn compare(
     latest: Option<String>,
     unpinnable: bool,
 ) -> UpgradeResult {
-    // Only apt carries epoch/revision decoration. Stripping it from a GitHub
-    // tag would turn `1.2.0-rc1` into `1.2.0` and invent an upgrade.
+    // Only apt and brew carry this kind of packaging decoration. Stripping
+    // it from a GitHub tag would turn `1.2.0-rc1` into `1.2.0` and invent an
+    // upgrade.
     let upgrade_available = match (&current, &latest) {
         (Some(c), Some(l)) => match spec {
             UpgradeSpec::Apt { .. } => upstream_of(l) != c,
+            UpgradeSpec::Brew { .. } => brew_upstream_of(l) != c,
             _ => l != c,
         },
         _ => false,
@@ -199,4 +219,67 @@ pub fn spawn_streaming(
         // None marks the end of the stream.
         let _ = tx.send(None);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tool() -> Tool {
+        crate::core::manifest::embedded()
+            .unwrap()
+            .tool("curl")
+            .unwrap()
+            .clone()
+    }
+
+    // Sits beside the brew case below: apt's epoch/revision decoration was
+    // already handled by `upstream_of`, just never pinned by a test of its
+    // own until this one.
+    #[test]
+    fn apt_epoch_and_revision_decoration_does_not_invent_an_upgrade() {
+        let spec = UpgradeSpec::Apt {
+            package: "curl".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("7.81.0".to_string()),
+            Some("4:7.81.0-1ubuntu1.20".to_string()),
+            false,
+        );
+        assert!(!result.upgrade_available);
+    }
+
+    // TEST-009 / RISK-003: a brew revision suffix must not read as a newer
+    // version than the one already installed.
+    #[test]
+    fn brew_revision_suffix_does_not_invent_an_upgrade() {
+        let spec = UpgradeSpec::Brew {
+            formula: "git-delta".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("14.1.0".to_string()),
+            Some("14.1.0_1".to_string()),
+            false,
+        );
+        assert!(!result.upgrade_available);
+    }
+
+    #[test]
+    fn a_genuinely_newer_brew_version_is_still_an_upgrade() {
+        let spec = UpgradeSpec::Brew {
+            formula: "git-delta".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("14.1.0".to_string()),
+            Some("14.2.0".to_string()),
+            false,
+        );
+        assert!(result.upgrade_available);
+    }
 }

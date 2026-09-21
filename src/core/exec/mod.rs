@@ -5,6 +5,7 @@
 //! nothing else in the engine needs to change.
 
 mod apt;
+mod brew;
 mod cargo;
 mod curl_script;
 mod git_clone;
@@ -53,6 +54,7 @@ pub fn executor_for(install: &Install) -> Box<dyn Executor> {
         Install::GithubRelease { .. } => Box::new(github_release::GithubRelease),
         Install::Nvm { .. } => Box::new(nvm::Nvm),
         Install::GitClone { .. } => Box::new(git_clone::GitClone),
+        Install::Brew { .. } => Box::new(brew::Brew),
         Install::Manual { .. } => Box::new(Manual),
     }
 }

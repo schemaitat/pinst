@@ -32,7 +32,34 @@ pub struct Selected<'m> {
 /// Returns tool names in dependency order (every tool after everything it
 /// requires). Ties break alphabetically so the order is deterministic — a plan
 /// an agent diffs between runs should not shuffle.
+///
+/// Orders on each tool's *base* `requires` — the edges every platform
+/// agrees on. Used for [`Manifest::validate`]'s cycle check and by callers
+/// that have no platform in hand; a plan that must respect a
+/// platform-specific edge (`ripgrep` on macOS requiring `homebrew`, which
+/// `ripgrep`'s base definition says nothing about) needs
+/// [`topo_order_for`] instead.
 pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
+    topo_order_with(tools, |tool| tool.requires.as_slice())
+}
+
+/// [`topo_order`], but ordering on each tool's *effective* `requires` for
+/// `platform` — the edges a `[tool.platform.<key>]` override adds or
+/// changes. An unsupported tool contributes its base `requires`, matching
+/// `select`'s own closure walk: the tool itself is dropped from the plan,
+/// but its position among tools that still depend on it must stay
+/// well-defined.
+pub fn topo_order_for(tools: &[Tool], platform: Platform) -> Result<Vec<String>> {
+    topo_order_with(tools, move |tool| match tool.resolve(platform) {
+        Resolved::Supported(effective) => effective.requires,
+        Resolved::Unsupported(_) => tool.requires.as_slice(),
+    })
+}
+
+fn topo_order_with<'a>(
+    tools: &'a [Tool],
+    requires_of: impl Fn(&'a Tool) -> &'a [String],
+) -> Result<Vec<String>> {
     let mut dependents: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let mut indegree: BTreeMap<&str, usize> = BTreeMap::new();
 
@@ -40,7 +67,7 @@ pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
         indegree.entry(tool.name.as_str()).or_insert(0);
     }
     for tool in tools {
-        for dep in &tool.requires {
+        for dep in requires_of(tool) {
             dependents.entry(dep.as_str()).or_default().push(&tool.name);
             *indegree.entry(tool.name.as_str()).or_insert(0) += 1;
         }
@@ -173,7 +200,7 @@ pub fn select<'m>(
         }
     }
 
-    let order = topo_order(&manifest.tools)?;
+    let order = topo_order_for(&manifest.tools, platform)?;
     let mut selected = Selected::default();
     for name in order {
         if !wanted.contains(&name) {
