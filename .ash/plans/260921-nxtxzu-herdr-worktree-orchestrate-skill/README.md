@@ -1,7 +1,7 @@
 ---
 id: 260921-nxtxzu
 slug: herdr-worktree-orchestrate-skill
-status: In Progress
+status: Done
 created: 2026-09-21
 updated: 2026-09-21
 areas: [agents, herdr, orchestration]
@@ -203,7 +203,7 @@ later action.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | Portable skill contract and log format | [phase-01.md](phase-01.md) | Done |
-| 2 | Herdr topology, handoff and babysitting | [phase-02.md](phase-02.md) | Proposed |
+| 2 | Herdr topology, handoff and babysitting | [phase-02.md](phase-02.md) | Done |
 
 ## Affected Files
 

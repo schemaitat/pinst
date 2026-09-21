@@ -2,7 +2,7 @@
 id: 260921-nxtxzu
 slug: herdr-worktree-orchestrate-skill
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Herdr topology, handoff and babysitting
@@ -23,7 +23,7 @@ while still debating where logs live.
 
 ## Steps
 
-- [ ] **TASK-005:** `.agents/skills/orchestrate/SKILL.md` — extend the Phase 1
+- [x] **TASK-005:** `.agents/skills/orchestrate/SKILL.md` — extend the Phase 1
   shell with preflight: `test "${HERDR_ENV:-}" = 1`, `herdr --skill`, installed
   command help, current pane/workspace discovery, `herdr integration status`
   for the selected kind, and `git status` when a git checkout is present.
@@ -34,7 +34,7 @@ while still debating where logs live.
   transitions before relying on them; never install it or add
   `--trust-repository` implicitly. Why: Herdr gate first; git is optional
   context, not a harness.
-- [ ] **TASK-006:** `.agents/skills/orchestrate/SKILL.md` — after preflight
+- [x] **TASK-006:** `.agents/skills/orchestrate/SKILL.md` — after preflight
   chooses a topology, add the isolated handoff: parse Herdr JSON for the
   returned workspace/root-pane or sibling-pane id, verify the delegated cwd,
   select a unique live agent name, and call `herdr agent start` in the
@@ -43,7 +43,7 @@ while still debating where logs live.
   none was requested. The initial prompt carries the task boundary, checkout,
   branch/base when known, acceptance criteria, allowed mutations and required
   final report — without requiring a plan id.
-- [ ] **TASK-007:** `.agents/skills/orchestrate/SKILL.md` — after the child has
+- [x] **TASK-007:** `.agents/skills/orchestrate/SKILL.md` — after the child has
   a bounded handoff, add the babysitting state machine. Each wait result is
   followed by `agent get` and `agent read`; `idle`/`done` trigger artifact and
   acceptance verification, not completion; `blocked` is inspected and
@@ -54,21 +54,21 @@ while still debating where logs live.
   user declines the needed action. Write `resolved` only after REQ-004 is
   satisfied. Append Phase 1 events throughout, including sanitized prompt
   text and the concrete verification behind `resolved` (REQ-005, REQ-006).
-- [ ] **TASK-008:** `.agents/commands/orchestrate.md` — after the skill's
+- [x] **TASK-008:** `.agents/commands/orchestrate.md` — after the skill's
   procedure is complete, add `/orchestrate` with the requested task/model as
   arguments and preload `HERDR_ENV`, Herdr version/current pane, selected-kind
   integration status, branch and `git status --short` when available. Query
   the current Herdr pane only after the environment gate passes. Direct the
   runtime to read the skill; do not preload plan index or imply plan
   ownership (REQ-008, CON-004).
-- [ ] **TASK-009:** `.claude/skills/orchestrate` and
+- [x] **TASK-009:** `.claude/skills/orchestrate` and
   `.claude/commands/orchestrate.md` — after both canonical assets exist, run
   `just wire` so this checkout projects them (CON-002, LESSON-007). Wiring is
   packaging for pinst, not a runtime requirement stated inside the skill body.
-- [ ] **TASK-010:** `docs/tools/herdr.toml` — after the skill is wired, add a
+- [x] **TASK-010:** `docs/tools/herdr.toml` — after the skill is wired, add a
   short recipe or `see_also` pointer so `pinst docs` can discover the skill
   without making docs part of the skill's procedure (FILE-006).
-- [ ] **TASK-011:** `.herdr/orchestrate/<start-time>-<agent-name>.log` — after
+- [x] **TASK-011:** `.herdr/orchestrate/<start-time>-<agent-name>.log` — after
   packaging is in place, exercise `/orchestrate` (or direct skill invocation)
   first with a read-only sibling-pane task and then with a disposable mutating
   task that requires a Herdr worktree. Force one bounded wait timeout in the

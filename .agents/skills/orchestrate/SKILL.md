@@ -60,6 +60,7 @@ Event vocabulary, in lifecycle order:
 | Event | Write it when |
 |-------|---------------|
 | `run_start` | The orchestration begins; include the task summary and starting cwd |
+| `command_error` | A Herdr control command fails; include status and structured error before inspecting live state |
 | `pane_created` | A sibling pane is created |
 | `worktree_created` | A worktree workspace is created or opened |
 | `agent_started` | Herdr detects the selected coding agent as ready |
@@ -92,5 +93,269 @@ as success, approve interactive prompts for the user, install Herdr
 integrations, trust repositories, or remove panes/worktrees without explicit
 authorization.
 
-The Herdr preflight, topology choice, handoff, supervision loop, and recovery
-procedure follow in the next section of this skill.
+## Step 1 — Prove Herdr caller context
+
+The user must explicitly ask for Herdr orchestration or delegation. Before any
+Herdr inspection or control command:
+
+```bash
+test "${HERDR_ENV:-}" = 1
+```
+
+If this fails, say that this session is not running inside Herdr and stop. Do
+not inspect or control whichever Herdr session happens to be focused outside
+the caller.
+
+When it passes, refresh the installed contract rather than trusting examples
+in this file:
+
+```bash
+herdr --skill
+herdr --help
+herdr agent
+herdr worktree
+herdr pane
+herdr integration status
+```
+
+Never run bare `herdr`; it launches or attaches the TUI. Run mutating nested
+commands only after checking their `--help`, because some create commands have
+valid defaults and execute when arguments are omitted.
+
+Record `run_start` before the first mutation. Include the user's task, starting
+cwd, requested kind/model, acceptance criteria, and the caller's
+`HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, and `HERDR_PANE_ID` when present.
+
+Herdr socket control commands return JSON on stdout. Server/API errors are
+JSON on stderr with exit 1; syntax errors exit 2. Local metadata commands such
+as `integration status` may render text, so use them only for their documented
+local purpose. For socket control, branch on status and fields, not on human
+terminal rendering. Public ids are opaque and scoped to one server: preserve
+values from responses instead of deriving them from labels, examples, or
+sidebar order.
+
+## Step 2 — Bound the delegated task
+
+Before creating layout, write down:
+
+- one concrete goal;
+- whether the child may edit files;
+- the exact cwd or repository and committed base it should see;
+- allowed and forbidden mutations;
+- acceptance criteria the orchestrator can independently inspect;
+- the requested agent kind and optional model;
+- conditions that require user escalation;
+- the final report shape.
+
+Do not delegate an open-ended request such as "finish everything". If
+acceptance cannot be observed from the response, filesystem, git state, or a
+command, tighten the task before starting an agent.
+
+If a git checkout is present, inspect `git status --short`, the branch, and
+`git rev-parse HEAD`. A new worktree starts from a committed ref. If the task
+depends on uncommitted parent content, stop and ask the user to choose a safe
+handoff; never stash, commit, copy, or omit those changes silently.
+
+## Step 3 — Choose exactly one topology
+
+Use a sibling pane when all of these are true:
+
+- the task is read-only, a test run, or another non-mutating operation;
+- sharing the current cwd cannot race another writer;
+- the result is a response or report rather than an isolated branch.
+
+Inspect the caller geometry:
+
+```bash
+herdr pane layout --pane "$HERDR_PANE_ID"
+```
+
+Split a wide pane right and a narrow/tall pane down, preserving cwd and focus:
+
+```bash
+herdr pane split --current --direction right --cwd "$PWD" --no-focus
+```
+
+Replace `right` with `down` when appropriate. Parse the new pane from
+`.result.pane`; append `pane_created` with its actual ids and cwd.
+
+Use a worktree workspace when the child may edit, should produce a reviewable
+branch, or must be isolated from the caller. Require a git checkout and a
+committed base. First discover the repository source workspace:
+
+```bash
+herdr worktree list --cwd "$PWD"
+```
+
+When the caller is already in a linked worktree, create/open actions must
+target `.result.source.source_workspace_id` and use
+`.result.source.source_checkout_path`; Herdr rejects a linked worktree as the
+source. Preserve those JSON values rather than guessing that the primary
+workspace is focused. Then inspect current syntax:
+
+```bash
+herdr worktree create --help
+herdr worktree create \
+  --workspace "<source-workspace-id>" \
+  --branch "<unique-branch>" \
+  --base "<committed-ref>" \
+  --label "<short-label>" \
+  --no-focus
+```
+
+`--workspace` and `--cwd` are alternative source selectors; never pass both.
+Use the returned source workspace when one is open, otherwise use the source
+checkout path with `--cwd`.
+
+Never add `--trust-repository` unless the user has explicitly verified and
+authorized that repository. Parse the returned workspace and root pane from
+the JSON response, then use those returned values for every later command.
+Append `worktree_created` with the branch, base, checkout path, workspace id,
+and pane id.
+
+Do not create a worktree merely because one is available. Do not put two
+writers in one checkout merely because a sibling pane is cheaper.
+
+If a control command fails, append `command_error` with its exit status and
+JSON error, then inspect current worktree/workspace/pane state before retrying.
+A connection failure does not prove a mutation was not applied.
+
+## Step 4 — Start and verify the child
+
+The target pane must be an available interactive shell with no foreground
+command. Pick a useful name matching `[a-z][a-z0-9_-]{0,31}` and confirm it is
+unique with `herdr agent list`.
+
+Check `herdr integration status` for the selected kind and record the result.
+An absent or outdated optional integration is not permission to install it.
+It is a warning that observed state may degrade to `unknown`; the supervision
+loop must prove actual transitions before relying on them.
+
+Start Cursor with:
+
+```bash
+herdr agent start <name> --kind cursor --pane <pane-id>
+```
+
+When the user requested a Cursor model, pass the installed Cursor CLI argument
+after Herdr's `--` separator:
+
+```bash
+herdr agent start <name> --kind cursor --pane <pane-id> -- --model <model>
+```
+
+Do not guess a model when none was requested. For another kind, pass native
+arguments only when the user supplied them or the installed help confirms
+them.
+
+Success means Herdr detected the expected agent in that pane and considers it
+ready. If start returns `agent_not_ready`, keep the returned name/pane, inspect
+`herdr agent get` and `herdr agent read`, and follow the blocked/unknown rules
+below. Append `agent_started` only after verifying the reported agent, pane,
+cwd, and readiness match the handoff. A cwd mismatch is an escalation, not a
+prompting opportunity.
+
+## Step 5 — Submit one complete initial prompt
+
+The initial prompt must stand alone. Include:
+
+- the bounded goal and acceptance criteria;
+- the exact checkout/cwd and branch/base when applicable;
+- allowed mutations and safety constraints;
+- commands or checks that must pass;
+- the required final response: summary, changed artifacts, verification,
+  unresolved blockers.
+
+Submit through the agent surface:
+
+```bash
+herdr agent prompt <name> "<bounded prompt>" --wait --timeout 120000
+```
+
+The timeout is a caller policy, not a universal constant; choose one suitable
+for the task. Without `--until`, Herdr waits for the first settled
+`idle`, `done`, or `blocked` state after observed activity. This does not track
+the task or even a particular turn.
+
+Prepare the sanitized prompt for logging, but append `prompt_sent` only after
+the command confirms submission or `get`/`read` proves the prompt reached the
+child. Always append `wait_result` with the command outcome, observed status,
+and timeout. Submission success proves only that input and Enter were written.
+`agent_prompt_stalled` or `timeout` does not prove the prompt was absent.
+After inspection, resend the exact initial prompt at most once only when the
+transcript and state prove it never appeared and no work began; log that
+evidence. Otherwise continue waiting or send a targeted nudge rather than
+duplicating the task.
+
+## Step 6 — Babysit to semantic resolution
+
+After every prompt or wait, inspect both state and output:
+
+```bash
+herdr agent get <name>
+herdr agent read <name> --source recent-unwrapped --lines 120
+```
+
+Increase `--lines` when needed. If terminal history cannot recover a long
+answer, ask the child as a targeted follow-up to write a Markdown report in a
+temporary directory and reply only with its path; then read that file. Do not
+use file output as the initial handoff.
+
+Interpret states this way:
+
+| State/outcome | Required action |
+|---------------|-----------------|
+| `working` | Continue waiting; do not prompt over active work |
+| `idle` | Read output and verify acceptance; ready for input is not resolved |
+| `done` | Read output and verify acceptance; seen-state is not resolved |
+| `blocked` / `agent_blocked` | Read the approval/question UI, append `blocked`, and escalate to the user without answering it |
+| `unknown` | Read output, perform one bounded diagnostic wait, then escalate if classification remains unreliable |
+| `agent_prompt_stalled` | Inspect get/read before deciding whether any input is needed |
+| `timeout` | Inspect get/read; if still working, wait again; if the prompt is provably absent, submit it once; otherwise evaluate observed output without replay |
+| missing/exited agent | Inspect pane output and escalate or abort with the concrete evidence |
+
+Resolution requires all of:
+
+1. the child explicitly reports what it did and any remaining blockers;
+2. the response addresses the full delegated goal;
+3. every promised file, diff, branch, command result, or report exists;
+4. acceptance checks pass when independently inspected;
+5. no approval, question, or unresolved condition remains.
+
+Only then append `resolved` with `detail.verification`.
+
+If a settled response is incomplete but the missing condition is concrete,
+send one targeted follow-up for that condition and append `nudge`. Never replay
+the initial prompt. Track nudges by condition: separate missing requirements
+may receive separate nudges, but the same condition recurring after one nudge
+must be escalated.
+
+Append `escalated` and ask the user when:
+
+- approval, credentials, trust, integration installation, or a product choice
+  is required;
+- dirty parent state prevents a safe worktree handoff;
+- a blocker or `unknown` state cannot be classified reliably;
+- the requested result conflicts with observed artifacts;
+- the same missing condition survives its targeted nudge.
+
+If the user declines, the child exits without a usable result, or progress
+cannot continue safely, append `aborted` with the reason and then `run_end`
+with `detail.status: "aborted"`. Do not describe an unresolved task as done.
+
+## Step 7 — Finish without destructive cleanup
+
+For a verified result, append `resolved`, then `run_end` with
+`detail.status: "resolved"`. Report:
+
+- outcome and verification;
+- child name, kind/model, workspace and pane;
+- worktree path/branch when applicable;
+- orchestration log path;
+- any resource deliberately left running.
+
+Do not automatically close panes/workspaces, remove worktrees, install
+integrations, merge branches, or discard child changes. Those are separate
+mutations requiring explicit user authorization. On a failed remote or socket
+operation, inspect live state before retrying because the mutation may already
+have been applied.

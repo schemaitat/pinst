@@ -594,7 +594,8 @@ mod tests {
             },
         );
         assert!(row(&report, "plan-write").issues > 0);
-        assert_eq!(row(&report, "conventional-commits").issues, 0);
+        assert!(row(&report, "conventional-commits").issues > 0);
+        assert!(row(&report, "orchestrate").issues > 0);
     }
 
     // --- fixtures -----------------------------------------------------------
