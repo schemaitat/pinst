@@ -3,7 +3,7 @@ id: 260920-qcrrqs
 slug: macos-support
 updated: 2026-09-21
 areas: [manifest, exec, release, configs]
-issue_count: 7
+issue_count: 8
 ---
 
 # Learnings — macOS support: a released Darwin binary, and every command working behind it (260920-qcrrqs-macos-support)
@@ -27,7 +27,12 @@ on real hardware) stays open, per DEP-004: no Mac was available. The
 headline lesson is that most of this plan's real bugs were not in the new
 code Phase 1–2 wrote, but in *existing* functions that had never needed to
 know a tool could resolve differently depending on context, and continued
-reading the one field they'd always read.
+reading the one field they'd always read. The macOS CI leg this plan itself
+adds in Phase 5 then found one more of exactly that shape on its first real
+run (ISSUE-008) — the one bug in this plan that `--platform macos`
+simulation from Linux structurally could not have caught, which is the
+whole reason Phase 5 exists rather than trusting simulation all the way
+through.
 
 ## Issues
 
@@ -196,3 +201,40 @@ either instruction without a trace of why.
 authority (the plan document and the session's actual operator), not
 something a skill's instructions could have resolved in advance.
 **Distilled:** declined — one occurrence, and the resolution (record the conflict and the authorization by name) is already stated as the recommendation; nothing further to mechanize.
+
+### ISSUE-008: `pinst docs search`/`dump --tag` filtered out every tool the host couldn't install
+**What happened:** PR #19's first real `macos-latest` CI run failed
+`cli::commands::docs::tests::a_tag_filter_narrows_what_dump_and_search_can_see`
+with `left: 0, right: 1` — invisible on Linux, where the same test passed
+every time. The test's fixture manifest has four tools, all installed via
+`apt` with no macOS override, so on macOS every one of them now resolves
+`Unsupported` and is filtered out before the tag filter even runs.
+**Root cause:** Phase 1 rewrote `docs.rs`'s local `select()` helper to go
+through `graph::select(..., Platform::host())` for consistency with every
+other command's narrowing. But `graph::select` also drops platform-
+unsupported tools — the right behavior for a command about to *plan an
+install*, and the wrong one for a command about to *look up
+documentation*. `pinst docs show ripgrep` from a Linux box, or `docs dump
+--tag dev` to see what a Mac's manifest documents, both want the whole
+catalogue regardless of what this specific host could install today.
+Nothing in `--platform macos` simulation from Linux could catch this: the
+test fixture is entirely apt tools on *both* platforms in the sense that
+matters — the bug only exists when `Platform::host()` genuinely resolves
+to `MacOS`, which only a real macOS runner does.
+**Fix applied:** rewrote `docs.rs`'s `select()` to narrow by tag/profile
+directly over `manifest.tools`, with no platform involvement at all —
+matching what it did before Phase 1 touched it. `graph::select` (platform
+filtering, dependency closure, topological order) stays reserved for
+commands that actually plan installs.
+**Recommendation:** when a helper reuses another command's narrowing
+function "for consistency", check whether that function's *other*
+behaviors (not just the one being reused) apply to the new caller too.
+`graph::select` bundles three things — tag/profile matching, platform
+filtering, dependency ordering — and docs only wanted the first. This is
+also the strongest evidence in this whole plan for why Phase 5's CI leg
+exists at all: every other bug here (ISSUE-001 through ISSUE-004) was
+caught by `--platform macos` simulation or by running the binary
+directly, but this one specifically needed `Platform::host()` to actually
+be `MacOS`, which only real hardware (or a real runner) provides.
+**Skill:** none.
+**Distilled:** promoted — LESSON-037.

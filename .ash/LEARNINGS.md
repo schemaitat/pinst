@@ -647,3 +647,22 @@ granularity — vendor+OS, neither more nor less — only became visible by
 holding both cases at once.
 **Status:** prose
 **Seen in:** 260920-qcrrqs-macos-support (ISSUE-005)
+
+### LESSON-037: A reused narrowing function carries all of its behaviors, not just the one you wanted
+**Lesson:** When a new command narrows a collection by calling an existing
+command's narrowing function "for consistency," check every behavior that
+function bundles, not only the one being reused. A function that filters by
+tag *and* by platform-install-support *and* orders by dependency is three
+behaviors in one call, and a caller that only wants the first inherits the
+other two whether it wants them or not.
+**Why:** `pinst docs search`/`dump --tag` started going through
+`graph::select`, which also drops any tool the current host cannot install
+— correct for a command about to plan an install, wrong for a command
+about to look up documentation. It was invisible on Linux because the
+test's fixture manifest happened to be apt-only tools resolving fine there,
+and `--platform macos` simulation from Linux could not catch it either: the
+bug only exists when `Platform::host()` genuinely resolves to the platform
+being tested, which only a real runner provides. It surfaced on the very
+first real `macos-latest` CI run.
+**Status:** prose
+**Seen in:** 260920-qcrrqs-macos-support (ISSUE-008)
