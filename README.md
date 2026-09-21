@@ -39,14 +39,24 @@ binary — so they answer on a machine with no checkout.
 
 ## Install
 
+Linux (x86_64) and macOS (Apple Silicon and Intel). A prebuilt binary ships
+for each; anything else builds from source automatically.
+
+On macOS, the manifest installs most tools through [Homebrew](https://brew.sh)
+(`brew`, an eighth install method alongside `apt`) — the manifest bootstraps
+it if it is not already there. `build-essential` has no macOS equivalent:
+doctor reports it as `tool.unsupported.build-essential` and names
+`xcode-select --install`, the Xcode Command Line Tools, as the remediation.
+
 On a fresh machine — no clone, no Rust toolchain:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/schemaitat/pinst/main/scripts/install.sh | sh
 ```
 
-That downloads the latest release binary, checks it against the `.sha256`
-published beside it, and puts it in `~/.local/bin`. From there:
+That downloads the latest release binary for this machine's platform, checks
+it against the `.sha256` published beside it, and puts it in `~/.local/bin`.
+From there:
 
 ```sh
 pinst bootstrap --dry-run    # read the plan first

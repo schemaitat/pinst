@@ -1,7 +1,7 @@
 ---
 id: 260920-qcrrqs
 slug: macos-support
-status: Proposed
+status: Done
 created: 2026-09-20
 updated: 2026-09-21
 areas: [manifest, exec, release, configs]
@@ -164,7 +164,7 @@ check it mechanically.
 | 2 | Homebrew as an install method | [phase-02.md](phase-02.md) | Done |
 | 3 | A manifest and configs that cover macOS | [phase-03.md](phase-03.md) | Done |
 | 4 | Build and publish the Darwin artifacts | [phase-04.md](phase-04.md) | Done |
-| 5 | Install it on a Mac, and keep it working | [phase-05.md](phase-05.md) | Proposed |
+| 5 | Install it on a Mac, and keep it working | [phase-05.md](phase-05.md) | Done |
 
 ## Affected Files
 
