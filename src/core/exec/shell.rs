@@ -9,8 +9,8 @@ use crate::core::plan::Action;
 pub struct ShellInstall;
 
 impl Executor for ShellInstall {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::Shell { command } = &tool.install else {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::Shell { command } = install else {
             bail!("shell executor called for tool '{}'", tool.name);
         };
         Ok(vec![Action::Shell {

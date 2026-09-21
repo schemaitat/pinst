@@ -7,8 +7,8 @@ use crate::core::plan::Action;
 pub struct Nvm;
 
 impl Executor for Nvm {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::Nvm { version } = &tool.install else {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::Nvm { version } = install else {
             bail!("nvm executor called for tool '{}'", tool.name);
         };
         // nvm is a shell function, not a binary: it has to be sourced into

@@ -10,10 +10,10 @@ use crate::core::plan::Action;
 pub struct GithubRelease;
 
 impl Executor for GithubRelease {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
         let Install::GithubRelease {
             repo, asset, dest, ..
-        } = &tool.install
+        } = install
         else {
             bail!("github_release executor called for tool '{}'", tool.name);
         };

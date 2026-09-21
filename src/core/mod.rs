@@ -11,6 +11,7 @@ pub mod graph;
 pub mod harness;
 pub mod manifest;
 pub mod plan;
+pub mod platform;
 pub mod probe;
 pub mod source;
 pub mod template;

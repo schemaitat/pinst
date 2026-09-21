@@ -7,8 +7,8 @@ use crate::core::plan::Action;
 pub struct Apt;
 
 impl Executor for Apt {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::Apt { packages } = &tool.install else {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::Apt { packages } = install else {
             bail!("apt executor called for a non-apt tool '{}'", tool.name);
         };
         Ok(vec![Action::Shell {
@@ -16,8 +16,8 @@ impl Executor for Apt {
         }])
     }
 
-    fn upgrade(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::Apt { packages } = &tool.install else {
+    fn upgrade(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::Apt { packages } = install else {
             bail!("apt executor called for a non-apt tool '{}'", tool.name);
         };
         // --only-upgrade keeps an upgrade from silently installing something

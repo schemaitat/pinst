@@ -13,13 +13,16 @@ use crate::core::{home_dir, probe};
 
 pub async fn run(ctx: &Ctx, args: &DoctorArgs) -> Result<ExitCode> {
     let loaded = super::load_manifest(ctx)?;
-    let tools = super::resolve(&loaded, &Selection::default())?;
+    let selected = super::resolve(&loaded, ctx, &Selection::default())?;
+    let tools = selected.tools;
     let home = home_dir()?;
     let configs = ConfigSet::load(&loaded.manifest, &home)?;
 
     ctx.note(format!("configs: {}", configs.source.describe()));
-    let probes = probe::probe_all(&tools).await;
-    let findings = doctor::diagnose(&tools, &probes, &configs)?;
+    let probes = probe::probe_all(&tools, ctx.platform).await;
+    let mut findings = doctor::diagnose(&tools, &probes, &configs, ctx.platform)?;
+    findings.extend(super::unsupported_findings(&selected.unsupported));
+    findings.sort_by(|a, b| a.severity.cmp(&b.severity).then(a.id.cmp(&b.id)));
 
     if args.fix {
         return fix(ctx, &tools, &probes, &configs, findings).await;
@@ -102,7 +105,7 @@ async fn fix(
 
     let mut plan = Plan::default();
     if !missing.is_empty() {
-        let install_plan = engine::build_install_plan(&missing, probes)?;
+        let install_plan = engine::build_install_plan(&missing, probes, ctx.platform)?;
         plan.steps.extend(install_plan.steps);
     }
     let config_plan = configs
@@ -130,7 +133,7 @@ async fn fix(
     ));
 
     // Re-diagnose so the report reflects reality after the fixes, not before.
-    let probes = probe::probe_all(tools).await;
-    let remaining = doctor::diagnose(tools, &probes, configs)?;
+    let probes = probe::probe_all(tools, ctx.platform).await;
+    let remaining = doctor::diagnose(tools, &probes, configs, ctx.platform)?;
     report(ctx, "doctor", remaining, summary.ran > 0)
 }

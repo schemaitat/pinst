@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use color_eyre::eyre::Result;
 use serde::Serialize;
 
+use crate::core::platform::Platform;
+
 /// Bumped only on a breaking change to the envelope shape.
 pub const OUTPUT_SCHEMA_VERSION: u32 = 1;
 
@@ -95,6 +97,11 @@ pub struct Ctx {
     pub yes: bool,
     pub quiet: bool,
     pub manifest_path: Option<PathBuf>,
+    /// The platform to plan for: resolved once in `GlobalArgs::ctx` from
+    /// `--platform`, `PINST_PLATFORM`, or the host, in that order — see
+    /// `Platform::resolve`. Every command reads this rather than checking
+    /// `cfg!(target_os)` itself.
+    pub platform: Platform,
 }
 
 impl Ctx {
@@ -163,6 +170,7 @@ mod tests {
             yes: false,
             quiet: false,
             manifest_path: None,
+            platform: Platform::host(),
         }
     }
 

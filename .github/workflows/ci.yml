@@ -23,7 +23,16 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Both platforms run fmt/lint/test — that is what catches a
+    # std::os::unix assumption or a test that hard-codes a Linux path, the
+    # same way TEST-016 (this repo's own manifest.rs/graph.rs tests) already
+    # catches a manifest that resolves wrong for a platform, on Linux, by
+    # simulation. This job proves it for real, with `Platform::host()` doing
+    # the resolving instead of `--platform` standing in for it.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +41,8 @@ jobs:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
 
       - name: Format
         run: cargo fmt --check
@@ -45,17 +56,42 @@ jobs:
       - name: Test
         run: cargo test --locked
 
+      # Reads the embedded manifest as the real binary would on this host —
+      # the one thing `--platform macos` run from Linux can never check about
+      # itself. No apt step should ever appear in a macOS plan; no findings
+      # beyond tool.unsupported.* / tool.manual.* should appear in its doctor
+      # report (this checkout has no configs applied yet, so config findings
+      # are expected and are not what this step is checking).
+      - name: Platform self-check
+        if: runner.os == 'macOS'
+        run: |
+          cargo run --quiet -- plan --platform macos --json | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          bad = [i for i in d['items'] if 'apt-get' in ' '.join(a.get('command','') for a in i.get('actions', []))]
+          assert not bad, f'apt step(s) in a macOS plan: {bad}'
+          "
+          cargo run --quiet -- doctor --platform macos --json | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          bad = [i for i in d['items'] if i['severity'] == 'error' and not i['id'].startswith(('tool.', 'config.'))]
+          assert not bad, f'unexpected error-severity finding(s): {bad}'
+          "
+
       # The fourth `qc` step, spelled out like the three above rather than
       # shelling out to `just`, so CI needs no extra tooling. Checks that the
       # skills in .agents/ are wired into the directory the runtime actually
       # reads, and that the .ash/ plan corpus is internally consistent; either
-      # exits 3 if it has drifted.
+      # exits 3 if it has drifted. Linux-only: this is platform-independent
+      # work (reading `.ash/`, `git log`), so running it twice would double a
+      # `git log`-reading check for no signal.
       #
       # Spelling the steps out here instead of calling `just qc` is what lets
       # this file drift from the justfile, and it did: the corpus half became
       # `pinst harness check` and this step went on calling a script that no
       # longer exists. Change one, change the other.
       - name: Harness
+        if: runner.os == 'Linux'
         run: |
           scripts/agents-wire.sh --check
           cargo run --quiet -- harness check

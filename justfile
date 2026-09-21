@@ -63,12 +63,21 @@ dist target="x86_64-unknown-linux-musl":
     set -euo pipefail
     target="{{ target }}"
     host="$(rustc -vV | sed -n 's/^host: //p')"
-    # Same architecture, different libc, is something the local toolchain
-    # handles: the musl build needs only `musl-tools` and `cmake` installed
-    # (cmake for aws-lc-rs, rustls' crypto provider via reqwest). cross is
-    # reserved for a genuinely foreign architecture, where a whole
-    # cross-toolchain in a container is the only sane way.
-    if [ "${target%%-*}" = "${host%%-*}" ]; then
+    # Compare vendor+OS, not the whole triple and not just the leading arch
+    # field. Same architecture, different libc (x86_64-unknown-linux-gnu
+    # host building the -musl target) is something the local toolchain
+    # handles, which is why this cannot compare the full triple — musl vs
+    # gnu would wrongly read as "foreign". Same OS, different architecture
+    # (an arm64 Mac building x86_64-apple-darwin, or vice versa) is also
+    # something Apple's own toolchain cross-compiles between natively,
+    # which is why this cannot compare only the arch field either — that
+    # was the bug: an arm64 Mac building x86_64-apple-darwin used to fail
+    # this check and fall to the `cross` branch below, which has no Apple
+    # support and is not installed on the release runner. `cross` and its
+    # container are reserved for a genuinely foreign OS.
+    IFS='-' read -r _ target_vendor target_os _ <<< "$target"
+    IFS='-' read -r _ host_vendor host_os _ <<< "$host"
+    if [ "$target_vendor-$target_os" = "$host_vendor-$host_os" ]; then
         rustup target add "$target"
         cargo build --release --locked --target "$target" \
             || { echo "hint: the musl build needs musl-tools and cmake" >&2; exit 1; }
@@ -77,10 +86,37 @@ dist target="x86_64-unknown-linux-musl":
     fi
     rm -rf dist && mkdir -p dist
     # --sort/--owner/--group keep the archive identical whoever builds it, so
-    # a locally built artifact can be compared against the released one.
-    tar --sort=name --owner=0 --group=0 --numeric-owner \
-        -C "target/$target/release" -czf "dist/pinst-$target.tar.gz" pinst
-    cd dist && sha256sum "pinst-$target.tar.gz" > "pinst-$target.tar.gz.sha256"
+    # a locally built artifact can be compared against the released one. BSD
+    # tar (what macOS ships) rejects all four flags outright, so this only
+    # runs them under GNU tar — `gtar` when present (a Homebrew install),
+    # falling back to `tar` when that GNU tar is what `tar` itself resolves
+    # to (Linux, or a Mac with coreutils' gnubin on PATH). A Mac building
+    # with neither loses only the reproducibility property, not the build:
+    # the archive's *contents* are identical either way, just not
+    # byte-identical to one built elsewhere.
+    if command -v gtar >/dev/null 2>&1; then
+        GNUTAR=gtar
+    elif tar --version 2>/dev/null | grep -q GNU; then
+        GNUTAR=tar
+    else
+        GNUTAR=""
+    fi
+    if [ -n "$GNUTAR" ]; then
+        "$GNUTAR" --sort=name --owner=0 --group=0 --numeric-owner \
+            -C "target/$target/release" -czf "dist/pinst-$target.tar.gz" pinst
+    else
+        echo "note: no GNU tar found — dist/pinst-$target.tar.gz will not be byte-reproducible" >&2
+        tar -C "target/$target/release" -czf "dist/pinst-$target.tar.gz" pinst
+    fi
+    cd dist
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "pinst-$target.tar.gz" > "pinst-$target.tar.gz.sha256"
+    else
+        # macOS has no sha256sum; shasum -a 256 produces the same line
+        # format, so scripts/install.sh's `shasum -a 256 -c` fallback reads
+        # either file the same way.
+        shasum -a 256 "pinst-$target.tar.gz" > "pinst-$target.tar.gz.sha256"
+    fi
     ls -l "pinst-$target.tar.gz" "pinst-$target.tar.gz.sha256"
 
 # --- the agent harness -----------------------------------------------------

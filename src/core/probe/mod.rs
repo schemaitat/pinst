@@ -15,7 +15,8 @@ use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::timeout;
 
-use crate::core::manifest::Tool;
+use crate::core::manifest::{Resolved, Tool};
+use crate::core::platform::Platform;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -28,12 +29,13 @@ pub struct ProbeResult {
     pub path: Option<PathBuf>,
 }
 
-/// Probes every tool concurrently and collects the results.
-pub async fn probe_all(tools: &[&Tool]) -> BTreeMap<String, ProbeResult> {
+/// Probes every tool concurrently and collects the results, using each
+/// tool's effective `detect` for `platform`.
+pub async fn probe_all(tools: &[&Tool], platform: Platform) -> BTreeMap<String, ProbeResult> {
     let mut set = tokio::task::JoinSet::new();
     for tool in tools {
         let tool = (*tool).clone();
-        set.spawn(async move { probe_tool(&tool).await });
+        set.spawn(async move { probe_tool(&tool, platform).await });
     }
 
     let mut results = BTreeMap::new();
@@ -46,29 +48,43 @@ pub async fn probe_all(tools: &[&Tool]) -> BTreeMap<String, ProbeResult> {
 }
 
 /// Streams results to `tx` as each probe lands. Used by the TUI, which
-/// renders partial state rather than waiting for the whole set.
-pub fn spawn_streaming(tools: Vec<Tool>, tx: UnboundedSender<ProbeResult>) {
+/// renders partial state rather than waiting for the whole set — always for
+/// `Platform::host()`, since the TUI reports on the machine it is running
+/// on rather than an overridable target.
+pub fn spawn_streaming(tools: Vec<Tool>, tx: UnboundedSender<ProbeResult>, platform: Platform) {
     for tool in tools {
         let tx = tx.clone();
         tokio::spawn(async move {
-            let _ = tx.send(probe_tool(&tool).await);
+            let _ = tx.send(probe_tool(&tool, platform).await);
         });
     }
 }
 
-pub async fn probe_tool(tool: &Tool) -> ProbeResult {
-    let installed = run_check(&tool.detect.command).await;
+pub async fn probe_tool(tool: &Tool, platform: Platform) -> ProbeResult {
+    // A tool `platform` cannot install has nothing to detect; callers are
+    // expected to have already filtered these out via `graph::select`; this
+    // is the fallback for one that slipped through some other path (e.g. a
+    // direct `docs`/`schema` lookup) rather than a panic.
+    let Resolved::Supported(effective) = tool.resolve(platform) else {
+        return ProbeResult {
+            tool: tool.name.clone(),
+            installed: false,
+            version: None,
+            path: None,
+        };
+    };
+    let installed = run_check(&effective.detect.command).await;
     let version = if installed {
-        match &tool.detect.version_cmd {
+        match &effective.detect.version_cmd {
             Some(cmd) => run_capture(cmd)
                 .await
-                .and_then(|out| version::extract(&out, tool.detect.version_regex.as_deref())),
+                .and_then(|out| version::extract(&out, effective.detect.version_regex.as_deref())),
             None => None,
         }
     } else {
         None
     };
-    let path = tool
+    let path = effective
         .detect
         .bin
         .as_deref()

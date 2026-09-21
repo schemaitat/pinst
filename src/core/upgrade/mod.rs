@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::core::manifest::{Tool, UpgradeSpec};
+use crate::core::platform::Platform;
 use crate::core::probe::ProbeResult;
 
 const TTL_SECS: u64 = 24 * 60 * 60;
@@ -82,17 +83,38 @@ fn upstream_of(candidate: &str) -> &str {
     without_epoch.split('-').next().unwrap_or(without_epoch)
 }
 
+/// Homebrew decorates a formula's version with a revision suffix when it
+/// rebuilds the same upstream release — `14.1.0_1` — the way apt decorates
+/// with an epoch and a distro revision. Only the part before `_` is
+/// comparable with what `--version` reports; stripping the whole string
+/// unconditionally would be wrong for a formula whose upstream version
+/// itself contains an underscore, so this only strips a *trailing*
+/// `_<digits>` revision marker.
+fn brew_upstream_of(candidate: &str) -> &str {
+    match candidate.rsplit_once('_') {
+        Some((base, revision))
+            if !revision.is_empty() && revision.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            base
+        }
+        _ => candidate,
+    }
+}
+
 fn compare(
     tool: &Tool,
     spec: &UpgradeSpec,
     current: Option<String>,
     latest: Option<String>,
+    unpinnable: bool,
 ) -> UpgradeResult {
-    // Only apt carries epoch/revision decoration. Stripping it from a GitHub
-    // tag would turn `1.2.0-rc1` into `1.2.0` and invent an upgrade.
+    // Only apt and brew carry this kind of packaging decoration. Stripping
+    // it from a GitHub tag would turn `1.2.0-rc1` into `1.2.0` and invent an
+    // upgrade.
     let upgrade_available = match (&current, &latest) {
         (Some(c), Some(l)) => match spec {
             UpgradeSpec::Apt { .. } => upstream_of(l) != c,
+            UpgradeSpec::Brew { .. } => brew_upstream_of(l) != c,
             _ => l != c,
         },
         _ => false,
@@ -102,20 +124,27 @@ fn compare(
         current,
         latest,
         upgrade_available,
-        unpinnable: tool.is_unpinnable(),
+        unpinnable,
     }
 }
 
 /// Looks up the latest version for one tool, using the cache unless `force`.
+/// Returns `None` when the tool is unsupported on `platform` — there is
+/// nothing to check.
 fn check_one(
     tool: &Tool,
     current: Option<String>,
     cache: &mut Cache,
     force: bool,
-) -> UpgradeResult {
-    let spec = tool.upgrade_spec();
+    platform: Platform,
+) -> Option<UpgradeResult> {
+    let crate::core::manifest::Resolved::Supported(effective) = tool.resolve(platform) else {
+        return None;
+    };
+    let unpinnable = effective.is_unpinnable();
+    let spec = tool.upgrade_spec_for(platform)?;
     if matches!(spec, UpgradeSpec::None {}) {
-        return compare(tool, &spec, current, None);
+        return Some(compare(tool, &spec, current, None, unpinnable));
     }
 
     let fresh = (!force)
@@ -143,42 +172,46 @@ fn check_one(
         }
     };
 
-    compare(tool, &spec, current, latest)
+    Some(compare(tool, &spec, current, latest, unpinnable))
 }
 
-/// Blocking upgrade check over a whole tool set. Callers on an async runtime
-/// must wrap this in `spawn_blocking` — the lookups shell out and hit the
-/// network.
+/// Blocking upgrade check over a whole tool set, using each tool's effective
+/// upgrade spec for `platform`. Callers on an async runtime must wrap this in
+/// `spawn_blocking` — the lookups shell out and hit the network.
 pub fn check_all(
     tools: &[&Tool],
     probes: &BTreeMap<String, ProbeResult>,
     force: bool,
+    platform: Platform,
 ) -> Vec<UpgradeResult> {
     let mut cache = load_cache();
     let results: Vec<UpgradeResult> = tools
         .iter()
-        .map(|tool| {
+        .filter_map(|tool| {
             let current = probes.get(&tool.name).and_then(|p| p.version.clone());
-            check_one(tool, current, &mut cache, force)
+            check_one(tool, current, &mut cache, force, platform)
         })
         .collect();
     save_cache(&cache);
     results
 }
 
-/// Streams results to `tx` as they land, for the TUI's Upgrades tab.
+/// Streams results to `tx` as they land, for the TUI's Upgrades tab — always
+/// for `Platform::host()`, since the TUI checks the machine it is running on.
 pub fn spawn_streaming(
     tools: Vec<Tool>,
     probes: BTreeMap<String, ProbeResult>,
     tx: UnboundedSender<Option<UpgradeResult>>,
     force: bool,
+    platform: Platform,
 ) {
     tokio::task::spawn_blocking(move || {
         let mut cache = load_cache();
         for tool in &tools {
             let current = probes.get(&tool.name).and_then(|p| p.version.clone());
-            let result = check_one(tool, current, &mut cache, force);
-            if tx.send(Some(result)).is_err() {
+            if let Some(result) = check_one(tool, current, &mut cache, force, platform)
+                && tx.send(Some(result)).is_err()
+            {
                 return;
             }
         }
@@ -186,4 +219,67 @@ pub fn spawn_streaming(
         // None marks the end of the stream.
         let _ = tx.send(None);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tool() -> Tool {
+        crate::core::manifest::embedded()
+            .unwrap()
+            .tool("curl")
+            .unwrap()
+            .clone()
+    }
+
+    // Sits beside the brew case below: apt's epoch/revision decoration was
+    // already handled by `upstream_of`, just never pinned by a test of its
+    // own until this one.
+    #[test]
+    fn apt_epoch_and_revision_decoration_does_not_invent_an_upgrade() {
+        let spec = UpgradeSpec::Apt {
+            package: "curl".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("7.81.0".to_string()),
+            Some("4:7.81.0-1ubuntu1.20".to_string()),
+            false,
+        );
+        assert!(!result.upgrade_available);
+    }
+
+    // TEST-009 / RISK-003: a brew revision suffix must not read as a newer
+    // version than the one already installed.
+    #[test]
+    fn brew_revision_suffix_does_not_invent_an_upgrade() {
+        let spec = UpgradeSpec::Brew {
+            formula: "git-delta".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("14.1.0".to_string()),
+            Some("14.1.0_1".to_string()),
+            false,
+        );
+        assert!(!result.upgrade_available);
+    }
+
+    #[test]
+    fn a_genuinely_newer_brew_version_is_still_an_upgrade() {
+        let spec = UpgradeSpec::Brew {
+            formula: "git-delta".to_string(),
+        };
+        let result = compare(
+            &tool(),
+            &spec,
+            Some("14.1.0".to_string()),
+            Some("14.2.0".to_string()),
+            false,
+        );
+        assert!(result.upgrade_available);
+    }
 }

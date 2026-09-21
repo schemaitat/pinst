@@ -16,8 +16,8 @@ use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{DocsAction, DocsAdoptArgs, DocsArgs, DocsDumpArgs, DocsSearchArgs, DocsShowArgs};
 use crate::core::docs::page::ToolDoc;
 use crate::core::docs::{Catalogue, capture, search as find, seed};
-use crate::core::graph::{self, Selection};
 use crate::core::manifest::Tool;
+use crate::core::platform::Platform;
 use crate::core::{probe, usage};
 
 /// Where the answer came from. An authored page and a dump of the tool's own
@@ -114,7 +114,7 @@ async fn show(
     args: &DocsShowArgs,
 ) -> Result<ExitCode> {
     let tool = lookup(manifest, &args.tool)?;
-    let probe = probe::probe_tool(tool).await;
+    let probe = probe::probe_tool(tool, Platform::host()).await;
 
     // An authored page always wins: it was written for this question, and the
     // capture was not.
@@ -231,7 +231,7 @@ async fn adopt(
         }
     }
 
-    let probe = probe::probe_tool(tool).await;
+    let probe = probe::probe_tool(tool, Platform::host()).await;
     let captured =
         capture::capture(tool, probe.version.as_deref(), args.refresh, cache_dir).await?;
 
@@ -297,7 +297,7 @@ async fn status(
     catalogue: &Catalogue,
 ) -> Result<ExitCode> {
     let tools: Vec<&Tool> = manifest.tools.iter().collect();
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, Platform::host()).await;
     let (items, orphans) = coverage(manifest, catalogue, &probes);
 
     let authored = items.iter().filter(|i| i.page == "authored").count();
@@ -417,7 +417,7 @@ async fn search(
     args: &DocsSearchArgs,
 ) -> Result<ExitCode> {
     let tools = select(manifest, &args.tags, &None)?;
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, Platform::host()).await;
 
     let entries: Vec<find::Entry<'_>> = tools
         .iter()
@@ -538,8 +538,12 @@ fn dump(
     )
 }
 
-/// Narrows the catalogue the same way every other command narrows the
-/// manifest, so `--tag` means one thing across the CLI.
+/// Narrows the catalogue by `--tag`/`--profile`, the same vocabulary every
+/// other command uses. Deliberately *not* `graph::select`: that also drops
+/// tools the current platform cannot install, which is the wrong filter for
+/// documentation — a tool's docs page is worth finding whether or not this
+/// machine could install it right now (asking "what does `ripgrep` do" from
+/// a Linux box about a macOS-only tool is a normal thing to want).
 fn select<'m>(
     manifest: &'m crate::core::manifest::Manifest,
     tags: &[String],
@@ -548,14 +552,35 @@ fn select<'m>(
     if tags.is_empty() && profile.is_none() {
         return Ok(manifest.tools.iter().collect());
     }
-    graph::select(
-        manifest,
-        &Selection {
-            profile: profile.clone(),
-            tags: tags.to_vec(),
-            names: Vec::new(),
-        },
-    )
+
+    let mut wanted_tags: Vec<&str> = tags.iter().map(String::as_str).collect();
+    if let Some(profile_name) = profile {
+        let Some(profile) = manifest.profile.get(profile_name) else {
+            return Err(usage(format!(
+                "unknown profile '{}' (known: {})",
+                profile_name,
+                manifest
+                    .profile
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        };
+        wanted_tags.extend(profile.tags.iter().map(String::as_str));
+    }
+
+    for tag in tags {
+        if !manifest.tools.iter().any(|t| t.tags.contains(tag)) {
+            return Err(usage(format!("no tool carries tag '{tag}'")));
+        }
+    }
+
+    Ok(manifest
+        .tools
+        .iter()
+        .filter(|t| t.tags.iter().any(|tag| wanted_tags.contains(&tag.as_str())))
+        .collect())
 }
 
 /// The manifest is the scope: a name it does not declare is a bad invocation,
@@ -686,6 +711,7 @@ install = { method = "apt", packages = ["seedable"] }
             yes: false,
             quiet: true,
             manifest_path: None,
+            platform: Platform::host(),
         }
     }
 
