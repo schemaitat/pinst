@@ -80,7 +80,9 @@ one line.
 that places a bounded task in a sibling pane or isolated worktree, supervises
 the delegated agent to a verified outcome, and writes its own log under
 `.herdr/orchestrate/`. It neither reads nor writes the plan corpus; use
-`/orchestrate` when Herdr delegation itself is the requested work.
+`/orchestrate` when Herdr delegation itself is the requested work. The
+orchestrator only delegates: it verifies the child's result but never
+implements, edits, commits, or co-edits the delegated deliverable.
 
 The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the

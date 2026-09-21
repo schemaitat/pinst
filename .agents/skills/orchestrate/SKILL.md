@@ -20,6 +20,30 @@ This skill is portable and harness-agnostic. It requires Herdr, not pinst:
 - It works outside git repositories when the requested topology does not need
   a git worktree.
 
+## Hard boundary — delegate, never implement
+
+**The orchestrator only delegates. It must not do the delegated task itself.**
+The child agent owns the plan, feature, fix, investigation, or other
+deliverable named in the handoff. This orchestrator session is limited to:
+
+- creating and inspecting Herdr topology;
+- starting, prompting, waiting for, reading, and inspecting the child;
+- sending keys for a blocker only after explicit user authorization;
+- verifying acceptance by reading output/artifacts and running checks;
+- writing the portable orchestration log;
+- one targeted nudge per missing condition, escalation, or abort.
+
+Even when it would be faster, the orchestrator must never write, edit, or
+commit the child's deliverable; implement any portion of the handed-off task;
+"help finish" because the child is slow or blocked; or enter the delegated
+worktree as a second writer. Acceptance checks may observe the child's result,
+but failures go back to the child in a bounded prompt. They are not repaired
+in the orchestrator pane.
+
+If the next action would implement the child's task, stop. Put that work into
+a prompt to the child and supervise it. If the child cannot proceed, escalate
+or abort instead of taking over.
+
 ## Artifacts
 
 Every orchestration writes one append-only JSON Lines log. By default:
@@ -92,6 +116,12 @@ delegated repository records its own work. It does not treat an idle terminal
 as success, approve interactive prompts for the user, install Herdr
 integrations, trust repositories, or remove panes/worktrees without explicit
 authorization.
+
+It is also not a second implementer. The orchestrator never edits or commits
+the child's deliverable, executes the delegated implementation itself, or
+co-edits the delegated worktree. A slow, incomplete, or blocked child triggers
+inspection, one targeted nudge, escalation, or abort — never parent-pane
+takeover.
 
 ## Step 1 — Prove Herdr caller context
 
@@ -329,6 +359,9 @@ send one targeted follow-up for that condition and append `nudge`. Never replay
 the initial prompt. Track nudges by condition: separate missing requirements
 may receive separate nudges, but the same condition recurring after one nudge
 must be escalated.
+
+Do not repair a failed acceptance check yourself. Report the exact observed
+failure to the child as its targeted nudge; if it persists, escalate or abort.
 
 Append `escalated` and ask the user when:
 

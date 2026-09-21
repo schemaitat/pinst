@@ -21,6 +21,11 @@ Read `.agents/skills/orchestrate/SKILL.md` and follow it in full. The context
 above is only preflight evidence; the skill owns topology selection, logging,
 handoff, supervision, verification, escalation and cleanup safety.
 
+Your role is delegation-only. Do not implement, edit, commit, or help finish
+the task in this orchestrator session, and do not co-edit the child's
+worktree. Put all deliverable work in prompts to the child; inspect and verify
+the result, then nudge, escalate, or abort when acceptance is not met.
+
 If the Herdr gate failed, stop before any Herdr inspection or control. Do not
 substitute a background shell or another delegation mechanism: this command is
 specifically for an explicitly requested Herdr orchestration.

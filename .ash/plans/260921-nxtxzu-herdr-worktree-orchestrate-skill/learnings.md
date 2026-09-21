@@ -3,7 +3,7 @@ id: 260921-nxtxzu
 slug: herdr-worktree-orchestrate-skill
 updated: 2026-09-21
 areas: [agents, herdr, orchestration]
-issue_count: 6
+issue_count: 7
 ---
 
 # Learnings — Herdr worktree orchestration as a portable skill (260921-nxtxzu-herdr-worktree-orchestrate-skill)
@@ -24,7 +24,9 @@ sibling-pane and isolated-worktree paths through semantic resolution. The
 smoke work exposed three details worth encoding in the skill itself:
 worktrees created from a linked checkout must target the parent source
 workspace, a timeout can occur before prompt delivery, and missing integration
-does not make one observed lifecycle state authoritative.
+does not make one observed lifecycle state authoritative. A follow-up also
+made the role boundary explicit: orchestration verifies child work but never
+becomes a second implementer.
 
 ## Issues
 
@@ -127,3 +129,23 @@ fixtures whose inputs the test owns.
 **Skill:** none
 **Gap:** answered — this was a brittle Rust test, not recurring work that a
 skill should own.
+
+### ISSUE-007: Delegation ownership was implied but not stated as a hard boundary
+**What happened:** The skill assigned implementation to a child and described
+supervision in detail, but it did not directly forbid the orchestrator from
+editing or "helping finish" the child's deliverable when the child was slow,
+blocked, or failed acceptance.
+**Root cause:** The procedure defined the child's task and the supervisor's
+mechanics without exhaustively defining the supervisor's negative authority.
+That left room for a well-intentioned orchestrator to become a second writer.
+**Fix applied:** A hard boundary near the top, the Non-goals section, the
+acceptance-failure path, the slash command, and the README now say the
+orchestrator only delegates. All implementation stays with the child;
+acceptance failures produce a child nudge, escalation, or abort.
+**Recommendation:** For delegation skills, state both ownership directions:
+what the child owns and what the supervisor is forbidden to take over.
+Repeat the boundary at the trigger and at the recovery path, where role drift
+is most tempting.
+**Skill:** orchestrate
+**Distilled:** declined — this is a role invariant now repeated and enforced
+by the owning skill and command.
