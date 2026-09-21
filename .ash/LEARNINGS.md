@@ -460,7 +460,14 @@ finding id as an example. The lesson resolved against that sentence rather
 than against the script that emits it, and deleting the script left the check
 silent. A passing check is not evidence until it has been seen to fail.
 **Status:** prose
-**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007)
+**Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007); again in
+260920-zqapye-installable-harness (ISSUE-004), twice in one plan — a doc
+comment written to *explain* the literal-id convention named a real id as
+its own example, in the very module built to replace the script LESSON-025
+was originally about. Caught only by a deliberate grep sweep run before, not
+instead of, the delete-and-restore experiment; the experiment alone would
+have passed either way, because the doc comment and the real emitter sat in
+the same file and vanished together.
 
 ### LESSON-026: A deletion that still compiles has not been verified
 **Lesson:** After removing code programmatically, compare the test count
@@ -611,3 +618,40 @@ into "the reader's next command succeeds".
 **Status:** prose
 **Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-005), found on
 review rather than by `just qc`
+
+### LESSON-035: Verify a resume instruction's factual claims before acting on them
+**Lesson:** When resuming interrupted work from an instruction describing the
+state to resume from ("you have no commits yet," "you were about to..."),
+check that description against `git log` and the run log before acting on it,
+rather than trusting it at face value.
+**Why:** An unattended run is expected to be interrupted by things outside
+its control — a session limit, a delivery retry — and the resume message
+that follows was accurate when written but can go stale by the time it
+arrives, especially if delivered more than once. Here the message claimed
+"no commits yet" for a run that, by the time it was read, had four phases
+committed. Acting on the stale claim instead of the real state would have
+meant redoing finished work or, worse, starting a second implementation
+alongside the first. `git log` and the append-only run log are always the
+ground truth; an instruction describing them is a snapshot that can expire.
+**Status:** prose
+**Seen in:** 260920-zqapye-installable-harness (ISSUE-001)
+
+### LESSON-036: A checker given an explicit root must resolve every input relative to that root
+**Lesson:** When a function receives an explicit root to check something
+against, derive every other input (a source tree, a config, a sibling
+directory) from that same root, rather than accepting it from the caller or
+falling back to ambient/cwd-based discovery. Return "nothing to check" when
+the expected sibling does not exist there, rather than substituting a
+default.
+**Why:** `install::check::run` first took its source from the caller, who
+passed the same ambient `asset::resolve_source()` that `install`/`status`
+correctly use for a human's intent-driven command. Given an explicit
+`project_root` that had no `.agents/` of its own (a test fixture's tempdir),
+ambient resolution quietly found *this checkout's* real `.agents/` instead —
+since `cargo test`'s cwd is the repo root — and checked it against the
+fixture's unrelated directory, producing a dozen confidently wrong findings
+instead of an empty result. Ambient discovery is the right default when
+nothing more specific was named; once something more specific *was* named,
+falling back past it answers a different question than was asked.
+**Status:** prose
+**Seen in:** 260920-zqapye-installable-harness (ISSUE-003)
