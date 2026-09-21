@@ -630,9 +630,18 @@ honest.
 
 Nothing is released by hand. release-please reads the Conventional Commits on
 `main` and keeps a release PR open; merging it bumps the version, writes
-`CHANGELOG.md`, tags `v<x.y.z>` and publishes a release with the musl binary,
-its checksum and a build provenance attestation attached. The release stays a
-draft until those assets are in place, so
-`/releases/latest/download/pinst-x86_64-unknown-linux-musl.tar.gz` — the URL
-`install.sh` and `pinst update pinst` both resolve — never points at an empty
-release.
+`CHANGELOG.md`, tags `v<x.y.z>` and publishes a release with three binaries,
+their checksums and a build provenance attestation attached:
+
+| Asset | Platform |
+|-------|----------|
+| `pinst-x86_64-unknown-linux-musl.tar.gz` | Linux x86_64 |
+| `pinst-aarch64-apple-darwin.tar.gz` | macOS, Apple Silicon |
+| `pinst-x86_64-apple-darwin.tar.gz` | macOS, Intel |
+
+The release stays a draft until all three are in place, so
+`/releases/latest/download/pinst-<target>.tar.gz` — the URL `install.sh` and
+`pinst update pinst` both resolve, `<target>` picked from the machine's own
+`uname` — never points at an empty release. A platform with no prebuilt
+binary here (or a download that fails to verify) falls back to building from
+source; `PINST_BUILD_FROM_SOURCE=1` forces that path outright.

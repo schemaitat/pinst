@@ -2,7 +2,7 @@
 id: 260920-qcrrqs
 slug: macos-support
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — Build and publish the Darwin artifacts
@@ -32,7 +32,7 @@ is a release.
 
 ## Steps
 
-- [ ] TASK-025: `justfile` (FILE-015) — change `dist`'s native-vs-`cross`
+- [x] TASK-025: `justfile` (FILE-015) — change `dist`'s native-vs-`cross`
       heuristic from comparing architectures to comparing the OS/vendor
       portion of the triple: same OS and vendor means `rustup target add` plus
       plain `cargo build --target`, and only a genuinely foreign OS falls to
@@ -43,7 +43,7 @@ is a release.
       branch, which has no Apple support and is not installed on the runner.
       Apple's toolchain cross-compiles between its own architectures natively;
       the container is for a foreign OS, which is now the only case left.
-- [ ] TASK-026: `justfile` (FILE-015) — replace the GNU-only archive flags
+- [x] TASK-026: `justfile` (FILE-015) — replace the GNU-only archive flags
       with a portable path: detect `gtar` and use the reproducible flags when
       it is present, otherwise fall back to plain `tar -czf` with a comment
       recording that the Darwin archives are not byte-reproducible.
@@ -53,7 +53,7 @@ is a release.
       keeping that property where the tool allows it and stating plainly
       where it does not is better than silently dropping it on one platform
       or adding a `gnu-tar` dependency to every Mac that builds a release.
-- [ ] TASK-027: `justfile` (FILE-015) — compute the checksum with
+- [x] TASK-027: `justfile` (FILE-015) — compute the checksum with
       `sha256sum` when present and `shasum -a 256` otherwise, writing the same
       `<asset>.sha256` file either way.
       Why: CON-003 — macOS has no `sha256sum`. `scripts/install.sh` already
@@ -61,7 +61,7 @@ is a release.
       the same or the file it writes will be in whichever format the builder
       happened to have. The two tools' output formats agree, so the artifact
       is identical; only the invocation differs.
-- [ ] TASK-028: `.github/workflows/release.yml` (FILE-016) — turn the matrix
+- [x] TASK-028: `.github/workflows/release.yml` (FILE-016) — turn the matrix
       into `{target, runner}` pairs:
       `x86_64-unknown-linux-musl`/`ubuntu-latest`,
       `aarch64-apple-darwin`/`macos-latest`,
@@ -70,13 +70,13 @@ is a release.
       Why: CON-002, DEP-002, PAT-003 — the previous release plan shaped this
       as a matrix precisely so a second platform would be rows rather than a
       rewrite, and this is that claim being cashed.
-- [ ] TASK-029: `.github/workflows/release.yml` (FILE-016) — make the
+- [x] TASK-029: `.github/workflows/release.yml` (FILE-016) — make the
       "Install musl toolchain" step conditional on the Linux row.
       Why: it is `sudo apt-get install musl-tools cmake`, which fails
       immediately on a macOS runner. The Darwin rows need no equivalent —
       `aws-lc-rs` builds against the CLT toolchain the runner image already
       carries — so the step gains a condition rather than a macOS counterpart.
-- [ ] TASK-030: `.github/workflows/release.yml` (FILE-016) — confirm the
+- [x] TASK-030: `.github/workflows/release.yml` (FILE-016) — confirm the
       `just dist ${{ matrix.target }}` invocation, the build-provenance
       attestation and the `gh release upload --clobber` step are all
       per-target and need no change beyond the matrix.
@@ -84,7 +84,7 @@ is a release.
       than an edit — but it is the read that catches a hard-coded asset name
       hiding among them, and the positional-argument bug that cost `v0.3.0` a
       release lived in exactly this line.
-- [ ] TASK-031: `README.md` (FILE-019) — update the release section: three
+- [x] TASK-031: `README.md` (FILE-019) — update the release section: three
       assets, which platforms they serve, and that Intel Macs get a prebuilt
       binary rather than a source build.
       Why: the README currently states the single musl asset as the release
@@ -151,6 +151,13 @@ is a release.
 
 ## Confirmed after the merge
 
-*(To be filled in when the first release carrying Darwin assets completes —
-record which rows built, which branch of TASK-025 each took, and whether
-`gtar` was present on the runner.)*
+Not yet confirmed — no release carrying Darwin assets has run. All of
+TASK-025 through TASK-031 are done and every "provable in the tree" criterion
+(TEST-022 through TEST-025) passed in this repo, including exercising the
+BSD-tar fallback and the `shasum -a 256` checksum branch with stubs standing
+in for the tools a Mac would actually use (LESSON-029). TEST-026 through
+TEST-028, which need DEP-002 (a real `macos-latest` run), stay open. Phase
+status is set to Done on the strength of the tree-provable half per this
+plan's own done-criteria split — whoever watches the first release after
+this merges should fill this section in and flip anything that turns out
+wrong.
