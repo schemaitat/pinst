@@ -95,8 +95,9 @@ pinst update pinst
 | `pinst apply` | Converge everything, then diagnose |
 | `pinst bootstrap` | `apply` for a fresh machine (the `default` profile) |
 | `pinst harness check\|index\|skills\|new-id` | Validate the `.ash/` plan corpus of whatever repo you are in |
-| `pinst schema manifest\|output\|docs\|harness` | JSON Schemas, derived from the code |
-| `pinst tui` | Dashboard: tools, findings, upgrades, docs; `/` searches, `e` edits a config |
+| `pinst harness install\|uninstall\|status` | Install/remove the agent harness (skills + commands), project or global scope |
+| `pinst schema manifest\|output\|docs\|harness\|harness-receipt` | JSON Schemas, derived from the code |
+| `pinst tui` | Dashboard: tools, findings, upgrades, docs, harness; `/` searches, `e` edits a config |
 
 Global flags: `--json`, `--dry-run`, `--yes`/`-y`, `--quiet`/`-q`,
 `--manifest <path>`.
@@ -627,7 +628,7 @@ recipe.
 | `src/core/` | The engine: manifest, graph, probing, planning, execution, configs, doctor |
 | `src/cli/` | The command surface — thin, no logic |
 | `src/ui/` | The TUI — also thin, over the same core |
-| `.agents/` | The agent harness: skills, and the contract for working on pinst |
+| `.agents/` | The agent harness: skills and commands, embedded at build time and installable elsewhere with `pinst harness install`, and the contract for working on pinst |
 | `.ash/` | Every plan, run log, and lesson this repo has produced |
 
 Plans and architectural decisions live in `.ash/plans/`, indexed by

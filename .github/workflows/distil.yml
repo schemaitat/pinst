@@ -177,7 +177,7 @@ jobs:
           claude_args: |
             --max-turns 40
             --model claude-opus-5
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just review),Bash(just harness),Bash(just index),Bash(just distil-guard:*),Bash(scripts/agents-wire.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(just review),Bash(just harness),Bash(just index),Bash(just wire),Bash(just distil-guard:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
 
       # The rail. A failure here ends the run with no branch and no pull
       # request, and the finding in the log says which way the pass went wrong.

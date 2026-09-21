@@ -24,6 +24,7 @@ pub async fn run(ctx: &Ctx) -> Result<ExitCode> {
     let (tx, mut rx) = event::start_event_loop();
     let mut app = App::new(tx, loaded.manifest, home_dir, catalogue);
     app.start_probing();
+    app.start_harness_load();
 
     let result = event_loop(&mut terminal, &mut app, &mut rx).await;
 

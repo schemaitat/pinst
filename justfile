@@ -120,18 +120,19 @@ dist target="x86_64-unknown-linux-musl":
     ls -l "pinst-$target.tar.gz" "pinst-$target.tar.gz.sha256"
 
 # --- the agent harness -----------------------------------------------------
-# Source of truth is .agents/ (skills) and .ash/ (the plan corpus). These
-# recipes are what keeps both honest; see .agents/README.md.
+# Source of truth is .agents/ (skills + commands) and .ash/ (the plan
+# corpus). These recipes are what keeps both honest; see .agents/README.md.
 #
-# The corpus half is `pinst harness` now, not a script: a machine that
-# installed the release binary gets the same checks with nothing to clone.
-# Skill projection is still bash, because `agents-wire.sh` writes symlinks
-# into a vendor directory and has nothing to do with the corpus.
+# Both halves are `pinst harness` now — the corpus checks and the skill/
+# command projection — so a machine that installed the release binary gets
+# the same checks with nothing to clone, and "the harness needs no
+# scripts/" is finally true of the whole thing, not just the corpus half.
 
-# Without this the skills in .agents/ are inert: no runtime reads that path.
-[doc("Wire .agents/skills into .claude/skills; run after adding or renaming one")]
+# Without this the skills and commands in .agents/ are inert: no runtime
+# reads that path directly.
+[doc("Wire .agents/ into .claude/; run after adding or renaming a skill or command")]
 wire:
-    scripts/agents-wire.sh
+    cargo run --quiet -- harness install --scope project --all
 
 # Needs a build now that the generator lives in the binary. Inside `qc` that
 # is free — `harness` runs after `test`, so the tree is already compiled — but
@@ -141,10 +142,11 @@ index:
     cargo run --quiet -- harness index
 
 # Exit code 3 means "found things to act on", the same verdict pinst itself
-# gives — so this fails `qc` until the corpus is clean again.
-[doc("Validate the harness: skills wired, plan corpus consistent")]
+# gives — so this fails `qc` until the corpus is clean again. Skill/command
+# projection is one of the invariants `harness check` covers now, alongside
+# the corpus.
+[doc("Validate the harness: skills/commands wired, plan corpus consistent")]
 harness:
-    scripts/agents-wire.sh --check
     cargo run --quiet -- harness check
 
 # The review pass. Deliberately NOT in `qc`: `skills` reports rates and

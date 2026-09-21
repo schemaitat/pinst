@@ -10,5 +10,6 @@
 fn main() {
     println!("cargo:rerun-if-changed=configs");
     println!("cargo:rerun-if-changed=docs/tools");
+    println!("cargo:rerun-if-changed=.agents");
     println!("cargo:rerun-if-changed=manifest.toml");
 }

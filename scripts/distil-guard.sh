@@ -25,7 +25,6 @@ set -euo pipefail
 # works from a checkout with nothing installed, which is what CI has; set
 # ASH_BIN="pinst harness" on a machine that has the release binary.
 read -r -a ASH <<< "${ASH_BIN:-cargo run --quiet -- harness}"
-WIRE="${WIRE_BIN:-scripts/agents-wire.sh}"
 
 # What an unattended distillation is allowed to touch. Everything it produces
 # is prose in the corpus or an edit to a skill it already had; anything else —
@@ -218,12 +217,10 @@ cmd_verify() {
 
   # 4. What it left behind. An edited skill that was never re-wired loads
   # nowhere (LESSON-007), and a corpus failing its own invariants must not
-  # become a pull request.
-  if ! "$WIRE" --check >/dev/null 2>&1; then
-    finding "distil.harness-failed" error \
-      "$WIRE --check fails on the distilled tree" \
-      "run '$WIRE --check' to see it, then 'just wire' if a skill was edited but not re-projected"
-  fi
+  # become a pull request. `harness check` covers both now — the wiring
+  # invariants moved into the binary alongside the corpus ones, so what used
+  # to be two calls (this script's own `--check` plus `${ASH[@]} check`) is
+  # one.
   if ! "${ASH[@]}" check >/dev/null 2>&1; then
     finding "distil.harness-failed.corpus" error \
       "${ASH[*]} check fails on the distilled tree" \

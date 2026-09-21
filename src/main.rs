@@ -3,6 +3,7 @@ mod cli;
 mod core;
 mod editor;
 mod event;
+mod prompt;
 mod ui;
 
 use clap::Parser;

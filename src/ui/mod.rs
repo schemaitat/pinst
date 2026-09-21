@@ -1,4 +1,5 @@
 mod docs;
+mod harness;
 mod health;
 mod overview;
 mod searchbar;
@@ -32,6 +33,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Tab::Health => health::draw(frame, chunks[2], app),
         Tab::Upgrades => upgrades::draw(frame, chunks[2], app),
         Tab::Docs => docs::draw(frame, chunks[2], app),
+        Tab::Harness => harness::draw(frame, chunks[2], app),
     }
 
     statusbar::draw(frame, chunks[3], app);

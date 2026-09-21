@@ -103,6 +103,16 @@ impl Runner {
                 })?;
                 Ok(())
             }
+            Action::Remove { path } => {
+                // Already gone is success, not an error: uninstall run twice
+                // is a normal thing to do, and failing on a path the first
+                // run already removed would push people toward `rm -rf`
+                // instead of trusting the command a second time.
+                if std::fs::symlink_metadata(path).is_err() {
+                    return Ok(());
+                }
+                remove_any(path)
+            }
         }
     }
 }
