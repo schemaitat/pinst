@@ -22,7 +22,8 @@ use crate::cli::commands::install;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
     HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs, HarnessNewIdArgs,
-    HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs, ScopeArg,
+    HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs, HarnessUninstallArgs,
+    ScopeArg,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
@@ -61,6 +62,9 @@ pub async fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
         // `load`.
         HarnessAction::Status(status_args) => self::status(ctx, args, status_args),
         HarnessAction::Install(install_args) => self::install(ctx, args, install_args).await,
+        HarnessAction::Uninstall(uninstall_args) => {
+            self::uninstall(ctx, args, uninstall_args).await
+        }
     }
 }
 
@@ -381,6 +385,114 @@ async fn install(
                 scope.label()
             ));
         }
+    }
+
+    Ok(exit)
+}
+
+/// `pinst harness uninstall` — remove exactly what a receipt says an
+/// earlier `install` wrote. Never touches `.ash/`: the corpus is the repo's
+/// own record of work, and it outlives any projection of the skills that
+/// produced it, `--purge` included.
+async fn uninstall(
+    ctx: &Ctx,
+    args: &HarnessArgs,
+    uninstall_args: &HarnessUninstallArgs,
+) -> Result<ExitCode> {
+    use crate::core::harness::install::plan::{self as install_plan, Selection};
+    use crate::core::harness::install::receipt::{Receipt, ReceiptScope};
+    use crate::core::plan::Outcome;
+
+    let vendor = Vendor::parse(&uninstall_args.vendor).ok_or_else(|| {
+        usage(format!(
+            "unknown vendor '{}' (try: claude)",
+            uninstall_args.vendor
+        ))
+    })?;
+    let scope: ReceiptScope = match uninstall_args.scope {
+        ScopeArg::Both => {
+            return Err(usage(
+                "`--scope both` is not valid for uninstall — a receipt describes one scope; \
+                 run uninstall twice, once per scope",
+            ));
+        }
+        other => other.try_into().expect("Both was just excluded above"),
+    };
+    let root = match scope {
+        ReceiptScope::Project => InstallRoot::resolve(args.root.as_deref())?
+            .path()
+            .to_path_buf(),
+        ReceiptScope::Global => home_dir()?,
+    };
+
+    let selection = if uninstall_args.all {
+        Selection::All
+    } else if !uninstall_args.skills.is_empty() || !uninstall_args.commands.is_empty() {
+        Selection::Named {
+            skills: uninstall_args.skills.clone(),
+            commands: uninstall_args.commands.clone(),
+        }
+    } else {
+        return Err(usage(
+            "nothing selected — pass --all, or one or more --skill/--command",
+        ));
+    };
+
+    let receipt_path = Receipt::path_for(scope, &root)?;
+    let Some(receipt) = Receipt::load(&receipt_path)? else {
+        ctx.note(format!(
+            "harness: no receipt at {} — nothing to uninstall",
+            receipt_path.display()
+        ));
+        return ctx.finish(Envelope::new(
+            "harness uninstall",
+            Status::Ok,
+            Vec::<crate::core::plan::StepReport>::new(),
+        ));
+    };
+
+    let source = asset::resolve_source();
+    let plan = install_plan::build_uninstall_plan(
+        &source,
+        &receipt.entries,
+        &selection,
+        uninstall_args.force,
+    )?;
+
+    let (exit, reports) = install::execute_and_collect(ctx, "harness uninstall", plan).await?;
+
+    if !ctx.dry_run {
+        let mut updated = receipt;
+        for report in &reports {
+            if matches!(report.outcome, Outcome::Ran | Outcome::Skipped)
+                && let Some((kind, name)) = install_plan::parse_step_id(&report.id)
+            {
+                updated.remove_entry(kind.into(), &name);
+            }
+        }
+
+        if updated.is_empty() || uninstall_args.purge {
+            Receipt::delete(&receipt_path)?;
+            ctx.note(format!(
+                "harness: {} {}",
+                if updated.is_empty() {
+                    "removed empty receipt"
+                } else {
+                    "purged receipt"
+                },
+                receipt_path.display()
+            ));
+        } else {
+            updated.save(&receipt_path)?;
+            ctx.note(format!("harness: updated {}", receipt_path.display()));
+        }
+
+        // Tidy up: a vendor directory this uninstall emptied is removed too.
+        // `remove_dir` refuses on anything non-empty, so this is a no-op
+        // whenever something else — someone's own skill, a partial
+        // selection — is still there.
+        let _ = std::fs::remove_dir(vendor.skills_dir(&root));
+        let _ = std::fs::remove_dir(vendor.commands_dir(&root));
     }
 
     Ok(exit)

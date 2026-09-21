@@ -72,6 +72,15 @@ impl From<AssetKind> for AssetKindLabel {
     }
 }
 
+impl From<AssetKindLabel> for AssetKind {
+    fn from(kind: AssetKindLabel) -> Self {
+        match kind {
+            AssetKindLabel::Skill => AssetKind::Skill,
+            AssetKindLabel::Command => AssetKind::Command,
+        }
+    }
+}
+
 impl AssetKindLabel {
     pub fn label(self) -> &'static str {
         match self {

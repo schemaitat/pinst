@@ -11,7 +11,7 @@ use color_eyre::eyre::Result;
 
 use super::super::asset::{self, Asset, AssetKind, Source};
 use super::super::vendor::Vendor;
-use super::receipt::{LinkStyle, ReceiptScope};
+use super::receipt::{Entry, LinkStyle, ReceiptScope};
 use super::state::{self, AssetState};
 use crate::core::plan::{Action, Plan, Step, StepKind};
 
@@ -205,6 +205,92 @@ fn relative_within_asset(asset: &Asset, file: &Path) -> PathBuf {
     }
 }
 
+/// Builds the plan that removes exactly what a receipt recorded — never a
+/// path this run merely guesses is "ours". Each entry: `Skipped` when the
+/// path is already gone; `Blocked` when it no longer matches what install
+/// left (a real file where a link was recorded, a copy whose content has
+/// drifted, or an asset the current source no longer declares at all, which
+/// makes drift unverifiable) unless `--force`; `Remove` otherwise.
+///
+/// Deliberately reads `source` to re-verify drift rather than trusting the
+/// receipt's own record of what it wrote: the receipt says what install did
+/// *then*, and a copy someone has since hand-edited is real content that
+/// silent deletion would discard (`RISK-001`).
+pub fn build_uninstall_plan(
+    source: &Source,
+    entries: &[Entry],
+    selection: &Selection,
+    force: bool,
+) -> Result<Plan> {
+    let assets = asset::enumerate(source)?;
+    let mut plan = Plan::default();
+
+    for entry in entries {
+        let kind: AssetKind = entry.kind.into();
+        let included = match selection {
+            Selection::All => true,
+            Selection::Named { skills, commands } => match kind {
+                AssetKind::Skill => skills.contains(&entry.name),
+                AssetKind::Command => commands.contains(&entry.name),
+            },
+        };
+        if !included {
+            continue;
+        }
+
+        let id = step_id(kind, &entry.name);
+        let description = format!("remove {} -> {}", entry.name, entry.path.display());
+
+        if std::fs::symlink_metadata(&entry.path).is_err() {
+            plan.push(
+                Step::new(id, StepKind::Config, description)
+                    .tool(&entry.name)
+                    .skipped("already removed"),
+            );
+            continue;
+        }
+
+        let matching_asset = assets
+            .iter()
+            .find(|a| a.kind == kind && a.name == entry.name);
+        let drifted = match matching_asset {
+            Some(asset) => {
+                let current = state::classify(source, asset, &entry.path)?;
+                match entry.style {
+                    LinkStyle::Symlink => current != AssetState::Linked,
+                    LinkStyle::Copy => current != AssetState::Copied,
+                }
+            }
+            // No source asset left to verify against — the safe reading is
+            // "cannot confirm this is still what we wrote", not "assume yes".
+            None => true,
+        };
+
+        if drifted && !force {
+            plan.push(
+                Step::new(id, StepKind::Config, description)
+                    .tool(&entry.name)
+                    .blocked(format!(
+                        "{} no longer matches what install wrote (or its source asset is gone); \
+                         rerun with --force to remove it anyway",
+                        entry.path.display()
+                    )),
+            );
+            continue;
+        }
+
+        plan.push(
+            Step::new(id, StepKind::Config, description)
+                .tool(&entry.name)
+                .actions(vec![Action::Remove {
+                    path: entry.path.clone(),
+                }]),
+        );
+    }
+
+    Ok(plan)
+}
+
 fn backup_path(target: &Path, stamp: &str) -> PathBuf {
     let mut name = target.as_os_str().to_os_string();
     name.push(format!(".pre-pinst.{stamp}"));
@@ -349,5 +435,156 @@ mod tests {
             0,
             "everything should now be skipped"
         );
+    }
+
+    fn run(
+        plan: Plan,
+    ) -> (
+        Vec<crate::core::plan::StepReport>,
+        crate::core::engine::ExecSummary,
+    ) {
+        let runner = crate::core::exec::Runner::new(false);
+        let approve = |_: &Step| true;
+        let auth = crate::core::engine::Authorizer { approve: &approve };
+        crate::core::engine::execute(&plan, &runner, &auth, &mut |_| {})
+    }
+
+    fn entries_from_reports(reports: &[crate::core::plan::StepReport], root: &Path) -> Vec<Entry> {
+        reports
+            .iter()
+            .filter_map(|r| parse_step_id(&r.id))
+            .map(|(kind, name)| {
+                let target = state::target_path(
+                    Vendor::Claude,
+                    root,
+                    &Asset {
+                        kind,
+                        name: name.clone(),
+                        files: Vec::new(),
+                    },
+                );
+                Entry {
+                    kind: kind.into(),
+                    name,
+                    path: target,
+                    style: LinkStyle::Symlink,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_uninstall_after_install_removes_every_link_it_wrote() {
+        let root = tempfile::tempdir().unwrap();
+        let install = build_install_plan(&tree_source(), &options(root.path())).unwrap();
+        let (reports, _) = run(install);
+        let entries = entries_from_reports(&reports, root.path());
+        assert!(!entries.is_empty());
+        for entry in &entries {
+            assert!(entry.path.exists() || entry.path.is_symlink());
+        }
+
+        let uninstall =
+            build_uninstall_plan(&tree_source(), &entries, &Selection::All, false).unwrap();
+        let (un_reports, un_summary) = run(uninstall);
+        assert_eq!(un_summary.failed, 0, "{un_reports:?}");
+        for entry in &entries {
+            assert!(
+                std::fs::symlink_metadata(&entry.path).is_err(),
+                "{} should be gone",
+                entry.path.display()
+            );
+        }
+        // And the now-empty vendor directories leave no trace either, once
+        // the caller (the CLI layer) does the same cleanup it does for real.
+    }
+
+    #[test]
+    fn an_entry_whose_target_drifted_is_blocked_without_force() {
+        let root = tempfile::tempdir().unwrap();
+        let install = build_install_plan(&tree_source(), &options(root.path())).unwrap();
+        let (reports, _) = run(install);
+        let entries = entries_from_reports(&reports, root.path());
+        let pinst_entry = entries.iter().find(|e| e.name == "pinst").unwrap().clone();
+
+        // Someone points the link somewhere else after install.
+        std::fs::remove_file(&pinst_entry.path).unwrap();
+        std::os::unix::fs::symlink("/tmp", &pinst_entry.path).unwrap();
+
+        let subset = vec![pinst_entry.clone()];
+        let plan = build_uninstall_plan(&tree_source(), &subset, &Selection::All, false).unwrap();
+        assert_eq!(plan.pending_count(), 0);
+        assert!(matches!(
+            plan.steps[0].state,
+            crate::core::plan::StepState::Blocked(_)
+        ));
+        assert!(
+            pinst_entry.path.exists() || pinst_entry.path.is_symlink(),
+            "a blocked entry must not be touched"
+        );
+
+        let forced = build_uninstall_plan(&tree_source(), &subset, &Selection::All, true).unwrap();
+        assert_eq!(forced.pending_count(), 1);
+    }
+
+    #[test]
+    fn an_entry_not_in_the_receipt_is_never_touched_even_if_it_matches_a_source_asset_by_name() {
+        // The whole safety property: uninstall only ever considers what is
+        // handed to it, never what it could infer from the target directory
+        // sharing a name with a real asset.
+        let root = tempfile::tempdir().unwrap();
+        let install = build_install_plan(&tree_source(), &options(root.path())).unwrap();
+        let (reports, _) = run(install);
+        let all_entries = entries_from_reports(&reports, root.path());
+
+        // Only hand `create-pr` to uninstall; everything else must survive.
+        let subset: Vec<Entry> = all_entries
+            .iter()
+            .filter(|e| e.name == "create-pr")
+            .cloned()
+            .collect();
+        assert_eq!(subset.len(), 1);
+
+        let plan = build_uninstall_plan(&tree_source(), &subset, &Selection::All, false).unwrap();
+        let (un_reports, un_summary) = run(plan);
+        assert_eq!(un_summary.failed, 0, "{un_reports:?}");
+
+        for entry in &all_entries {
+            if entry.name == "create-pr" {
+                assert!(std::fs::symlink_metadata(&entry.path).is_err());
+            } else {
+                assert!(
+                    std::fs::symlink_metadata(&entry.path).is_ok(),
+                    "{} must survive an uninstall that never named it",
+                    entry.path.display()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dry_run_uninstall_deletes_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        let install = build_install_plan(&tree_source(), &options(root.path())).unwrap();
+        let (reports, _) = run(install);
+        let entries = entries_from_reports(&reports, root.path());
+
+        let plan = build_uninstall_plan(&tree_source(), &entries, &Selection::All, false).unwrap();
+        let runner = crate::core::exec::Runner::new(true); // dry_run
+        let approve = |_: &Step| true;
+        let auth = crate::core::engine::Authorizer { approve: &approve };
+        let (dry_reports, _) = crate::core::engine::execute(&plan, &runner, &auth, &mut |_| {});
+        assert!(
+            dry_reports
+                .iter()
+                .all(|r| r.outcome == crate::core::plan::Outcome::WouldRun)
+        );
+        for entry in &entries {
+            assert!(
+                std::fs::symlink_metadata(&entry.path).is_ok(),
+                "dry-run must not remove {}",
+                entry.path.display()
+            );
+        }
     }
 }

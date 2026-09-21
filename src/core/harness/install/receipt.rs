@@ -132,6 +132,28 @@ impl Receipt {
         let text = serde_json::to_string_pretty(self)?;
         std::fs::write(path, text).with_context(|| format!("writing {}", path.display()))
     }
+
+    /// Drops one entry — what a successful `Remove` step earns. A partial
+    /// uninstall (one `--skill`) must leave the rest of the receipt intact,
+    /// or the next uninstall has nothing to work from for what is still
+    /// installed.
+    pub fn remove_entry(&mut self, kind: AssetKindLabel, name: &str) {
+        self.entries.retain(|e| !(e.kind == kind && e.name == name));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Deletes the receipt file itself. Called only once nothing is left in
+    /// it, or when the caller explicitly asked for `--purge` — never as a
+    /// side effect of an ordinary uninstall.
+    pub fn delete(path: &Path) -> Result<()> {
+        if path.is_file() {
+            std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
+        }
+        Ok(())
+    }
 }
 
 /// `$XDG_STATE_HOME`, or `~/.local/state` — the standard fallback per the
@@ -209,6 +231,47 @@ mod tests {
         assert_eq!(loaded.entries.len(), 1);
         assert_eq!(loaded.entries[0].name, "demo");
         assert_eq!(loaded.schema_version, RECEIPT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn remove_entry_drops_only_the_matching_kind_and_name() {
+        let mut receipt = Receipt::new(
+            ReceiptScope::Project,
+            "claude",
+            "embedded",
+            vec![
+                Entry {
+                    kind: AssetKindLabel::Skill,
+                    name: "demo".to_string(),
+                    path: PathBuf::from("/a"),
+                    style: LinkStyle::Copy,
+                },
+                Entry {
+                    kind: AssetKindLabel::Command,
+                    name: "demo".to_string(),
+                    path: PathBuf::from("/b"),
+                    style: LinkStyle::Copy,
+                },
+            ],
+        );
+        receipt.remove_entry(AssetKindLabel::Skill, "demo");
+        assert_eq!(receipt.entries.len(), 1);
+        assert_eq!(receipt.entries[0].kind, AssetKindLabel::Command);
+        assert!(!receipt.is_empty());
+
+        receipt.remove_entry(AssetKindLabel::Command, "demo");
+        assert!(receipt.is_empty());
+    }
+
+    #[test]
+    fn delete_removes_the_file_and_is_a_no_op_when_already_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("harness.json");
+        std::fs::write(&path, "{}").unwrap();
+        Receipt::delete(&path).unwrap();
+        assert!(!path.exists());
+        // A second delete of an already-gone file must not error.
+        Receipt::delete(&path).unwrap();
     }
 
     #[test]

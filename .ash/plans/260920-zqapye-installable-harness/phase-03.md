@@ -2,7 +2,7 @@
 id: 260920-zqapye
 slug: installable-harness
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — `pinst harness uninstall`
@@ -27,7 +27,7 @@ a personal skill whose name collides with one of ours would look like ours.
 
 ## Steps
 
-- [ ] TASK-017: `src/core/plan.rs` — `Action::Remove { path: PathBuf }`, with
+- [x] TASK-017: `src/core/plan.rs` — `Action::Remove { path: PathBuf }`, with
       `describe` rendering `remove <path>` and `privilege` returning
       `Privilege::User`; `src/core/exec/mod.rs` — the `Runner` arm, using
       `remove_file` for a symlink or file and `remove_dir_all` only for a
@@ -35,7 +35,7 @@ a personal skill whose name collides with one of ours would look like ours.
       **Why the already-gone case is not an error:** uninstall run twice is a
       normal thing to do, and a second run failing on a path the first removed
       would push people to `rm -rf` instead.
-- [ ] TASK-018: `src/core/harness/install/plan.rs` — `build_uninstall_plan`
+- [x] TASK-018: `src/core/harness/install/plan.rs` — `build_uninstall_plan`
       taking the receipt: one step per recorded entry, `Skipped` when the path
       is gone, `Blocked` when the path is no longer what install left (a real
       file where a link was recorded, or a copy whose content no longer matches
@@ -44,20 +44,20 @@ a personal skill whose name collides with one of ours would look like ours.
       **Why the drift check:** a copy that differs from the source is something
       someone edited in place. Deleting it silently discards work whose only
       copy was there.
-- [ ] TASK-019: `src/core/harness/install/receipt.rs` — prune removed entries
+- [x] TASK-019: `src/core/harness/install/receipt.rs` — prune removed entries
       and rewrite the receipt after a successful run; delete the receipt itself
       only when it ends up empty or when `--purge` is given.
       **Why not always delete it:** a partial uninstall (one `--skill`) must
       leave a receipt describing what is still installed, or the next uninstall
       has nothing to work from.
-- [ ] TASK-020: `src/cli/mod.rs` + `src/cli/commands/harness.rs` —
+- [x] TASK-020: `src/cli/mod.rs` + `src/cli/commands/harness.rs` —
       `HarnessAction::Uninstall(HarnessUninstallArgs)` with `--scope`,
       `--vendor`, `--skill`, `--command`, `--all`, `--force`, `--purge`, run
       through `execute_and_report`. **`.ash/` is never a target of uninstall**,
       with or without `--purge`: the corpus is the repo's own record of work and
       outlives any projection of the skills that produced it. Say so in
       `--help`, not only in code.
-- [ ] TASK-021: tests — uninstall after install leaves the tree byte-identical
+- [x] TASK-021: tests — uninstall after install leaves the tree byte-identical
       to before (including no empty `.claude/` left behind); a hand-written file
       at a managed path is reported `Blocked` and still exists afterwards; an
       entry absent from the receipt is never touched even when it sits in the

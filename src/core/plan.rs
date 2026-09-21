@@ -43,6 +43,14 @@ pub enum Action {
         path: PathBuf,
         to: PathBuf,
     },
+    /// Delete a file, symlink, or directory outright — no backup. The one
+    /// action in pinst that can destroy something without leaving a copy,
+    /// and for that reason the only one a plan builder may emit for a path
+    /// it did not itself record having written (see `harness::install`,
+    /// which restricts this to paths read back out of its own receipt).
+    Remove {
+        path: PathBuf,
+    },
 }
 
 impl Action {
@@ -59,6 +67,7 @@ impl Action {
             Action::Backup { path, to } => {
                 format!("back up {} -> {}", path.display(), to.display())
             }
+            Action::Remove { path } => format!("remove {}", path.display()),
         }
     }
 

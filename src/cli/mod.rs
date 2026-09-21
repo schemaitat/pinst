@@ -249,6 +249,10 @@ pub enum HarnessAction {
     Status(HarnessStatusArgs),
     /// Project skills and slash commands into a vendor's directories.
     Install(HarnessInstallArgs),
+    /// Remove exactly what an earlier `install` wrote. Never touches `.ash/`
+    /// — the corpus is the repo's own record of work and outlives any
+    /// projection of the skills that produced it, with or without `--purge`.
+    Uninstall(HarnessUninstallArgs),
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -291,6 +295,32 @@ pub struct HarnessInstallArgs {
     /// Skip scaffolding `.ash/` when a project install finds none.
     #[arg(long)]
     pub no_corpus: bool,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessUninstallArgs {
+    /// Which scope to remove from. `both` is not valid — uninstall reads one
+    /// receipt at a time.
+    #[arg(long, value_enum, default_value_t = ScopeArg::Project)]
+    pub scope: ScopeArg,
+    /// The runtime to remove for. `claude` is the only one today.
+    #[arg(long, default_value = "claude")]
+    pub vendor: String,
+    /// Remove only this skill (repeatable).
+    #[arg(long = "skill", value_name = "NAME")]
+    pub skills: Vec<String>,
+    /// Remove only this command (repeatable).
+    #[arg(long = "command", value_name = "NAME")]
+    pub commands: Vec<String>,
+    /// Remove every entry the receipt records.
+    #[arg(long)]
+    pub all: bool,
+    /// Remove an entry even if it no longer matches what install wrote.
+    #[arg(long)]
+    pub force: bool,
+    /// Also delete the receipt file once nothing is left in it.
+    #[arg(long)]
+    pub purge: bool,
 }
 
 /// Which install scope(s) a harness command acts on.
