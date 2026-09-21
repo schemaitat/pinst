@@ -18,6 +18,7 @@ use crate::core::docs::page::ToolDoc;
 use crate::core::docs::{Catalogue, capture, search as find, seed};
 use crate::core::graph::{self, Selection};
 use crate::core::manifest::Tool;
+use crate::core::platform::Platform;
 use crate::core::{probe, usage};
 
 /// Where the answer came from. An authored page and a dump of the tool's own
@@ -114,7 +115,7 @@ async fn show(
     args: &DocsShowArgs,
 ) -> Result<ExitCode> {
     let tool = lookup(manifest, &args.tool)?;
-    let probe = probe::probe_tool(tool).await;
+    let probe = probe::probe_tool(tool, Platform::host()).await;
 
     // An authored page always wins: it was written for this question, and the
     // capture was not.
@@ -231,7 +232,7 @@ async fn adopt(
         }
     }
 
-    let probe = probe::probe_tool(tool).await;
+    let probe = probe::probe_tool(tool, Platform::host()).await;
     let captured =
         capture::capture(tool, probe.version.as_deref(), args.refresh, cache_dir).await?;
 
@@ -297,7 +298,7 @@ async fn status(
     catalogue: &Catalogue,
 ) -> Result<ExitCode> {
     let tools: Vec<&Tool> = manifest.tools.iter().collect();
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, Platform::host()).await;
     let (items, orphans) = coverage(manifest, catalogue, &probes);
 
     let authored = items.iter().filter(|i| i.page == "authored").count();
@@ -417,7 +418,7 @@ async fn search(
     args: &DocsSearchArgs,
 ) -> Result<ExitCode> {
     let tools = select(manifest, &args.tags, &None)?;
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, Platform::host()).await;
 
     let entries: Vec<find::Entry<'_>> = tools
         .iter()
@@ -548,14 +549,16 @@ fn select<'m>(
     if tags.is_empty() && profile.is_none() {
         return Ok(manifest.tools.iter().collect());
     }
-    graph::select(
+    Ok(graph::select(
         manifest,
         &Selection {
             profile: profile.clone(),
             tags: tags.to_vec(),
             names: Vec::new(),
         },
-    )
+        Platform::host(),
+    )?
+    .tools)
 }
 
 /// The manifest is the scope: a name it does not declare is a bad invocation,
@@ -686,6 +689,7 @@ install = { method = "apt", packages = ["seedable"] }
             yes: false,
             quiet: true,
             manifest_path: None,
+            platform: Platform::host(),
         }
     }
 

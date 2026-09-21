@@ -7,10 +7,10 @@ use crate::core::plan::Action;
 pub struct CurlScript;
 
 impl Executor for CurlScript {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
         let Install::CurlScript {
             url, shell, args, ..
-        } = &tool.install
+        } = install
         else {
             bail!("curl_script executor called for tool '{}'", tool.name);
         };

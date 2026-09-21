@@ -22,18 +22,24 @@ use super::plan::Action;
 
 /// Produces the actions that install or upgrade one tool. One implementation
 /// per install method, each ignorant of every other method.
+///
+/// `install` is the tool's *effective* method for whatever platform is being
+/// planned for — not necessarily `tool.install`, which is only the Linux
+/// base a macOS override may have replaced. `tool` is still passed alongside
+/// it for fields an executor needs that do not vary by platform (its name,
+/// chiefly).
 pub trait Executor {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>>;
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>>;
 
     /// Most methods upgrade by re-running their install (apt/cargo/curl
     /// installers are all idempotent-ish in that way); methods that need
     /// something different override this.
-    fn upgrade(&self, tool: &Tool) -> Result<Vec<Action>> {
-        self.install(tool)
+    fn upgrade(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        self.install(tool, install)
     }
 
     /// Set when the method cannot be automated at all.
-    fn blocked_reason(&self, _tool: &Tool) -> Option<String> {
+    fn blocked_reason(&self, _tool: &Tool, _install: &Install) -> Option<String> {
         None
     }
 }
@@ -54,12 +60,12 @@ pub fn executor_for(install: &Install) -> Box<dyn Executor> {
 struct Manual;
 
 impl Executor for Manual {
-    fn install(&self, _tool: &Tool) -> Result<Vec<Action>> {
+    fn install(&self, _tool: &Tool, _install: &Install) -> Result<Vec<Action>> {
         Ok(Vec::new())
     }
 
-    fn blocked_reason(&self, tool: &Tool) -> Option<String> {
-        match &tool.install {
+    fn blocked_reason(&self, _tool: &Tool, install: &Install) -> Option<String> {
+        match install {
             Install::Manual { note } => Some(note.clone()),
             _ => None,
         }

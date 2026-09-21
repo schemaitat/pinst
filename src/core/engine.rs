@@ -11,18 +11,31 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::exec::{self, Runner};
-use super::manifest::{Install, Tool};
+use super::manifest::{Install, PostStep, Resolved, Tool};
 use super::plan::{Action, Outcome, Plan, Step, StepKind, StepReport, StepState};
+use super::platform::Platform;
 use super::probe::ProbeResult;
 use super::upgrade::UpgradeResult;
 
 /// Builds the install plan for `tools`, in the order they are given (the
-/// caller has already topologically sorted them).
-pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult>) -> Result<Plan> {
+/// caller has already topologically sorted them), using each tool's
+/// effective install/post-install for `platform`.
+pub fn build_install_plan(
+    tools: &[&Tool],
+    probes: &BTreeMap<String, ProbeResult>,
+    platform: Platform,
+) -> Result<Plan> {
     let mut plan = Plan::default();
     let mut apt_update_added = false;
 
     for tool in tools {
+        // `tools` is expected to already be platform-filtered by
+        // `graph::select`; a tool that slipped through unsupported has
+        // nothing to plan, so it is skipped rather than erroring the whole
+        // plan over one entry.
+        let Resolved::Supported(effective) = tool.resolve(platform) else {
+            continue;
+        };
         let installed = probes.get(&tool.name).map(|p| p.installed).unwrap_or(false);
 
         if installed {
@@ -36,8 +49,8 @@ pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult
                 .skipped("already installed"),
             );
         } else {
-            let executor = exec::executor_for(&tool.install);
-            if let Some(reason) = executor.blocked_reason(tool) {
+            let executor = exec::executor_for(effective.install);
+            if let Some(reason) = executor.blocked_reason(tool, effective.install) {
                 plan.push(
                     Step::new(
                         format!("install:{}", tool.name),
@@ -50,7 +63,7 @@ pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult
             } else {
                 // One `apt-get update` for the whole run, emitted just before
                 // the first apt install rather than once per package.
-                if matches!(tool.install, Install::Apt { .. }) && !apt_update_added {
+                if matches!(effective.install, Install::Apt { .. }) && !apt_update_added {
                     apt_update_added = true;
                     plan.push(
                         Step::new(
@@ -64,7 +77,7 @@ pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult
                     );
                 }
 
-                let confirm = requires_confirmation(tool);
+                let confirm = requires_confirmation(effective.install);
                 plan.push(
                     Step::new(
                         format!("install:{}", tool.name),
@@ -72,20 +85,25 @@ pub fn build_install_plan(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult
                         format!("install {}", tool.name),
                     )
                     .tool(&tool.name)
-                    .actions(executor.install(tool)?)
+                    .actions(executor.install(tool, effective.install)?)
                     .confirm(confirm),
                 );
             }
         }
 
-        push_post_install(&mut plan, tool);
+        push_post_install(&mut plan, tool, effective.post_install);
     }
 
     Ok(plan)
 }
 
-/// Builds the upgrade plan for tools that a prior upgrade check flagged.
-pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result<Plan> {
+/// Builds the upgrade plan for tools that a prior upgrade check flagged,
+/// using each tool's effective install for `platform`.
+pub fn build_upgrade_plan(
+    tools: &[&Tool],
+    upgrades: &[UpgradeResult],
+    platform: Platform,
+) -> Result<Plan> {
     let by_name: BTreeMap<&str, &UpgradeResult> =
         upgrades.iter().map(|u| (u.tool.as_str(), u)).collect();
 
@@ -93,6 +111,9 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
     let mut apt_update_added = false;
 
     for tool in tools {
+        let Resolved::Supported(effective) = tool.resolve(platform) else {
+            continue;
+        };
         let step_id = format!("upgrade:{}", tool.name);
         let Some(result) = by_name.get(tool.name.as_str()) else {
             continue;
@@ -111,8 +132,8 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
             continue;
         }
 
-        let executor = exec::executor_for(&tool.install);
-        if let Some(reason) = executor.blocked_reason(tool) {
+        let executor = exec::executor_for(effective.install);
+        if let Some(reason) = executor.blocked_reason(tool, effective.install) {
             plan.push(
                 Step::new(
                     step_id,
@@ -125,7 +146,7 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
             continue;
         }
 
-        if matches!(tool.install, Install::Apt { .. }) && !apt_update_added {
+        if matches!(effective.install, Install::Apt { .. }) && !apt_update_added {
             apt_update_added = true;
             plan.push(
                 Step::new(
@@ -150,16 +171,16 @@ pub fn build_upgrade_plan(tools: &[&Tool], upgrades: &[UpgradeResult]) -> Result
                 format!("upgrade {} to {latest}", tool.name),
             )
             .tool(&tool.name)
-            .actions(executor.upgrade(tool)?)
-            .confirm(requires_confirmation(tool)),
+            .actions(executor.upgrade(tool, effective.install)?)
+            .confirm(requires_confirmation(effective.install)),
         );
     }
 
     Ok(plan)
 }
 
-fn push_post_install(plan: &mut Plan, tool: &Tool) {
-    for (index, post) in tool.post_install.iter().enumerate() {
+fn push_post_install(plan: &mut Plan, tool: &Tool, post_install: &[PostStep]) {
+    for (index, post) in post_install.iter().enumerate() {
         let description = if post.description.is_empty() {
             post.command.clone()
         } else {
@@ -181,8 +202,8 @@ fn push_post_install(plan: &mut Plan, tool: &Tool) {
     }
 }
 
-fn requires_confirmation(tool: &Tool) -> bool {
-    match &tool.install {
+fn requires_confirmation(install: &Install) -> bool {
+    match install {
         Install::GithubRelease { confirm, .. } => *confirm,
         _ => false,
     }
@@ -314,6 +335,7 @@ mod tests {
     use super::*;
     use crate::core::graph::{Selection, select};
     use crate::core::manifest;
+    use crate::core::platform::Platform;
 
     fn probes(installed: &[&str], all: &[&Tool]) -> BTreeMap<String, ProbeResult> {
         all.iter()
@@ -340,8 +362,10 @@ mod tests {
     #[test]
     fn plan_follows_dependency_order() {
         let manifest = manifest::embedded().unwrap();
-        let tools = select(&manifest, &Selection::default()).unwrap();
-        let plan = build_install_plan(&tools, &probes(&[], &tools)).unwrap();
+        let tools = select(&manifest, &Selection::default(), Platform::Linux)
+            .unwrap()
+            .tools;
+        let plan = build_install_plan(&tools, &probes(&[], &tools), Platform::Linux).unwrap();
 
         let ids: Vec<&str> = plan
             .steps
@@ -366,10 +390,13 @@ mod tests {
                 names: vec!["direnv".to_string()],
                 ..Default::default()
             },
+            Platform::Linux,
         )
-        .unwrap();
+        .unwrap()
+        .tools;
 
-        let plan = build_install_plan(&tools, &probes(&["direnv"], &tools)).unwrap();
+        let plan =
+            build_install_plan(&tools, &probes(&["direnv"], &tools), Platform::Linux).unwrap();
         let step = plan
             .steps
             .iter()
@@ -386,8 +413,10 @@ mod tests {
     #[test]
     fn apt_update_is_emitted_once_before_the_first_apt_install() {
         let manifest = manifest::embedded().unwrap();
-        let tools = select(&manifest, &Selection::default()).unwrap();
-        let plan = build_install_plan(&tools, &probes(&[], &tools)).unwrap();
+        let tools = select(&manifest, &Selection::default(), Platform::Linux)
+            .unwrap()
+            .tools;
+        let plan = build_install_plan(&tools, &probes(&[], &tools), Platform::Linux).unwrap();
 
         let updates: Vec<usize> = plan
             .steps
@@ -421,9 +450,11 @@ mod tests {
                 names: vec!["git-credential-manager".to_string()],
                 ..Default::default()
             },
+            Platform::Linux,
         )
-        .unwrap();
-        let plan = build_install_plan(&tools, &probes(&[], &tools)).unwrap();
+        .unwrap()
+        .tools;
+        let plan = build_install_plan(&tools, &probes(&[], &tools), Platform::Linux).unwrap();
         let step = plan
             .steps
             .iter()
@@ -502,9 +533,11 @@ mod tests {
                 names: vec!["curl".to_string()],
                 ..Default::default()
             },
+            Platform::Linux,
         )
-        .unwrap();
-        let plan = build_install_plan(&tools, &probes(&[], &tools)).unwrap();
+        .unwrap()
+        .tools;
+        let plan = build_install_plan(&tools, &probes(&[], &tools), Platform::Linux).unwrap();
 
         let runner = Runner::new(true);
         let auth = Authorizer {

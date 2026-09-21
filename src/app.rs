@@ -13,6 +13,7 @@ use crate::core::docs::page::ToolDoc;
 use crate::core::docs::search as find;
 use crate::core::doctor::{self, Finding};
 use crate::core::manifest::{Manifest, Tool};
+use crate::core::platform::Platform;
 use crate::core::probe::{self, ProbeResult};
 use crate::core::upgrade::{self, UpgradeResult};
 use crate::event::{self, AppEvent};
@@ -123,7 +124,7 @@ impl App {
 
     pub fn start_probing(&self) {
         let sink = event::forward_probes(self.tx.clone());
-        probe::spawn_streaming(self.registry.clone(), sink);
+        probe::spawn_streaming(self.registry.clone(), sink, Platform::host());
     }
 
     pub fn handle_event(&mut self, event: AppEvent) {
@@ -172,8 +173,21 @@ impl App {
             let Ok(set) = ConfigSet::load(&manifest, &home_dir) else {
                 return;
             };
-            let refs: Vec<&Tool> = manifest.tools.iter().collect();
-            let findings = doctor::diagnose(&refs, &probes, &set).unwrap_or_default();
+            // Same platform filtering the CLI applies via `graph::select`:
+            // the TUI reports on the machine it is running on, so a tool
+            // this host cannot install has nothing here to check.
+            let refs: Vec<&Tool> = manifest
+                .tools
+                .iter()
+                .filter(|t| {
+                    matches!(
+                        t.resolve(Platform::host()),
+                        crate::core::manifest::Resolved::Supported(_)
+                    )
+                })
+                .collect();
+            let findings =
+                doctor::diagnose(&refs, &probes, &set, Platform::host()).unwrap_or_default();
             let configs = set.status().unwrap_or_default();
             let _ = tx.send(AppEvent::Health { findings, configs });
         });
@@ -184,7 +198,13 @@ impl App {
         self.upgrades_ever_run = true;
         self.status = "checking for upgrades...".to_string();
         let sink = event::forward_upgrades(self.tx.clone());
-        upgrade::spawn_streaming(self.registry.clone(), self.probes.clone(), sink, force);
+        upgrade::spawn_streaming(
+            self.registry.clone(),
+            self.probes.clone(),
+            sink,
+            force,
+            Platform::host(),
+        );
     }
 
     fn query_lower(&self) -> Option<String> {

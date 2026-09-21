@@ -3,7 +3,7 @@ id: 260920-qcrrqs
 slug: macos-support
 status: Proposed
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-09-21
 areas: [manifest, exec, release, configs]
 summary: Make pinst a macOS tool as well as a Linux one — platform-aware manifest, a brew install method, and released Darwin binaries.
 files_touched: [src/core/platform.rs, src/core/manifest.rs, src/core/graph.rs, src/core/doctor.rs, src/core/exec/brew.rs, src/core/exec/mod.rs, src/core/engine.rs, src/core/plan.rs, src/core/upgrade/strategies.rs, src/cli/mod.rs, manifest.toml, configs/zsh/.zshrc, justfile, .github/workflows/release.yml, .github/workflows/ci.yml, scripts/install.sh, README.md]
@@ -160,7 +160,7 @@ check it mechanically.
 
 | # | Phase | File | Status |
 |---|-------|------|--------|
-| 1 | Platform becomes a value pinst can reason about | [phase-01.md](phase-01.md) | Proposed |
+| 1 | Platform becomes a value pinst can reason about | [phase-01.md](phase-01.md) | Done |
 | 2 | Homebrew as an install method | [phase-02.md](phase-02.md) | Proposed |
 | 3 | A manifest and configs that cover macOS | [phase-03.md](phase-03.md) | Proposed |
 | 4 | Build and publish the Darwin artifacts | [phase-04.md](phase-04.md) | Proposed |

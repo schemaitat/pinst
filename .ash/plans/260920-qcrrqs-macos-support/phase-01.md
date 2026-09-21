@@ -2,7 +2,7 @@
 id: 260920-qcrrqs
 slug: macos-support
 phase: 1
-status: Proposed
+status: Done
 ---
 
 # Phase 1 — Platform becomes a value pinst can reason about
@@ -32,7 +32,7 @@ the same commit with no way to tell them apart.
 
 ## Steps
 
-- [ ] TASK-001: `src/core/platform.rs` (FILE-001) — add
+- [x] TASK-001: `src/core/platform.rs` (FILE-001) — add
       `enum Platform { Linux, MacOS }` with `Display`/`FromStr` over `linux`
       and `macos`, `Platform::host()` reading `cfg!(target_os)`, and
       `Platform::resolve(explicit: Option<Platform>)` preferring the explicit
@@ -42,7 +42,7 @@ the same commit with no way to tell them apart.
       error (exit 2) rather than a silent fall back to the host — a typo that
       quietly plans for the wrong platform is the failure this whole flag
       exists to avoid.
-- [ ] TASK-002: `src/core/platform.rs` (FILE-001) — add
+- [x] TASK-002: `src/core/platform.rs` (FILE-001) — add
       `Platform::admits(&Install) -> bool`, returning false for
       `Install::Apt` on `MacOS` and true for every other method on every
       platform.
@@ -53,8 +53,8 @@ the same commit with no way to tell them apart.
       that are portable-by-method but not portable-in-fact — `neovim`'s Linux
       asset — are handled by an explicit override in Phase 3, not by this
       table.
-- [ ] TASK-003: `src/core/mod.rs` (FILE-002) — register `pub mod platform;`.
-- [ ] TASK-004: `src/core/manifest.rs` (FILE-003) — add
+- [x] TASK-003: `src/core/mod.rs` (FILE-002) — register `pub mod platform;`.
+- [x] TASK-004: `src/core/manifest.rs` (FILE-003) — add
       `struct PlatformOverride` with optional `detect`, `install`, `upgrade`,
       `requires`, `post_install` and `unsupported: Option<String>`, and a
       `#[serde(default)] platform: BTreeMap<String, PlatformOverride>` field
@@ -62,7 +62,7 @@ the same commit with no way to tell them apart.
       Why: `deny_unknown_fields` per LESSON-017 — this is a format a human
       hand-writes, and a mistyped `instal` that silently resolves to the Linux
       default is indistinguishable from a tool that simply has no override.
-- [ ] TASK-005: `src/core/manifest.rs` (FILE-003) — add
+- [x] TASK-005: `src/core/manifest.rs` (FILE-003) — add
       `Tool::resolve(&self, platform: Platform) -> Resolution`, returning
       either the effective `Tool` (base fields with the override's `Some`
       fields substituted) or `Unsupported(note)`. A tool is unsupported when
@@ -72,7 +72,7 @@ the same commit with no way to tell them apart.
       Why: the generated note is what keeps a half-covered manifest honest
       without demanding a hand-written sentence for all fourteen apt tools
       before anything can be tried.
-- [ ] TASK-006: `src/core/manifest.rs` (FILE-003) — extend `validate()` to
+- [x] TASK-006: `src/core/manifest.rs` (FILE-003) — extend `validate()` to
       reject an override keyed by a platform name that does not parse, and to
       reject an override that sets both `unsupported` and any substituting
       field.
@@ -80,7 +80,7 @@ the same commit with no way to tell them apart.
       first and it would otherwise be accepted and ignored — the exact silent
       failure LESSON-008 describes. Validation runs on every load, so this is
       caught at `pinst list`, not at install time.
-- [ ] TASK-007: `src/core/graph.rs` (FILE-004) and `src/cli/mod.rs`
+- [x] TASK-007: `src/core/graph.rs` (FILE-004) and `src/cli/mod.rs`
       (FILE-006) — thread `Platform` into `select`: resolve each tool, drop
       the unsupported ones before topological ordering, and return them
       alongside the selection so callers can report them. Add the global
@@ -92,7 +92,7 @@ the same commit with no way to tell them apart.
       dropped stays selected and will fail honestly at install time — pinst
       reports per-tool outcomes and one failure must not abort the rest, which
       is `engine.rs`'s existing contract.
-- [ ] TASK-008: `src/core/doctor.rs` (FILE-005) — emit
+- [x] TASK-008: `src/core/doctor.rs` (FILE-005) — emit
       `tool.unsupported.<name>` at `Severity::Info`, `fixable: false`, with
       the resolution's note as `remediation`, for each tool dropped by
       TASK-007.

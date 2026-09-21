@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::core::manifest::{Tool, UpgradeSpec};
+use crate::core::platform::Platform;
 use crate::core::probe::ProbeResult;
 
 const TTL_SECS: u64 = 24 * 60 * 60;
@@ -87,6 +88,7 @@ fn compare(
     spec: &UpgradeSpec,
     current: Option<String>,
     latest: Option<String>,
+    unpinnable: bool,
 ) -> UpgradeResult {
     // Only apt carries epoch/revision decoration. Stripping it from a GitHub
     // tag would turn `1.2.0-rc1` into `1.2.0` and invent an upgrade.
@@ -102,20 +104,27 @@ fn compare(
         current,
         latest,
         upgrade_available,
-        unpinnable: tool.is_unpinnable(),
+        unpinnable,
     }
 }
 
 /// Looks up the latest version for one tool, using the cache unless `force`.
+/// Returns `None` when the tool is unsupported on `platform` — there is
+/// nothing to check.
 fn check_one(
     tool: &Tool,
     current: Option<String>,
     cache: &mut Cache,
     force: bool,
-) -> UpgradeResult {
-    let spec = tool.upgrade_spec();
+    platform: Platform,
+) -> Option<UpgradeResult> {
+    let crate::core::manifest::Resolved::Supported(effective) = tool.resolve(platform) else {
+        return None;
+    };
+    let unpinnable = effective.is_unpinnable();
+    let spec = tool.upgrade_spec_for(platform)?;
     if matches!(spec, UpgradeSpec::None {}) {
-        return compare(tool, &spec, current, None);
+        return Some(compare(tool, &spec, current, None, unpinnable));
     }
 
     let fresh = (!force)
@@ -143,42 +152,46 @@ fn check_one(
         }
     };
 
-    compare(tool, &spec, current, latest)
+    Some(compare(tool, &spec, current, latest, unpinnable))
 }
 
-/// Blocking upgrade check over a whole tool set. Callers on an async runtime
-/// must wrap this in `spawn_blocking` — the lookups shell out and hit the
-/// network.
+/// Blocking upgrade check over a whole tool set, using each tool's effective
+/// upgrade spec for `platform`. Callers on an async runtime must wrap this in
+/// `spawn_blocking` — the lookups shell out and hit the network.
 pub fn check_all(
     tools: &[&Tool],
     probes: &BTreeMap<String, ProbeResult>,
     force: bool,
+    platform: Platform,
 ) -> Vec<UpgradeResult> {
     let mut cache = load_cache();
     let results: Vec<UpgradeResult> = tools
         .iter()
-        .map(|tool| {
+        .filter_map(|tool| {
             let current = probes.get(&tool.name).and_then(|p| p.version.clone());
-            check_one(tool, current, &mut cache, force)
+            check_one(tool, current, &mut cache, force, platform)
         })
         .collect();
     save_cache(&cache);
     results
 }
 
-/// Streams results to `tx` as they land, for the TUI's Upgrades tab.
+/// Streams results to `tx` as they land, for the TUI's Upgrades tab — always
+/// for `Platform::host()`, since the TUI checks the machine it is running on.
 pub fn spawn_streaming(
     tools: Vec<Tool>,
     probes: BTreeMap<String, ProbeResult>,
     tx: UnboundedSender<Option<UpgradeResult>>,
     force: bool,
+    platform: Platform,
 ) {
     tokio::task::spawn_blocking(move || {
         let mut cache = load_cache();
         for tool in &tools {
             let current = probes.get(&tool.name).and_then(|p| p.version.clone());
-            let result = check_one(tool, current, &mut cache, force);
-            if tx.send(Some(result)).is_err() {
+            if let Some(result) = check_one(tool, current, &mut cache, force, platform)
+                && tx.send(Some(result)).is_err()
+            {
                 return;
             }
         }

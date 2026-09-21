@@ -3,12 +3,14 @@
 //! See `manifest.toml` for the authored file and `pinst schema manifest` for
 //! the JSON Schema derived from these same types.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use color_eyre::eyre::{Context, Result, bail};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::core::platform::Platform;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -54,6 +56,72 @@ pub struct Tool {
     pub upgrade: Option<UpgradeSpec>,
     #[serde(default)]
     pub post_install: Vec<PostStep>,
+    /// Per-platform overrides, keyed by [`Platform::key`] (`"linux"`,
+    /// `"macos"`). A tool with no entry for the platform being resolved
+    /// falls through to [`Platform::admits`]; a tool with an entry is
+    /// explicitly accounted for on that platform, even if every field in
+    /// the entry is `None` and it changes nothing.
+    #[serde(default, rename = "platform")]
+    pub platform_overrides: BTreeMap<String, PlatformOverride>,
+}
+
+/// One platform's differences from a tool's base definition. Every field is
+/// optional and substitutes for the matching base field when present; a
+/// field left `None` is inherited unchanged. `unsupported` is exclusive with
+/// every substituting field — a tool this platform cannot install has
+/// nothing else to override (checked in [`Manifest::validate`]).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct PlatformOverride {
+    #[serde(default)]
+    pub detect: Option<Detect>,
+    #[serde(default)]
+    pub install: Option<Install>,
+    #[serde(default)]
+    pub upgrade: Option<UpgradeSpec>,
+    #[serde(default)]
+    pub requires: Option<Vec<String>>,
+    #[serde(default)]
+    pub post_install: Option<Vec<PostStep>>,
+    /// This platform has no automated path for the tool at all. Doctor
+    /// reports it as `tool.unsupported.<name>` at info severity, carrying
+    /// this note as the remediation.
+    #[serde(default)]
+    pub unsupported: Option<String>,
+}
+
+/// The fields of a [`Tool`] as they apply on a specific platform, borrowed
+/// from either the base definition or its override — nothing is cloned.
+#[derive(Debug, Clone, Copy)]
+pub struct EffectiveTool<'a> {
+    pub detect: &'a Detect,
+    pub install: &'a Install,
+    pub requires: &'a [String],
+    pub post_install: &'a [PostStep],
+}
+
+impl EffectiveTool<'_> {
+    /// True when this platform's effective install method offers no
+    /// verifiable version pinning.
+    pub fn is_unpinnable(&self) -> bool {
+        install_is_unpinnable(self.install)
+    }
+
+    pub fn method_name(&self) -> &'static str {
+        install_method_name(self.install)
+    }
+}
+
+/// The result of resolving a [`Tool`] against a [`Platform`]. `Unsupported`
+/// carries an owned string rather than a borrow: the common case (a tool
+/// with no override at all, on a platform its method does not admit) has no
+/// note written anywhere to borrow from, so one is generated on the spot.
+#[derive(Debug, Clone)]
+pub enum Resolved<'a> {
+    Supported(EffectiveTool<'a>),
+    /// The tool cannot be installed on this platform; the note is what
+    /// doctor and the CLI report as the reason.
+    Unsupported(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -182,57 +250,119 @@ pub struct Profile {
     pub tags: Vec<String>,
 }
 
+/// Derives the upgrade check for a given install method and tool name —
+/// factored out of [`Tool::upgrade_spec`] so a platform override's `install`
+/// can go through the same derivation without a `Tool` to hang it off.
+fn derive_upgrade_spec(name: &str, install: &Install) -> UpgradeSpec {
+    match install {
+        Install::Apt { packages } => UpgradeSpec::Apt {
+            package: packages
+                .first()
+                .cloned()
+                .unwrap_or_else(|| name.to_string()),
+        },
+        Install::Cargo { crate_name } => UpgradeSpec::Cargo {
+            crate_name: crate_name.clone(),
+        },
+        Install::CurlScript { github_repo, .. } => match github_repo {
+            Some(repo) => UpgradeSpec::GithubRelease { repo: repo.clone() },
+            None => UpgradeSpec::None {},
+        },
+        Install::GithubRelease { repo, .. } => UpgradeSpec::GithubRelease { repo: repo.clone() },
+        Install::Nvm { .. } => UpgradeSpec::Nvm {},
+        Install::Shell { .. } | Install::GitClone { .. } | Install::Manual { .. } => {
+            UpgradeSpec::None {}
+        }
+    }
+}
+
+/// True when `install` offers no verifiable version pinning, so doctor
+/// reports it as unpinnable rather than implying a guarantee.
+fn install_is_unpinnable(install: &Install) -> bool {
+    matches!(install, Install::CurlScript { .. } | Install::Shell { .. })
+}
+
+fn install_method_name(install: &Install) -> &'static str {
+    match install {
+        Install::Apt { .. } => "apt",
+        Install::Cargo { .. } => "cargo",
+        Install::CurlScript { .. } => "curl_script",
+        Install::Shell { .. } => "shell",
+        Install::GithubRelease { .. } => "github_release",
+        Install::Nvm { .. } => "nvm",
+        Install::GitClone { .. } => "git_clone",
+        Install::Manual { .. } => "manual",
+    }
+}
+
 impl Tool {
-    /// The upgrade check to run: the explicit override if present, otherwise
-    /// derived from how the tool is installed.
-    pub fn upgrade_spec(&self) -> UpgradeSpec {
-        if let Some(explicit) = &self.upgrade {
-            return explicit.clone();
-        }
-        match &self.install {
-            Install::Apt { packages } => UpgradeSpec::Apt {
-                package: packages
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| self.name.clone()),
-            },
-            Install::Cargo { crate_name } => UpgradeSpec::Cargo {
-                crate_name: crate_name.clone(),
-            },
-            Install::CurlScript { github_repo, .. } => match github_repo {
-                Some(repo) => UpgradeSpec::GithubRelease { repo: repo.clone() },
-                None => UpgradeSpec::None {},
-            },
-            Install::GithubRelease { repo, .. } => {
-                UpgradeSpec::GithubRelease { repo: repo.clone() }
-            }
-            Install::Nvm { .. } => UpgradeSpec::Nvm {},
-            Install::Shell { .. } | Install::GitClone { .. } | Install::Manual { .. } => {
-                UpgradeSpec::None {}
-            }
-        }
-    }
-
-    /// True when the install method offers no verifiable version pinning, so
-    /// doctor reports it as unpinnable rather than implying a guarantee.
-    pub fn is_unpinnable(&self) -> bool {
-        matches!(
-            self.install,
-            Install::CurlScript { .. } | Install::Shell { .. }
-        )
-    }
-
+    /// The install method's name on the platform this binary was built for.
+    /// Every caller that must respect `--platform` resolves the tool first
+    /// and calls [`EffectiveTool::method_name`] instead.
     pub fn method_name(&self) -> &'static str {
-        match self.install {
-            Install::Apt { .. } => "apt",
-            Install::Cargo { .. } => "cargo",
-            Install::CurlScript { .. } => "curl_script",
-            Install::Shell { .. } => "shell",
-            Install::GithubRelease { .. } => "github_release",
-            Install::Nvm { .. } => "nvm",
-            Install::GitClone { .. } => "git_clone",
-            Install::Manual { .. } => "manual",
+        install_method_name(&self.install)
+    }
+
+    /// Resolves this tool against `platform`: the effective view (base
+    /// fields with the platform override's `Some` fields substituted), or
+    /// why the platform cannot install it at all.
+    ///
+    /// A tool with no `[tool.platform.<key>]` entry for `platform` falls
+    /// through to [`Platform::admits`] — apt tools are unsupported on macOS
+    /// with a generated note, everything else resolves unchanged. A tool
+    /// *with* an entry is explicitly accounted for on that platform: its
+    /// `unsupported` note wins if set, otherwise every field the override
+    /// left `None` is inherited from the base definition.
+    pub fn resolve(&self, platform: Platform) -> Resolved<'_> {
+        match self.platform_overrides.get(platform.key()) {
+            Some(over) => {
+                if let Some(note) = &over.unsupported {
+                    return Resolved::Unsupported(note.clone());
+                }
+                Resolved::Supported(EffectiveTool {
+                    detect: over.detect.as_ref().unwrap_or(&self.detect),
+                    install: over.install.as_ref().unwrap_or(&self.install),
+                    requires: over.requires.as_deref().unwrap_or(&self.requires),
+                    post_install: over.post_install.as_deref().unwrap_or(&self.post_install),
+                })
+            }
+            None => {
+                if platform.admits(&self.install) {
+                    Resolved::Supported(EffectiveTool {
+                        detect: &self.detect,
+                        install: &self.install,
+                        requires: &self.requires,
+                        post_install: &self.post_install,
+                    })
+                } else {
+                    Resolved::Unsupported(format!(
+                        "{} installs with {}, which {platform} does not have",
+                        self.name,
+                        install_method_name(&self.install)
+                    ))
+                }
+            }
         }
+    }
+
+    /// The upgrade check for `platform`: an explicit override (on the
+    /// override block, then the base tool) wins; otherwise it is derived
+    /// from the platform's effective install method. Returns `None` when
+    /// the tool is unsupported on `platform` — there is nothing to check.
+    pub fn upgrade_spec_for(&self, platform: Platform) -> Option<UpgradeSpec> {
+        let effective = match self.resolve(platform) {
+            Resolved::Supported(effective) => effective,
+            Resolved::Unsupported(_) => return None,
+        };
+        if let Some(over) = self.platform_overrides.get(platform.key())
+            && let Some(explicit) = &over.upgrade
+        {
+            return Some(explicit.clone());
+        }
+        if let Some(explicit) = &self.upgrade {
+            return Some(explicit.clone());
+        }
+        Some(derive_upgrade_spec(&self.name, effective.install))
     }
 }
 
@@ -269,6 +399,31 @@ impl Manifest {
                 }
                 if dep == &tool.name {
                     bail!("tool '{}' requires itself", tool.name);
+                }
+            }
+        }
+
+        for tool in &self.tools {
+            for (key, over) in &tool.platform_overrides {
+                if key.parse::<Platform>().is_err() {
+                    bail!(
+                        "tool '{}' has a platform override for unrecognized platform '{key}' \
+                         (known: linux, macos)",
+                        tool.name
+                    );
+                }
+                let substitutes = over.detect.is_some()
+                    || over.install.is_some()
+                    || over.upgrade.is_some()
+                    || over.requires.is_some()
+                    || over.post_install.is_some();
+                if over.unsupported.is_some() && substitutes {
+                    bail!(
+                        "tool '{}' platform override for '{key}' sets both 'unsupported' \
+                         and a substituting field — a tool this platform cannot install has \
+                         nothing else to override",
+                        tool.name
+                    );
                 }
             }
         }
@@ -462,19 +617,157 @@ mod tests {
     fn derives_upgrade_spec_from_install_method() {
         let manifest = embedded().unwrap();
         let zsh = manifest.tool("zsh").unwrap();
-        assert!(matches!(zsh.upgrade_spec(), UpgradeSpec::Apt { .. }));
+        assert!(matches!(
+            zsh.upgrade_spec_for(Platform::Linux).unwrap(),
+            UpgradeSpec::Apt { .. }
+        ));
 
         // curl-script installs only get a GitHub check when a repo is named.
         let claude = manifest.tool("claude").unwrap();
-        assert!(matches!(claude.upgrade_spec(), UpgradeSpec::None {}));
+        assert!(matches!(
+            claude.upgrade_spec_for(Platform::Linux).unwrap(),
+            UpgradeSpec::None {}
+        ));
         let uv = manifest.tool("uv").unwrap();
         assert!(matches!(
-            uv.upgrade_spec(),
+            uv.upgrade_spec_for(Platform::Linux).unwrap(),
             UpgradeSpec::GithubRelease { .. }
         ));
 
         // An explicit override wins over the derived default.
         let rust = manifest.tool("rust").unwrap();
-        assert!(matches!(rust.upgrade_spec(), UpgradeSpec::None {}));
+        assert!(matches!(
+            rust.upgrade_spec_for(Platform::Linux).unwrap(),
+            UpgradeSpec::None {}
+        ));
+    }
+
+    // TEST-002: Tool::resolve over an inline fixture — an override
+    // substituting `install` only, leaving `detect` inherited; an explicit
+    // `unsupported`; an apt tool with no override resolving to `Unsupported`
+    // with the generated note; and a non-apt tool with no override
+    // resolving unchanged on both platforms.
+    #[test]
+    fn resolve_substitutes_only_the_overridden_fields() {
+        let manifest = parse(
+            r#"
+            [meta]
+            schema_version = 1
+
+            [[tool]]
+            name = "widget"
+            detect = { command = "command -v widget", bin = "widget" }
+            install = { method = "apt", packages = ["widget"] }
+
+              [tool.platform.macos]
+              install = { method = "cargo", crate_name = "widget-cli" }
+            "#,
+        )
+        .unwrap();
+        let widget = manifest.tool("widget").unwrap();
+
+        let Resolved::Supported(effective) = widget.resolve(Platform::MacOS) else {
+            panic!("widget has a macos override and should resolve as supported");
+        };
+        assert!(matches!(effective.install, Install::Cargo { .. }));
+        // detect was not overridden, so it is inherited from the base.
+        assert_eq!(effective.detect.command, "command -v widget");
+    }
+
+    #[test]
+    fn resolve_honors_an_explicit_unsupported_note() {
+        let manifest = parse(
+            r#"
+            [meta]
+            schema_version = 1
+
+            [[tool]]
+            name = "gizmo"
+            detect = { command = "true" }
+            install = { method = "shell", command = "echo hi" }
+
+              [tool.platform.macos]
+              unsupported = "no macOS build exists yet"
+            "#,
+        )
+        .unwrap();
+        let gizmo = manifest.tool("gizmo").unwrap();
+
+        let Resolved::Unsupported(note) = gizmo.resolve(Platform::MacOS) else {
+            panic!("gizmo declares itself unsupported on macos");
+        };
+        assert_eq!(note, "no macOS build exists yet");
+
+        // Linux carries no override at all, so it resolves normally.
+        assert!(matches!(
+            gizmo.resolve(Platform::Linux),
+            Resolved::Supported(_)
+        ));
+    }
+
+    #[test]
+    fn resolve_generates_a_note_for_an_apt_tool_with_no_override() {
+        let manifest = embedded().unwrap();
+        let zsh = manifest.tool("zsh").unwrap();
+
+        let Resolved::Unsupported(note) = zsh.resolve(Platform::MacOS) else {
+            panic!("zsh has no macos override and apt is not admitted there");
+        };
+        assert!(note.contains("zsh"), "{note}");
+        assert!(note.contains("apt"), "{note}");
+
+        // A non-apt tool with no override resolves unchanged on both
+        // platforms.
+        let rust = manifest.tool("rust").unwrap();
+        assert!(matches!(
+            rust.resolve(Platform::Linux),
+            Resolved::Supported(_)
+        ));
+        assert!(matches!(
+            rust.resolve(Platform::MacOS),
+            Resolved::Supported(_)
+        ));
+    }
+
+    // TEST-003: validate() rejects an unrecognized platform key, and an
+    // override that sets both `unsupported` and a substituting field.
+    #[test]
+    fn rejects_unrecognized_platform_key() {
+        let err = parse(
+            r#"
+            [meta]
+            schema_version = 1
+            [[tool]]
+            name = "a"
+            detect = { command = "true" }
+            install = { method = "apt", packages = ["a"] }
+
+              [tool.platform.darwin]
+              unsupported = "typo'd platform name"
+            "#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("unrecognized platform"), "{err}");
+        assert!(err.to_string().contains("'a'"), "{err}");
+    }
+
+    #[test]
+    fn rejects_unsupported_combined_with_a_substituting_field() {
+        let err = parse(
+            r#"
+            [meta]
+            schema_version = 1
+            [[tool]]
+            name = "a"
+            detect = { command = "true" }
+            install = { method = "apt", packages = ["a"] }
+
+              [tool.platform.macos]
+              unsupported = "no macOS path"
+              requires = ["b"]
+            "#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("both 'unsupported'"), "{err}");
     }
 }
