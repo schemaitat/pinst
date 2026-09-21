@@ -76,6 +76,12 @@ lives as a skill so it loads when an agent is actually about to run `pinst`,
 instead of sitting in every session's context. That is why `AGENTS.md` is now
 one line.
 
+`orchestrate` is outside this lifecycle too. It is a portable Herdr helper
+that places a bounded task in a sibling pane or isolated worktree, supervises
+the delegated agent to a verified outcome, and writes its own log under
+`.herdr/orchestrate/`. It neither reads nor writes the plan corpus; use
+`/orchestrate` when Herdr delegation itself is the requested work.
+
 The loop closes at `plan-learnings` → `.ash/LEARNINGS.md` → the next
 `plan-write`, which reads it before choosing an approach. That file is the
 only reason the corpus is worth keeping rather than just being history.
@@ -127,6 +133,7 @@ prose.
 | "commit this" | `/cc` → `conventional-commits` |
 | "open a PR", "ship this branch", "get this reviewed" | `/pr` → `create-pr` |
 | "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
+| "delegate this in Herdr", "babysit another agent", "run this in a worktree" | `/orchestrate` → `orchestrate` |
 | a one-line fix with no design content | none of the above — just do it |
 
 That last row matters. A plan is overhead that buys traceability; work that

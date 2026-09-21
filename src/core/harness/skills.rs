@@ -535,7 +535,7 @@ mod tests {
                 ..Options::default()
             },
         );
-        assert_eq!(report.skills.len(), 6, "expected six skills");
+        assert_eq!(report.skills.len(), 7, "expected seven skills");
 
         for row in &report.skills {
             assert!(row.wired, "{} is not wired into .claude/skills", row.name);
