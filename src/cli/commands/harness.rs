@@ -9,6 +9,8 @@
 //! The exit codes carry the verdict as everywhere else: `0` clean, `2` a
 //! usage error, `3` ran fine and found things to act on.
 
+use std::path::PathBuf;
+
 use color_eyre::eyre::Result;
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -16,14 +18,19 @@ use serde::Serialize;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
     HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs, HarnessRenumberLessonArgs,
-    HarnessSkillsArgs,
+    HarnessSkillsArgs, HarnessStatusArgs, ScopeArg,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
 use crate::core::harness::corpus::Corpus;
 use crate::core::harness::index::{self, IndexState};
+use crate::core::harness::install::state::{self, AssetKindLabel, AssetState, AssetStatus};
+use crate::core::harness::project::InstallRoot;
 use crate::core::harness::root::CorpusRoot;
-use crate::core::harness::{evidence, id, renumber, skills};
+use crate::core::harness::vendor::Vendor;
+use crate::core::harness::{asset, evidence, id, renumber, skills};
+use crate::core::home_dir;
+use crate::core::usage;
 
 /// What `new-id` returns. One field, but an envelope item all the same: an
 /// agent that has learned to read `items[0]` from every other command should
@@ -45,6 +52,9 @@ pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
         HarnessAction::RenumberLesson(renumber) => {
             self::renumber_lesson(ctx, &load(ctx, args)?, renumber)
         }
+        // `status` reads `.agents/` and the vendor directories it projects
+        // into, not the `.ash/` corpus, so it does not go through `load`.
+        HarnessAction::Status(status_args) => self::status(ctx, args, status_args),
     }
 }
 
@@ -87,6 +97,130 @@ fn mint(ctx: &Ctx, args: &HarnessNewIdArgs) -> Result<ExitCode> {
         Status::Ok,
         vec![MintedId { id }],
     ))
+}
+
+/// One row of `harness status --json`: an `install::state::AssetStatus`
+/// tagged with which scope it came from, because `--scope both` reports two
+/// answers to "is this installed" and the payload has to say which is which.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct StatusItem {
+    pub scope: String,
+    pub kind: AssetKindLabel,
+    pub name: String,
+    pub target: PathBuf,
+    pub state: AssetState,
+}
+
+impl StatusItem {
+    fn from(scope: &str, row: AssetStatus) -> Self {
+        Self {
+            scope: scope.to_string(),
+            kind: row.kind,
+            name: row.name,
+            target: row.target,
+            state: row.state,
+        }
+    }
+}
+
+/// `pinst harness status` — where the harness is installed, right now,
+/// computed by comparing the vendor directories against `.agents/` rather
+/// than by trusting a receipt. A receipt says what an install *did*; this
+/// says what is actually there, which is the question `status` exists to
+/// answer even when nothing was ever installed by this binary at all (a
+/// hand-wired repo, or one still running `agents-wire.sh`).
+fn status(ctx: &Ctx, args: &HarnessArgs, status_args: &HarnessStatusArgs) -> Result<ExitCode> {
+    let vendor = Vendor::parse(&status_args.vendor).ok_or_else(|| {
+        usage(format!(
+            "unknown vendor '{}' (try: claude)",
+            status_args.vendor
+        ))
+    })?;
+    let source = asset::resolve_source();
+
+    let mut items = Vec::new();
+    let mut summary = serde_json::Map::new();
+    let want_project = matches!(status_args.scope, ScopeArg::Project | ScopeArg::Both);
+    let want_global = matches!(status_args.scope, ScopeArg::Global | ScopeArg::Both);
+
+    if want_project {
+        let root = InstallRoot::resolve(args.root.as_deref())?;
+        let rows = state::status(&source, vendor, root.path())?;
+        if !ctx.json {
+            print_scope_banner("project", root.path(), &rows);
+        }
+        summary.insert("project".to_string(), scope_summary(root.path(), &rows));
+        items.extend(rows.into_iter().map(|r| StatusItem::from("project", r)));
+    }
+
+    if want_global {
+        let home = home_dir()?;
+        let rows = state::status(&source, vendor, &home)?;
+        if !ctx.json {
+            print_scope_banner("global", &home, &rows);
+        }
+        summary.insert("global".to_string(), scope_summary(&home, &rows));
+        items.extend(rows.into_iter().map(|r| StatusItem::from("global", r)));
+    }
+
+    let issues = items
+        .iter()
+        .filter(|i| {
+            matches!(
+                i.state,
+                AssetState::Missing | AssetState::Drifted | AssetState::Foreign
+            )
+        })
+        .count();
+    let status = if issues > 0 {
+        Status::Issues
+    } else {
+        Status::Ok
+    };
+
+    ctx.finish(
+        Envelope::new("harness status", status, items).summary(serde_json::Value::Object(summary)),
+    )
+}
+
+fn scope_summary(root: &std::path::Path, rows: &[AssetStatus]) -> serde_json::Value {
+    let count = |state: AssetState| rows.iter().filter(|r| r.state == state).count();
+    serde_json::json!({
+        "root": root,
+        "linked": count(AssetState::Linked),
+        "copied": count(AssetState::Copied),
+        "missing": count(AssetState::Missing),
+        "drifted": count(AssetState::Drifted),
+        "foreign": count(AssetState::Foreign),
+        "unmanaged": count(AssetState::Unmanaged),
+    })
+}
+
+fn print_scope_banner(label: &str, root: &std::path::Path, rows: &[AssetStatus]) {
+    let installed = rows.iter().any(|r| r.state.satisfied());
+    println!(
+        "\n== {label} ({}) — {} ==",
+        root.display(),
+        if installed {
+            "installed"
+        } else {
+            "not installed"
+        }
+    );
+    for row in rows {
+        let mark = match row.state {
+            AssetState::Linked | AssetState::Copied => "[ok]",
+            AssetState::Missing => "[--]",
+            AssetState::Drifted | AssetState::Foreign => "[!!]",
+            AssetState::Unmanaged => "[??]",
+        };
+        println!(
+            "{mark} {:<8} {:<24} {:?}",
+            row.kind.label(),
+            row.name,
+            row.state
+        );
+    }
 }
 
 /// Rewrites `.ash/INDEX.md`, or with `--check` reports whether it is current.

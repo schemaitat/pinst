@@ -245,6 +245,30 @@ pub enum HarnessAction {
     NewId(HarnessNewIdArgs),
     /// Move a lesson to a free LESSON-NNN, taking this branch's citations.
     RenumberLesson(HarnessRenumberLessonArgs),
+    /// Report where the harness is installed: project, global, or both.
+    Status(HarnessStatusArgs),
+}
+
+/// Which install scope(s) a harness command acts on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum ScopeArg {
+    /// `<repo>/.claude/`, discovered the way `--root` names or falls back to.
+    Project,
+    /// `~/.claude/`.
+    Global,
+    /// Both, reported or acted on together. The default for `status`.
+    Both,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessStatusArgs {
+    /// Which install scope(s) to report on.
+    #[arg(long, value_enum, default_value_t = ScopeArg::Both)]
+    pub scope: ScopeArg,
+    /// The runtime to report on. `claude` is the only one today.
+    #[arg(long, default_value = "claude")]
+    pub vendor: String,
 }
 
 #[derive(Debug, Args, Clone)]
