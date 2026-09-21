@@ -10,6 +10,7 @@ use tokio_stream::StreamExt;
 
 use crate::core::configs::FileStatus;
 use crate::core::doctor::Finding;
+use crate::core::harness::install::state::AssetStatus;
 use crate::core::probe::ProbeResult;
 use crate::core::upgrade::UpgradeResult;
 
@@ -24,6 +25,10 @@ pub enum AppEvent {
     },
     Upgrade(UpgradeResult),
     UpgradesDone,
+    Harness {
+        project: Vec<AssetStatus>,
+        global: Vec<AssetStatus>,
+    },
 }
 
 /// Spawns the input-reading and tick-generating background tasks and returns

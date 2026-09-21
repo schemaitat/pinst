@@ -5,4 +5,5 @@
 pub mod corpus_init;
 pub mod plan;
 pub mod receipt;
+pub mod record;
 pub mod state;

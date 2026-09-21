@@ -12,6 +12,13 @@ use crate::core::docs::Catalogue;
 use crate::core::docs::page::ToolDoc;
 use crate::core::docs::search as find;
 use crate::core::doctor::{self, Finding};
+use crate::core::harness::asset as harness_asset;
+use crate::core::harness::install::plan as harness_plan;
+use crate::core::harness::install::receipt::{Receipt, ReceiptScope};
+use crate::core::harness::install::record;
+use crate::core::harness::install::state::{self as harness_state, AssetStatus};
+use crate::core::harness::project::InstallRoot;
+use crate::core::harness::vendor::Vendor;
 use crate::core::manifest::{Manifest, Tool};
 use crate::core::probe::{self, ProbeResult};
 use crate::core::upgrade::{self, UpgradeResult};
@@ -23,10 +30,17 @@ pub enum Tab {
     Health,
     Upgrades,
     Docs,
+    Harness,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Overview, Tab::Health, Tab::Upgrades, Tab::Docs];
+    pub const ALL: [Tab; 5] = [
+        Tab::Overview,
+        Tab::Health,
+        Tab::Upgrades,
+        Tab::Docs,
+        Tab::Harness,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -34,8 +48,36 @@ impl Tab {
             Tab::Health => "Health",
             Tab::Upgrades => "Upgrades",
             Tab::Docs => "Docs",
+            Tab::Harness => "Harness",
         }
     }
+}
+
+/// Which harness action a confirmation modal is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HarnessModalAction {
+    Install,
+    Uninstall,
+}
+
+impl HarnessModalAction {
+    pub fn label(self) -> &'static str {
+        match self {
+            HarnessModalAction::Install => "install",
+            HarnessModalAction::Uninstall => "uninstall",
+        }
+    }
+}
+
+/// A pending harness mutation, awaiting `Enter` or `Esc`. Named, not just a
+/// bool, because the modal has to say *what* it is about to do and *how
+/// many* steps that is — "install?" is not a sentence someone can disagree
+/// with, "install 12 items into /repo/.claude" is.
+#[derive(Debug, Clone, Copy)]
+pub struct HarnessModal {
+    pub scope: ReceiptScope,
+    pub action: HarnessModalAction,
+    pub steps: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +121,19 @@ pub struct App {
     pub picker_selected: usize,
     pub pending_editor: Option<PathBuf>,
 
+    /// Where a project-scope harness install lands, resolved once at
+    /// startup — an ancestor `.ash/`, else the git top-level, else the
+    /// working directory. `home_dir` above already carries the global root.
+    pub harness_project_root: PathBuf,
+    pub harness_project: Vec<AssetStatus>,
+    pub harness_global: Vec<AssetStatus>,
+    pub harness_ready: bool,
+    pub harness_selected: usize,
+    /// True while a spawned install/uninstall run is in flight — blocks a
+    /// second `i`/`u` from opening a modal on top of one still running.
+    pub harness_busy: bool,
+    pub harness_modal: Option<HarnessModal>,
+
     pub status: String,
     pub tick_count: u64,
 }
@@ -92,6 +147,14 @@ impl App {
     ) -> Self {
         let registry = manifest.tools.clone();
         let probes_expected = registry.len();
+        // Resolution is a filesystem walk and at most one `git` subprocess,
+        // done once here alongside the manifest load and catalogue load
+        // `tui::run` already does synchronously before entering the loop —
+        // not worth a background task for something this cheap and needed
+        // immediately to compute the first frame's harness banner.
+        let harness_project_root = InstallRoot::resolve(None)
+            .map(|root| root.path().to_path_buf())
+            .unwrap_or_else(|_| PathBuf::from("."));
         Self {
             tab: Tab::Overview,
             should_quit: false,
@@ -116,6 +179,13 @@ impl App {
             picker_open: false,
             picker_selected: 0,
             pending_editor: None,
+            harness_project_root,
+            harness_project: Vec::new(),
+            harness_global: Vec::new(),
+            harness_ready: false,
+            harness_selected: 0,
+            harness_busy: false,
+            harness_modal: None,
             status: "probing tools...".to_string(),
             tick_count: 0,
         }
@@ -124,6 +194,24 @@ impl App {
     pub fn start_probing(&self) {
         let sink = event::forward_probes(self.tx.clone());
         probe::spawn_streaming(self.registry.clone(), sink);
+    }
+
+    /// Loads both scopes' install state off the async runtime's worker
+    /// threads — classification stats every managed path and reads every
+    /// copied file to compare it, the same reasoning `spawn_health_check`
+    /// already applies to config diagnosis.
+    pub fn start_harness_load(&self) {
+        let tx = self.tx.clone();
+        let project_root = self.harness_project_root.clone();
+        let global_root = self.home_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            let source = harness_asset::resolve_source();
+            let project =
+                harness_state::status(&source, Vendor::Claude, &project_root).unwrap_or_default();
+            let global =
+                harness_state::status(&source, Vendor::Claude, &global_root).unwrap_or_default();
+            let _ = tx.send(AppEvent::Harness { project, global });
+        });
     }
 
     pub fn handle_event(&mut self, event: AppEvent) {
@@ -143,6 +231,13 @@ impl App {
             AppEvent::UpgradesDone => {
                 self.upgrades_loading = false;
                 self.status = "upgrade check complete".to_string();
+            }
+            AppEvent::Harness { project, global } => {
+                self.harness_project = project;
+                self.harness_global = global;
+                self.harness_ready = true;
+                self.harness_busy = false;
+                self.status = "harness state refreshed".to_string();
             }
         }
     }
@@ -269,6 +364,27 @@ impl App {
         }
     }
 
+    /// Both scopes' rows, project first then global — the same order the
+    /// CLI's `harness status` prints them in — tagged with which scope each
+    /// row came from, and filtered by the active search query.
+    pub fn filtered_harness(&self) -> Vec<(ReceiptScope, &AssetStatus)> {
+        let rows = self
+            .harness_project
+            .iter()
+            .map(|r| (ReceiptScope::Project, r))
+            .chain(
+                self.harness_global
+                    .iter()
+                    .map(|r| (ReceiptScope::Global, r)),
+            );
+        match self.query_lower() {
+            None => rows.collect(),
+            Some(q) => rows
+                .filter(|(_, r)| r.name.to_lowercase().contains(&q))
+                .collect(),
+        }
+    }
+
     /// Files pinst can jump straight into an editor for: `~/.zshrc` first
     /// (the most-edited file day to day), then every other config pinst
     /// manages.
@@ -293,6 +409,10 @@ impl App {
     fn handle_term_event(&mut self, event: Event) {
         let Event::Key(key) = event else { return };
         if key.kind != KeyEventKind::Press {
+            return;
+        }
+        if self.harness_modal.is_some() {
+            self.handle_harness_modal_key(key.code);
             return;
         }
         if self.picker_open {
@@ -322,6 +442,7 @@ impl App {
             KeyCode::Char('2') => self.tab = Tab::Health,
             KeyCode::Char('3') => self.tab = Tab::Upgrades,
             KeyCode::Char('4') => self.tab = Tab::Docs,
+            KeyCode::Char('5') => self.tab = Tab::Harness,
             KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('e') => {
@@ -330,6 +451,12 @@ impl App {
             }
             KeyCode::Char('r') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
                 self.refresh_upgrades(true);
+            }
+            KeyCode::Char('i') if self.tab == Tab::Harness && !self.harness_busy => {
+                self.open_harness_modal(HarnessModalAction::Install);
+            }
+            KeyCode::Char('u') if self.tab == Tab::Harness && !self.harness_busy => {
+                self.open_harness_modal(HarnessModalAction::Uninstall);
             }
             _ => {}
         }
@@ -360,6 +487,7 @@ impl App {
     fn reset_selections(&mut self) {
         self.overview_selected = 0;
         self.docs_selected = 0;
+        self.harness_selected = 0;
     }
 
     fn next_tab(&mut self) {
@@ -387,6 +515,13 @@ impl App {
                 if len > 0 {
                     self.docs_selected =
                         (self.docs_selected as i32 + delta).rem_euclid(len) as usize;
+                }
+            }
+            Tab::Harness => {
+                let len = self.filtered_harness().len() as i32;
+                if len > 0 {
+                    self.harness_selected =
+                        (self.harness_selected as i32 + delta).rem_euclid(len) as usize;
                 }
             }
             _ => {}
@@ -417,6 +552,186 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Opens a confirmation modal for the scope the current selection
+    /// belongs to, naming the exact step count so "install 12 items into
+    /// /repo/.claude" is a sentence someone can disagree with — "install?"
+    /// is not. Silently does nothing if the harness state hasn't loaded yet,
+    /// there is nothing selected, or the scope has nothing to do.
+    fn open_harness_modal(&mut self, action: HarnessModalAction) {
+        if !self.harness_ready {
+            return;
+        }
+        let rows = self.filtered_harness();
+        if rows.is_empty() {
+            return;
+        }
+        let index = self.harness_selected.min(rows.len() - 1);
+        let scope = rows[index].0;
+
+        let Some(steps) = self.compute_harness_step_count(scope, action) else {
+            self.status = format!(
+                "harness: nothing to {} for {} scope",
+                action.label(),
+                scope.label()
+            );
+            return;
+        };
+        self.harness_modal = Some(HarnessModal {
+            scope,
+            action,
+            steps,
+        });
+    }
+
+    /// A read-only, synchronous count of what an install/uninstall *would*
+    /// do — building the same `Plan` the mutation itself will build, purely
+    /// to size the confirmation modal. Cheap enough for the UI thread: no
+    /// subprocess, just enumerating `.agents/` and stat-ing a handful of
+    /// paths, the same work `filtered_harness`'s data already came from.
+    fn compute_harness_step_count(
+        &self,
+        scope: ReceiptScope,
+        action: HarnessModalAction,
+    ) -> Option<usize> {
+        let root = self.harness_root(scope);
+        let source = harness_asset::resolve_source();
+        let steps = match action {
+            HarnessModalAction::Install => {
+                let options = harness_plan::InstallOptions {
+                    vendor: Vendor::Claude,
+                    scope,
+                    root,
+                    style: None,
+                    force: false,
+                    selection: harness_plan::Selection::All,
+                };
+                harness_plan::build_install_plan(&source, &options)
+                    .ok()?
+                    .pending_count()
+            }
+            HarnessModalAction::Uninstall => {
+                let receipt_path = Receipt::path_for(scope, &root).ok()?;
+                let receipt = Receipt::load(&receipt_path).ok()??;
+                harness_plan::build_uninstall_plan(
+                    &source,
+                    &receipt.entries,
+                    &harness_plan::Selection::All,
+                    false,
+                )
+                .ok()?
+                .pending_count()
+            }
+        };
+        (steps > 0).then_some(steps)
+    }
+
+    fn harness_root(&self, scope: ReceiptScope) -> PathBuf {
+        match scope {
+            ReceiptScope::Project => self.harness_project_root.clone(),
+            ReceiptScope::Global => self.home_dir.clone(),
+        }
+    }
+
+    fn handle_harness_modal_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => self.harness_modal = None,
+            KeyCode::Enter => {
+                if let Some(modal) = self.harness_modal.take() {
+                    self.run_harness_action(modal);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Runs the confirmed mutation off the async runtime's worker threads,
+    /// through the exact same `Plan`/`Runner`/`record` path the CLI uses —
+    /// two ways to mutate would be two places for the blocked-on-drift rule
+    /// to be wrong, and this tab has no `--dry-run` to fall back on
+    /// (`CON-002`, `SEC-001`). Refreshes both scopes on completion rather
+    /// than trusting its own plan, the same reason `pinst config status`
+    /// re-reads the filesystem instead of believing a just-applied plan.
+    fn run_harness_action(&mut self, modal: HarnessModal) {
+        self.harness_busy = true;
+        self.status = format!(
+            "{}ing harness ({} scope)...",
+            modal.action.label(),
+            modal.scope.label()
+        );
+
+        let tx = self.tx.clone();
+        let root = self.harness_root(modal.scope);
+        let project_root = self.harness_project_root.clone();
+        let global_root = self.home_dir.clone();
+        let scope = modal.scope;
+        let action = modal.action;
+
+        tokio::task::spawn_blocking(move || {
+            let source = harness_asset::resolve_source();
+            let runner = crate::core::exec::Runner::new(false);
+            let approve = |_: &crate::core::plan::Step| true;
+            let auth = crate::core::engine::Authorizer { approve: &approve };
+
+            match action {
+                HarnessModalAction::Install => {
+                    let mut plan = crate::core::plan::Plan::default();
+                    if matches!(scope, ReceiptScope::Project)
+                        && let Ok(scaffold) =
+                            crate::core::harness::install::corpus_init::build_scaffold_plan(&root)
+                    {
+                        for step in scaffold.steps {
+                            plan.push(step);
+                        }
+                    }
+                    let options = harness_plan::InstallOptions {
+                        vendor: Vendor::Claude,
+                        scope,
+                        root: root.clone(),
+                        style: None,
+                        force: false,
+                        selection: harness_plan::Selection::All,
+                    };
+                    if let Ok(asset_plan) = harness_plan::build_install_plan(&source, &options) {
+                        for step in asset_plan.steps {
+                            plan.push(step);
+                        }
+                    }
+                    let (reports, _summary) =
+                        crate::core::engine::execute(&plan, &runner, &auth, &mut |_| {});
+                    let _ = record::record_install(scope, Vendor::Claude, &root, &source, &reports);
+                }
+                HarnessModalAction::Uninstall => {
+                    if let Ok(receipt_path) = Receipt::path_for(scope, &root)
+                        && let Ok(Some(receipt)) = Receipt::load(&receipt_path)
+                        && let Ok(plan) = harness_plan::build_uninstall_plan(
+                            &source,
+                            &receipt.entries,
+                            &harness_plan::Selection::All,
+                            false,
+                        )
+                    {
+                        let (reports, _summary) =
+                            crate::core::engine::execute(&plan, &runner, &auth, &mut |_| {});
+                        let _ = record::record_uninstall(
+                            scope,
+                            Vendor::Claude,
+                            &root,
+                            receipt,
+                            &reports,
+                            false,
+                        );
+                    }
+                }
+            }
+
+            let project =
+                harness_state::status(&source, Vendor::Claude, &project_root).unwrap_or_default();
+            let global =
+                harness_state::status(&source, Vendor::Claude, &global_root).unwrap_or_default();
+            let _ = tx.send(AppEvent::Harness { project, global });
+        });
     }
 }
 
@@ -475,11 +790,18 @@ does = "Search a path."
         press(&mut app, KeyCode::Char('4'));
         assert_eq!(app.tab, Tab::Docs);
 
-        // Cycling past the last tab wraps to the first.
+        // Docs is no longer the last tab — Harness follows it — so cycling
+        // forward once lands there, not back at the first tab.
         press(&mut app, KeyCode::Tab);
-        assert_eq!(app.tab, Tab::Overview);
+        assert_eq!(app.tab, Tab::Harness);
         press(&mut app, KeyCode::BackTab);
         assert_eq!(app.tab, Tab::Docs);
+
+        // Cycling past the actual last tab (Harness) wraps to the first.
+        press(&mut app, KeyCode::Char('5'));
+        assert_eq!(app.tab, Tab::Harness);
+        press(&mut app, KeyCode::Tab);
+        assert_eq!(app.tab, Tab::Overview);
     }
 
     #[test]
@@ -585,5 +907,218 @@ does = "Search a path."
         assert!(rendered.contains("ripgrep"), "{rendered}");
         assert!(rendered.contains("rg -n"), "the recipe must be on screen");
         assert!(rendered.contains("authored"), "the page's status is shown");
+    }
+
+    use harness_state::AssetState as HarnessState;
+
+    fn seeded_row(name: &str, state: HarnessState) -> AssetStatus {
+        AssetStatus {
+            kind: harness_state::AssetKindLabel::Skill,
+            name: name.to_string(),
+            target: PathBuf::from(format!("/tmp/{name}")),
+            state,
+        }
+    }
+
+    #[test]
+    fn the_harness_tab_is_reachable_and_renders_both_scopes() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![seeded_row("demo", HarnessState::Linked)];
+        app.harness_global = Vec::new();
+
+        press(&mut app, KeyCode::Char('5'));
+        assert_eq!(app.tab, Tab::Harness);
+
+        let backend = ratatui::backend::TestBackend::new(100, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("project"), "{rendered}");
+        assert!(rendered.contains("global"), "{rendered}");
+        assert!(rendered.contains("demo"), "{rendered}");
+    }
+
+    #[test]
+    fn harness_search_filters_without_moving_other_tabs_cursors() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![
+            seeded_row("alpha", HarnessState::Missing),
+            seeded_row("beta", HarnessState::Missing),
+        ];
+
+        press(&mut app, KeyCode::Char('5'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.harness_selected, 1);
+        assert_eq!(
+            app.overview_selected, 0,
+            "the Overview cursor must not move"
+        );
+
+        typed(&mut app, "alpha");
+        assert_eq!(app.filtered_harness().len(), 1);
+        assert_eq!(app.harness_selected, 0, "a new query resets the cursor");
+    }
+
+    #[test]
+    fn i_opens_a_modal_naming_the_step_count_and_esc_cancels_unchanged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_dir, mut app) = app(&[]);
+        // Redirect the project scope at an empty sandbox rather than this
+        // checkout — the modal's step count is computed by really building
+        // an install plan, and this keeps that read entirely inside a
+        // tempdir even though nothing is executed in this test.
+        app.harness_project_root = tmp.path().to_path_buf();
+        app.harness_ready = true;
+        app.harness_project = vec![seeded_row("pinst", HarnessState::Missing)];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        press(&mut app, KeyCode::Char('i'));
+        let modal = app.harness_modal.expect("a modal should have opened");
+        assert_eq!(modal.action, HarnessModalAction::Install);
+        assert!(modal.steps > 0, "a fresh sandbox has something to install");
+
+        press(&mut app, KeyCode::Esc);
+        assert!(app.harness_modal.is_none());
+        assert!(
+            std::fs::read_dir(tmp.path()).unwrap().next().is_none(),
+            "Esc must not have written anything"
+        );
+    }
+
+    #[tokio::test]
+    async fn enter_on_the_install_modal_actually_installs_and_the_next_refresh_shows_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let catalogue = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let manifest = manifest::load(None).unwrap().manifest;
+        let mut app = App::new(tx, manifest, PathBuf::from("/home/test"), catalogue);
+
+        app.harness_project_root = tmp.path().to_path_buf();
+        app.harness_ready = true;
+        app.harness_project = vec![seeded_row("pinst", HarnessState::Missing)];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        press(&mut app, KeyCode::Char('i'));
+        assert!(app.harness_modal.is_some());
+        press(&mut app, KeyCode::Enter);
+        assert!(app.harness_modal.is_none(), "confirming closes the modal");
+        assert!(app.harness_busy);
+
+        let event = rx.recv().await.expect("the spawned run must report back");
+        app.handle_event(event);
+
+        assert!(!app.harness_busy);
+        assert!(
+            app.harness_project.iter().any(|r| r.state.satisfied()),
+            "{:?}",
+            app.harness_project
+        );
+        assert!(
+            tmp.path()
+                .join(".claude/skills")
+                .read_dir()
+                .unwrap()
+                .next()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn enter_on_the_uninstall_modal_removes_only_the_receipts_entries() {
+        use crate::core::harness::asset::{self as raw_asset};
+        use crate::core::harness::install::receipt::Receipt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        // Install for real first (through the shared core path, not the
+        // TUI), then plant an extra hand-made skill the receipt never
+        // recorded — the row that must survive the uninstall untouched.
+        let source = raw_asset::resolve_source();
+        let opts = harness_plan::InstallOptions {
+            vendor: Vendor::Claude,
+            scope: ReceiptScope::Project,
+            root: tmp.path().to_path_buf(),
+            style: None,
+            force: false,
+            selection: harness_plan::Selection::Named {
+                skills: vec!["pinst".to_string()],
+                commands: vec![],
+            },
+        };
+        let plan = harness_plan::build_install_plan(&source, &opts).unwrap();
+        let runner = crate::core::exec::Runner::new(false);
+        let approve = |_: &crate::core::plan::Step| true;
+        let auth = crate::core::engine::Authorizer { approve: &approve };
+        let (reports, _) = crate::core::engine::execute(&plan, &runner, &auth, &mut |_| {});
+        record::record_install(
+            ReceiptScope::Project,
+            Vendor::Claude,
+            tmp.path(),
+            &source,
+            &reports,
+        )
+        .unwrap();
+
+        let skills_dir = Vendor::Claude.skills_dir(tmp.path());
+        std::fs::create_dir_all(skills_dir.join("someone-elses-skill")).unwrap();
+        std::fs::write(skills_dir.join("someone-elses-skill/SKILL.md"), "mine").unwrap();
+
+        let receipt_path = Receipt::path_for(ReceiptScope::Project, tmp.path()).unwrap();
+        let receipt = Receipt::load(&receipt_path).unwrap().unwrap();
+        assert_eq!(receipt.entries.len(), 1, "sanity: only pinst was recorded");
+
+        let dir = tempfile::tempdir().unwrap();
+        let catalogue = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let manifest = manifest::load(None).unwrap().manifest;
+        let mut app = App::new(tx, manifest, PathBuf::from("/home/test"), catalogue);
+        app.harness_project_root = tmp.path().to_path_buf();
+        app.harness_ready = true;
+        app.harness_project = harness_state::status(&source, Vendor::Claude, tmp.path()).unwrap();
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        press(&mut app, KeyCode::Char('u'));
+        let modal = app
+            .harness_modal
+            .expect("uninstall should have something to do");
+        assert_eq!(modal.action, HarnessModalAction::Uninstall);
+        assert_eq!(modal.steps, 1);
+
+        press(&mut app, KeyCode::Enter);
+        let event = rx.recv().await.unwrap();
+        app.handle_event(event);
+
+        assert!(
+            !Receipt::path_for(ReceiptScope::Project, tmp.path())
+                .unwrap()
+                .exists()
+        );
+        assert!(
+            !skills_dir.join("pinst").exists(),
+            "the receipt's own entry must be gone"
+        );
+        assert!(
+            skills_dir.join("someone-elses-skill").exists(),
+            "an entry the receipt never named must survive"
+        );
+        assert!(
+            app.harness_project
+                .iter()
+                .any(|r| r.name == "someone-elses-skill"
+                    && r.state == harness_state::AssetState::Unmanaged),
+            "{:?}",
+            app.harness_project
+        );
     }
 }

@@ -2,7 +2,7 @@
 id: 260920-zqapye
 slug: installable-harness
 phase: 5
-status: Proposed
+status: Done
 ---
 
 # Phase 5 — The Harness tab
@@ -23,17 +23,17 @@ to lose. Everything before it is reachable from the command line.
 
 ## Steps
 
-- [ ] TASK-026: `src/app.rs` — `Tab::Harness` as the fifth entry in `Tab::ALL`,
+- [x] TASK-026: `src/app.rs` — `Tab::Harness` as the fifth entry in `Tab::ALL`,
       reachable by `5` and by cycling; `harness: Vec<AssetStatus>` covering both
       scopes, `harness_ready: bool`, `harness_selected: usize`, and
       `filtered_harness()` so `/` filters it the way it filters every other tab.
-- [ ] TASK-027: `src/event.rs` + `src/app.rs` — load the harness state in
+- [x] TASK-027: `src/event.rs` + `src/app.rs` — load the harness state in
       `spawn_blocking` and deliver it as an `AppEvent`, exactly as the health
       check does.
       **Why off the runtime:** classification stats every managed path and reads
       every copied file to compare it; that belongs off the async worker threads,
       and `spawn_health_check` is the pattern already there (PAT-003).
-- [ ] TASK-028: `src/ui/harness.rs` — a banner of one line per scope naming the
+- [x] TASK-028: `src/ui/harness.rs` — a banner of one line per scope naming the
       directory, whether a receipt exists, the link style, and the counts
       (`project  /repo/.claude   6 skills, 6 commands, linked`  /  `global
       ~/.claude   not installed`), above a table of assets with their state
@@ -41,7 +41,7 @@ to lose. Everything before it is reachable from the command line.
       **Why the banner is two fixed lines rather than a list:** "where is it
       installed" has exactly two possible answers on this machine, and a reader
       should get both without moving the cursor (REQ-004, REQ-005).
-- [ ] TASK-029: `src/app.rs` + `src/ui/mod.rs` — `i` installs and `u`
+- [x] TASK-029: `src/app.rs` + `src/ui/mod.rs` — `i` installs and `u`
       uninstalls the selected scope, both behind a confirmation modal reusing
       `draw_picker`'s centred-rect treatment and spelling out the step count;
       the run goes through the same `build_install_plan` / `build_uninstall_plan`
@@ -50,7 +50,7 @@ to lose. Everything before it is reachable from the command line.
       **Why the same path and not a shortcut:** two ways to mutate is two places
       for `--dry-run` and the blocked-on-unmanaged rule to be wrong, and the TUI
       is the one with no `--dry-run` to fall back on (CON-002, SEC-001).
-- [ ] TASK-030: `src/ui/statusbar.rs` — the hint line gains `[i] install  [u]
+- [x] TASK-030: `src/ui/statusbar.rs` — the hint line gains `[i] install  [u]
       uninstall` while the tab is active; tests — a `TestBackend` render asserts
       the banner names both scopes and that a skill name and its state reach the
       screen, in the shape of the existing docs-tab render test; the confirmation

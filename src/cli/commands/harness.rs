@@ -249,10 +249,8 @@ async fn install(
 ) -> Result<ExitCode> {
     use crate::cli::LinkStyleArg;
     use crate::core::harness::install::plan::{self as install_plan, InstallOptions, Selection};
-    use crate::core::harness::install::receipt::{
-        Entry as ReceiptEntry, LinkStyle, Receipt, ReceiptScope,
-    };
-    use crate::core::plan::{Outcome, Plan};
+    use crate::core::harness::install::receipt::{LinkStyle, Receipt, ReceiptScope};
+    use crate::core::plan::Plan;
 
     let vendor = Vendor::parse(&install_args.vendor).ok_or_else(|| {
         usage(format!(
@@ -347,11 +345,6 @@ async fn install(
         LinkStyleArg::Link => LinkStyle::Symlink,
         LinkStyleArg::Copy => LinkStyle::Copy,
     });
-    let source_label = match &source {
-        asset::Source::Tree(path) => path.display().to_string(),
-        asset::Source::Embedded => "embedded".to_string(),
-    };
-
     let mut plan = Plan::default();
     if scope == ReceiptScope::Project && !install_args.no_corpus {
         let scaffold = crate::core::harness::install::corpus_init::build_scaffold_plan(&root)?;
@@ -368,11 +361,6 @@ async fn install(
         force: install_args.force,
         selection: selection.clone(),
     };
-    let resolved_style = style.unwrap_or(match (&source, scope) {
-        (asset::Source::Tree(_), ReceiptScope::Project) => LinkStyle::Symlink,
-        _ => LinkStyle::Copy,
-    });
-
     let asset_plan = install_plan::build_install_plan(&source, &options)?;
     for step in asset_plan.steps {
         plan.push(step);
@@ -387,45 +375,12 @@ async fn install(
     // (`install_plan::step_id`/`parse_step_id`), so the receipt is built
     // straight from what actually happened rather than re-deriving it from
     // the selection.
-    let any_failed = reports.iter().any(|r| r.outcome == Outcome::Failed);
-    if !ctx.dry_run && !any_failed {
-        let new_entries: Vec<ReceiptEntry> = reports
-            .iter()
-            .filter(|r| matches!(r.outcome, Outcome::Ran | Outcome::Skipped))
-            .filter_map(|r| install_plan::parse_step_id(&r.id))
-            .map(|(kind, name)| {
-                let target = state::target_path(
-                    vendor,
-                    &root,
-                    &asset::Asset {
-                        kind,
-                        name: name.clone(),
-                        files: Vec::new(),
-                    },
-                );
-                ReceiptEntry {
-                    kind: kind.into(),
-                    name,
-                    path: target,
-                    style: resolved_style,
-                }
-            })
-            .collect();
-
-        if !new_entries.is_empty() {
-            let receipt_path = Receipt::path_for(scope, &root)?;
-            // Merge with whatever the receipt already recorded — a repeat
-            // install with a narrower `--skill` selection must not forget
-            // entries an earlier, broader run put there.
-            let mut merged = Receipt::load(&receipt_path)?
-                .map(|r| r.entries)
-                .unwrap_or_default();
-            for entry in new_entries {
-                merged.retain(|e| !(e.kind == entry.kind && e.name == entry.name));
-                merged.push(entry);
-            }
-            let receipt = Receipt::new(scope, vendor.label(), &source_label, merged);
-            receipt.save(&receipt_path)?;
+    if !ctx.dry_run {
+        crate::core::harness::install::record::record_install(
+            scope, vendor, &root, &source, &reports,
+        )?;
+        let receipt_path = Receipt::path_for(scope, &root)?;
+        if receipt_path.is_file() {
             ctx.note(format!(
                 "harness: wrote {} ({} scope)",
                 receipt_path.display(),
@@ -448,7 +403,6 @@ async fn uninstall(
 ) -> Result<ExitCode> {
     use crate::core::harness::install::plan::{self as install_plan, Selection};
     use crate::core::harness::install::receipt::{Receipt, ReceiptScope};
-    use crate::core::plan::Outcome;
 
     let vendor = Vendor::parse(&uninstall_args.vendor).ok_or_else(|| {
         usage(format!(
@@ -509,37 +463,24 @@ async fn uninstall(
     let (exit, reports) = install::execute_and_collect(ctx, "harness uninstall", plan).await?;
 
     if !ctx.dry_run {
-        let mut updated = receipt;
-        for report in &reports {
-            if matches!(report.outcome, Outcome::Ran | Outcome::Skipped)
-                && let Some((kind, name)) = install_plan::parse_step_id(&report.id)
-            {
-                updated.remove_entry(kind.into(), &name);
-            }
-        }
-
-        if updated.is_empty() || uninstall_args.purge {
-            Receipt::delete(&receipt_path)?;
-            ctx.note(format!(
-                "harness: {} {}",
-                if updated.is_empty() {
-                    "removed empty receipt"
-                } else {
-                    "purged receipt"
-                },
-                receipt_path.display()
-            ));
-        } else {
-            updated.save(&receipt_path)?;
-            ctx.note(format!("harness: updated {}", receipt_path.display()));
-        }
-
-        // Tidy up: a vendor directory this uninstall emptied is removed too.
-        // `remove_dir` refuses on anything non-empty, so this is a no-op
-        // whenever something else — someone's own skill, a partial
-        // selection — is still there.
-        let _ = std::fs::remove_dir(vendor.skills_dir(&root));
-        let _ = std::fs::remove_dir(vendor.commands_dir(&root));
+        use crate::core::harness::install::record::{self, UninstallOutcome};
+        let outcome = record::record_uninstall(
+            scope,
+            vendor,
+            &root,
+            receipt,
+            &reports,
+            uninstall_args.purge,
+        )?;
+        ctx.note(format!(
+            "harness: {} {}",
+            match outcome {
+                UninstallOutcome::DeletedEmpty => "removed empty receipt",
+                UninstallOutcome::Purged => "purged receipt",
+                UninstallOutcome::Updated => "updated",
+            },
+            receipt_path.display()
+        ));
     }
 
     Ok(exit)

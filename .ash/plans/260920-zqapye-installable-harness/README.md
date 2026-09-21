@@ -153,7 +153,7 @@ which is a real change in this codebase's safety story.
 | 2 | `pinst harness install` | [phase-02.md](phase-02.md) | Done |
 | 3 | `pinst harness uninstall` | [phase-03.md](phase-03.md) | Done |
 | 4 | The interactive picker | [phase-04.md](phase-04.md) | Done |
-| 5 | The Harness tab | [phase-05.md](phase-05.md) | Proposed |
+| 5 | The Harness tab | [phase-05.md](phase-05.md) | Done |
 | 6 | Retire `scripts/agents-wire.sh` | [phase-06.md](phase-06.md) | Proposed |
 
 ## Affected Files
