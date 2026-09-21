@@ -1,6 +1,13 @@
 /target
 /dist
 
+# What `just wire` / `pinst harness install` wrote on this machine. This
+# repo's own .claude/ links are committed directly (they predate the
+# installer and stay that way — see .agents/README.md), so the receipt is
+# purely local bookkeeping: every contributor running `just wire` gets their
+# own timestamp and absolute paths, which is noise in a diff, not a change.
+/.ash/harness.json
+
 # Scratch files the unattended /distil run writes at the repo root. None is
 # ever committed — the commit step names its paths explicitly — but the
 # dry-run patch is built with `git add -N .`, which picked pr-body.md up and

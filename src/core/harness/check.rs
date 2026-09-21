@@ -69,6 +69,11 @@ pub fn run(corpus: &Corpus) -> Vec<Finding> {
     check_lessons(corpus, &mut findings);
     check_distillation(corpus, &mut findings);
     check_index(corpus, &mut findings);
+    // The projection invariants the old bash wiring script's `--check` used to
+    // own: every skill's frontmatter well-formed, and project scope's
+    // `.claude/` agreeing with `.agents/`. One command now carries what
+    // `just harness` previously needed two to say.
+    findings.extend(super::install::check::run(corpus.root.path()));
     findings
 }
 

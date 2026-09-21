@@ -96,10 +96,11 @@ Both are written by `plan-learnings` and read by `pinst harness`:
   `mechanized` or `retired`. A `mechanized` lesson also carries
   **`**Check:**`**, naming the finding id that now enforces it
   (`phase.logged-not-done`, `wire.missing` — an id, not a description). That
-  id must exist somewhere under `src/` or `scripts/`, in *either* checker:
-  `pinst harness check` owns the corpus invariants and
-  `scripts/agents-wire.sh` owns the skill projection, and a lesson may be
-  mechanized by either. `pinst harness check` reports
+  id must exist somewhere under `src/`, and `pinst harness check` is the one
+  checker now — it owns both the corpus invariants and the skill/command
+  projection, which used to be two commands (`pinst harness check` and
+  the old bash wiring script's `--check`) and are one since `pinst harness
+  install` replaced the script. `pinst harness check` reports
   `lesson.unenforced` when the id is nowhere to be found, because a lesson
   claiming enforcement it does not have is worse than one honestly marked
   `prose` — it tells the next reader the problem is handled.
@@ -136,60 +137,63 @@ will later ask about.
 
 ## Slash commands are the entry points
 
-`.claude/commands/` holds one command per lifecycle stage. They exist rather
+`.agents/commands/` holds one command per lifecycle stage, projected into
+`.claude/commands/` the same way the skills are (below). They exist rather
 than relying on the model to pick the right skill unprompted, and each one
 front-loads the context that stage always needs — the plan corpus for
 `/plan`, the in-progress plans for `/implement`, the diff and scope
 vocabulary for `/cc` — so the skill starts with its inputs already in hand
 instead of spending its first three tool calls collecting them.
 
-## How the skills reach a runtime
+## How the skills and commands reach a runtime
 
-**No agent runtime reads `.agents/skills/.`** Claude Code reads
-`.claude/skills/`. So the skills are *projected*:
+**No agent runtime reads `.agents/` directly.** Claude Code reads
+`.claude/skills/` and `.claude/commands/`. So both are *projected*:
 
 ```sh
 just wire        # .claude/skills/<name> -> ../../.agents/skills/<name>
+                  # .claude/commands/<name>.md -> ../../.agents/commands/<name>.md
 ```
 
-The links are relative and committed, so a fresh clone or a new worktree
-arrives already wired; `just wire` is only needed after adding, renaming, or
-deleting a skill. `.agents/` stays canonical because it is the cross-vendor
-convention — adding a second runtime means one more entry in
-`TARGET_DIRS` in `scripts/agents-wire.sh`, not a second copy of every skill.
+`just wire` is `pinst harness install --scope project --all` — the same
+command that installs the harness into a repo that has never had it, or into
+`~/.claude` for global scope; run against a repo that is already wired, it
+reports every asset `Skipped` and changes nothing. The links are relative
+and committed, so a fresh clone or a new worktree arrives already wired;
+`just wire` is only needed after adding, renaming, or deleting a skill or
+command. `.agents/` stays canonical because it is the cross-vendor
+convention — adding a second runtime is one more entry in
+`core::harness::vendor::Vendor`, not a second copy of every skill.
 
-This mirrors what pinst does with `configs/`: one source tree, symlinked
-into the place the consumer looks, so edits round-trip with no sync step.
+This mirrors what pinst does with `configs/`: one source tree, embedded into
+the binary and symlinked into the place the consumer looks when a checkout
+exists, so edits round-trip with no sync step.
 
 If a runtime turns out not to follow symlinked skill directories,
-`scripts/agents-wire.sh --copy` writes real copies instead, and
-`--check` still verifies them — the projection is the contract, the link
-style is an implementation detail.
+`pinst harness install --copy` writes real copies instead — `pinst harness
+check` verifies either shape, and `pinst harness status` reports which one
+is in effect and at which scope (project, global, or both) — the projection
+is the contract, the link style is an implementation detail.
 
 ## The checks
 
-Both are in `just qc`, so the harness is held to the same standard as the
-Rust. Both use pinst's own exit-code contract: `0` clean, `2` usage, `3` ran
-fine and found things to act on.
+In `just qc`, using pinst's own exit-code contract: `0` clean, `2` usage,
+`3` ran fine and found things to act on.
 
 ```sh
-just harness                      # both of the below
-scripts/agents-wire.sh --check    # every skill wired, names match their dirs
-pinst harness check               # the corpus invariants
-pinst harness check --json        # ... as a machine-readable envelope
-just index                        # regenerate .ash/INDEX.md
+just harness            # pinst harness check — corpus invariants + wiring, in one command
+pinst harness check --json   # ... as a machine-readable envelope
+pinst harness status         # where the harness is installed, project and global
+just index                   # regenerate .ash/INDEX.md
 ```
 
-The corpus half is a pinst subcommand rather than a script, so a machine
-that installed the release binary gets these checks with nothing to clone —
-which is also why it discovers the corpus by walking up from the working
-directory for a `.ash/`, not by looking beside pinst's own `manifest.toml`.
-It runs against whatever repo you are standing in.
-
-Skill projection is still bash, deliberately: `agents-wire.sh` writes
-symlinks into a vendor directory and has nothing to do with the corpus. So
-`just harness` is one binary and one script, and "the harness needs no
-`scripts/`" is true of the corpus checks and not yet of the recipe.
+`pinst harness check` is a pinst subcommand rather than a script, so a
+machine that installed the release binary gets these checks — corpus
+invariants *and* skill/command wiring, one command for both now — with
+nothing to clone. It discovers the corpus by walking up from the working
+directory for a `.ash/`, not by looking beside pinst's own `manifest.toml`,
+so it runs against whatever repo you are standing in; "the harness needs no
+`scripts/`" is true of the whole thing now, install and uninstall included.
 
 `pinst harness check` enforces what the skills previously only asserted in prose:
 indices unique, quoted, and matching their directory; required frontmatter
@@ -373,6 +377,6 @@ already gives each line of work its own checkout.
    the trigger condition, listing the phrasings a user would actually say,
    the way the existing four do.
 2. `just wire`.
-3. If it is a lifecycle entry point, add a `.claude/commands/<name>.md` that
+3. If it is a lifecycle entry point, add a `.agents/commands/<name>.md` that
    pre-loads its context, and add a row to the routing table above.
 4. `just harness`.

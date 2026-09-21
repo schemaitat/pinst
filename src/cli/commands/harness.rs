@@ -138,7 +138,7 @@ impl StatusItem {
 /// than by trusting a receipt. A receipt says what an install *did*; this
 /// says what is actually there, which is the question `status` exists to
 /// answer even when nothing was ever installed by this binary at all (a
-/// hand-wired repo, or one still running `agents-wire.sh`).
+/// hand-wired repo, or one still running the old bash wiring script).
 fn status(ctx: &Ctx, args: &HarnessArgs, status_args: &HarnessStatusArgs) -> Result<ExitCode> {
     let vendor = Vendor::parse(&status_args.vendor).ok_or_else(|| {
         usage(format!(

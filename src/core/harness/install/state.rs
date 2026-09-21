@@ -7,7 +7,8 @@
 //! known list of files, but a vendor's skills or commands directory is a
 //! directory a person also puts things in by hand, and `pinst harness
 //! status` has to say so rather than pretend it does not exist — this is
-//! what carries over `agents-wire.sh`'s `wire.unmanaged` finding.
+//! what carries over the equivalent finding the old bash wiring script
+//! used to emit for the same situation.
 
 use std::path::{Path, PathBuf};
 

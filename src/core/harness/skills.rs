@@ -178,13 +178,36 @@ pub fn run(corpus: &Corpus, options: &Options<'_>) -> Report {
     };
 
     let tally = issue_tally(corpus);
+    // Read the same state `pinst harness status`/`install` compute, rather
+    // than a second, narrower "does the path exist" check of its own — two
+    // implementations of "is this skill wired" is exactly the drift this
+    // harness exists to detect.
+    let wired: std::collections::BTreeSet<String> = super::install::state::status(
+        &super::asset::resolve_source(),
+        super::vendor::Vendor::Claude,
+        corpus.root.path(),
+    )
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|row| row.kind == super::install::state::AssetKindLabel::Skill && row.state.satisfied())
+    .map(|row| row.name)
+    .collect();
+
     for dir in skill_dirs(&skills_dir) {
         let name = dir.file_name().unwrap().to_string_lossy().to_string();
         let file = dir.join("SKILL.md");
         if !file.is_file() {
             continue;
         }
-        let row = grade(corpus, &name, &file, &tally, options, &mut report.findings);
+        let row = grade(
+            corpus,
+            &name,
+            &file,
+            &tally,
+            options,
+            &mut report.findings,
+            wired.contains(&name),
+        );
         let row = match counts.as_ref() {
             None => row,
             Some(counts) => {
@@ -234,6 +257,7 @@ fn grade(
     tally: &BTreeMap<String, usize>,
     options: &Options<'_>,
     findings: &mut Vec<Finding>,
+    wired: bool,
 ) -> SkillRow {
     let text = std::fs::read_to_string(file).unwrap_or_default();
     let fm = frontmatter::parse(&text).ok().flatten();
@@ -313,7 +337,7 @@ fn grade(
     };
 
     SkillRow {
-        wired: corpus.root.wired_dir().join(name).exists(),
+        wired,
         name: name.to_string(),
         produces,
         windowed,

@@ -47,15 +47,14 @@ jobs:
 
       # The fourth `qc` step, spelled out like the three above rather than
       # shelling out to `just`, so CI needs no extra tooling. Checks that the
-      # skills in .agents/ are wired into the directory the runtime actually
-      # reads, and that the .ash/ plan corpus is internally consistent; either
-      # exits 3 if it has drifted.
+      # skills/commands in .agents/ are wired into the directories the
+      # runtime actually reads, and that the .ash/ plan corpus is internally
+      # consistent; exits 3 if either has drifted.
       #
       # Spelling the steps out here instead of calling `just qc` is what lets
-      # this file drift from the justfile, and it did: the corpus half became
-      # `pinst harness check` and this step went on calling a script that no
-      # longer exists. Change one, change the other.
+      # this file drift from the justfile, and it did once already: the
+      # corpus half became `pinst harness check` and this step went on
+      # calling a script that no longer existed. Change one, change the
+      # other — there is only the one command now, which is most of the fix.
       - name: Harness
-        run: |
-          scripts/agents-wire.sh --check
-          cargo run --quiet -- harness check
+        run: cargo run --quiet -- harness check

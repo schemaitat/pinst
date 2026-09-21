@@ -117,7 +117,7 @@ impl CorpusRoot {
         self.root.join(".agents/skills")
     }
 
-    /// Where `agents-wire.sh` projects them for Claude Code.
+    /// Where `pinst harness install` projects them for Claude Code.
     pub fn wired_dir(&self) -> PathBuf {
         self.root.join(".claude/skills")
     }

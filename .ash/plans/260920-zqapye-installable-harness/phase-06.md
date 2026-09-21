@@ -2,7 +2,7 @@
 id: 260920-zqapye
 slug: installable-harness
 phase: 6
-status: Proposed
+status: Done
 ---
 
 # Phase 6 — Retire `scripts/agents-wire.sh`
@@ -27,7 +27,7 @@ drift this harness exists to detect, and this one is about itself (ALT-001).
 
 ## Steps
 
-- [ ] TASK-031: `src/core/harness/install/check.rs` — port every finding the
+- [x] TASK-031: `src/core/harness/install/check.rs` — port every finding the
       script emits, each id written as a **string literal**, never assembled
       from fragments: the six projection findings (missing, not-a-link, broken,
       orphan, unmanaged, stale) and the five source validations (no-manifest,
@@ -40,22 +40,22 @@ drift this harness exists to detect, and this one is about itself (ALT-001).
       **Note:** the unquoted-value case now falls out of the strict frontmatter
       parser rather than an `awk` heuristic, so it should get *better*, not just
       ported — the parser already refuses what the heuristic guessed at.
-- [ ] TASK-032: `src/core/harness/check.rs` — call the projection checks for
+- [x] TASK-032: `src/core/harness/check.rs` — call the projection checks for
       project scope as part of `pinst harness check`, so one command carries what
       `just harness` previously needed two to say; `src/core/harness/skills.rs` —
       `wired` reads Phase 1's state function instead of its own `.exists()`, so
       the report and the checker cannot disagree about what "wired" means.
-- [ ] TASK-033: delete `scripts/agents-wire.sh`; `justfile` — `wire` becomes
+- [x] TASK-033: delete `scripts/agents-wire.sh`; `justfile` — `wire` becomes
       `pinst harness install --scope project --all`, and `harness` drops its
       first line, leaving `pinst harness check`.
-- [ ] TASK-034: repoint the remaining callers — `.github/workflows/ci.yml` (the
+- [x] TASK-034: repoint the remaining callers — `.github/workflows/ci.yml` (the
       harness step), `scripts/distil-guard.sh` (the `WIRE` variable and its two
       call sites), and `.github/workflows/distil.yml` (the `--allowedTools`
       entry naming the script).
       **Why the workflow's allowlist matters:** an unattended run that is denied
       the tool it was told to use fails in a way that looks like the model
       refusing rather than the harness being misconfigured.
-- [ ] TASK-035: documentation — `.agents/README.md`'s "How the skills reach a
+- [x] TASK-035: documentation — `.agents/README.md`'s "How the skills reach a
       runtime", "The checks" and "Adding a skill" sections (step 2 becomes
       `pinst harness install`, and the commands now live in `.agents/commands/`);
       `README.md`'s command table and its `.agents/` row;
@@ -66,14 +66,14 @@ drift this harness exists to detect, and this one is about itself (ALT-001).
       `lesson.unenforced` by itself, which is exactly what happened in
       `260920-wtburh` — the lesson resolved against freshly written prose and
       went silent when the real emitter was moved away (RISK-003).
-- [ ] TASK-036: prove the enforcement is real, the way that plan proved it: move
+- [x] TASK-036: prove the enforcement is real, the way that plan proved it: move
       `src/core/harness/install/check.rs` aside, run `pinst harness check`, and
       confirm LESSON-007 now reports as unenforced; restore it and confirm the
       finding clears. Record both outcomes in the run log.
       **Why by experiment and not by reading:** the property is "a grep over the
       tree finds this id in code", and the only way to know a grep finds
       something is to take it away.
-- [ ] TASK-037: `.ash/CHANGELOG.log` entry and `just review`, confirming the
+- [x] TASK-037: `.ash/CHANGELOG.log` entry and `just review`, confirming the
       skills report still grades all six skills and that `wired` is true for
       each — the column whose backing function changed in TASK-032.
 

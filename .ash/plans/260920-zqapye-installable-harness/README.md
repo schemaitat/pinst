@@ -1,7 +1,7 @@
 ---
 id: 260920-zqapye
 slug: installable-harness
-status: In Progress
+status: Done
 created: 2026-09-20
 updated: 2026-09-21
 areas: [harness, agents, cli, tui]
@@ -154,7 +154,7 @@ which is a real change in this codebase's safety story.
 | 3 | `pinst harness uninstall` | [phase-03.md](phase-03.md) | Done |
 | 4 | The interactive picker | [phase-04.md](phase-04.md) | Done |
 | 5 | The Harness tab | [phase-05.md](phase-05.md) | Done |
-| 6 | Retire `scripts/agents-wire.sh` | [phase-06.md](phase-06.md) | Proposed |
+| 6 | Retire `scripts/agents-wire.sh` | [phase-06.md](phase-06.md) | Done |
 
 ## Affected Files
 - **FILE-001**: `.claude/commands/*.md` → `.agents/commands/*.md` — six slash
