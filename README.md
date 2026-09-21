@@ -39,14 +39,24 @@ binary — so they answer on a machine with no checkout.
 
 ## Install
 
+Linux (x86_64) and macOS (Apple Silicon and Intel). A prebuilt binary ships
+for each; anything else builds from source automatically.
+
+On macOS, the manifest installs most tools through [Homebrew](https://brew.sh)
+(`brew`, an eighth install method alongside `apt`) — the manifest bootstraps
+it if it is not already there. `build-essential` has no macOS equivalent:
+doctor reports it as `tool.unsupported.build-essential` and names
+`xcode-select --install`, the Xcode Command Line Tools, as the remediation.
+
 On a fresh machine — no clone, no Rust toolchain:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/schemaitat/pinst/main/scripts/install.sh | sh
 ```
 
-That downloads the latest release binary, checks it against the `.sha256`
-published beside it, and puts it in `~/.local/bin`. From there:
+That downloads the latest release binary for this machine's platform, checks
+it against the `.sha256` published beside it, and puts it in `~/.local/bin`.
+From there:
 
 ```sh
 pinst bootstrap --dry-run    # read the plan first
@@ -176,6 +186,7 @@ optional `bin` (the PATH binary name), `version_cmd`, and `version_regex`
 | `github_release` | `repo`, `asset`, `dest` | `confirm` | Downloads the asset, extracts with `tar` |
 | `nvm` | | `version` | Sources `nvm.sh` and installs that version |
 | `git_clone` | `url`, `dest` | `depth` | `git clone` (upgrades with `git pull --ff-only`) |
+| `brew` | `formulae` | `cask` | `brew install [--cask] <formulae>` — never `sudo`; Homebrew refuses to run as root |
 | `manual` | `note` | | Nothing — doctor reports the note |
 
 Examples of the less obvious ones:
@@ -199,6 +210,42 @@ from the parser, so it cannot drift from what pinst actually accepts.
 
 Adding a whole new install *method* is a module in `src/core/exec/`
 implementing the `Executor` trait, plus a variant on `manifest::Install`.
+
+### Platforms
+
+pinst runs on Linux and macOS. Every command accepts `--platform <linux|macos>`
+to plan for a platform other than the one pinst is running on (falling back to
+`PINST_PLATFORM`, then the host) — useful for inspecting what a macOS run
+would do from a Linux machine, or vice versa.
+
+A tool whose base `install` method the target platform cannot run at all —
+`apt` on macOS, `brew` on Linux — is skipped rather than planned, and reported
+by `pinst doctor` as `tool.unsupported.<name>` at info severity. Give it a
+`[tool.platform.<name>]` block to say what that platform should actually do
+instead, where `<name>` is `linux` or `macos`:
+
+```toml
+[[tool]]
+name = "ripgrep"
+install = { method = "apt", packages = ["ripgrep"] }
+
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["ripgrep"] }
+```
+
+Only the fields that actually differ need restating — `detect`, `install`,
+`upgrade`, `requires` and `post_install` are all overridable, and anything
+left out is inherited from the tool's base definition. A platform that
+cannot install the tool at all gets a note instead of a substitution:
+
+```toml
+  [tool.platform.macos]
+  unsupported = "Xcode Command Line Tools provide cc/make: xcode-select --install"
+```
+
+`unsupported` and the substituting fields are mutually exclusive — a tool a
+platform cannot install has nothing else to override.
 
 ### Dependencies and ordering
 
@@ -594,9 +641,18 @@ honest.
 
 Nothing is released by hand. release-please reads the Conventional Commits on
 `main` and keeps a release PR open; merging it bumps the version, writes
-`CHANGELOG.md`, tags `v<x.y.z>` and publishes a release with the musl binary,
-its checksum and a build provenance attestation attached. The release stays a
-draft until those assets are in place, so
-`/releases/latest/download/pinst-x86_64-unknown-linux-musl.tar.gz` — the URL
-`install.sh` and `pinst update pinst` both resolve — never points at an empty
-release.
+`CHANGELOG.md`, tags `v<x.y.z>` and publishes a release with three binaries,
+their checksums and a build provenance attestation attached:
+
+| Asset | Platform |
+|-------|----------|
+| `pinst-x86_64-unknown-linux-musl.tar.gz` | Linux x86_64 |
+| `pinst-aarch64-apple-darwin.tar.gz` | macOS, Apple Silicon |
+| `pinst-x86_64-apple-darwin.tar.gz` | macOS, Intel |
+
+The release stays a draft until all three are in place, so
+`/releases/latest/download/pinst-<target>.tar.gz` — the URL `install.sh` and
+`pinst update pinst` both resolve, `<target>` picked from the machine's own
+`uname` — never points at an empty release. A platform with no prebuilt
+binary here (or a download that fails to verify) falls back to building from
+source; `PINST_BUILD_FROM_SOURCE=1` forces that path outright.

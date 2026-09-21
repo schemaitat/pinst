@@ -49,7 +49,7 @@ rather than the stale one the message described.
 even when — especially when — the instruction sounds confident and was
 presumably accurate when it was written. A duplicated or delayed message is
 exactly the shape of input that can go stale between being written and being
-read. Promoted to LESSON-035.
+read. Promoted to LESSON-038.
 **Skill:** plan-implement
 
 ### ISSUE-002: A command's copy-mode write joined an empty path onto a file target
@@ -104,7 +104,7 @@ ambient discovery.
 validate *against*, resolve every input relative to that root rather than
 accepting a separately-resolved value from the caller — a caller-supplied or
 ambient value can silently point somewhere else, and the failure mode is a
-confident wrong answer, not an error. Promoted to LESSON-036.
+confident wrong answer, not an error. Promoted to LESSON-039.
 **Skill:** none
 
 ### ISSUE-004: The lesson.unenforced trap this module exists about caught this module

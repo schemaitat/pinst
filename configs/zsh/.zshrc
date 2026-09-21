@@ -2,7 +2,22 @@
 export ZSH="$HOME/.oh-my-zsh"
 
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$HOME/.opencode/bin:/opt/nvim-linux-x86_64/bin:$PATH"
+export PATH="$HOME/.opencode/bin:$PATH"
+
+# Linux-only: neovim's github_release install unpacks here. Guarded on
+# existence rather than platform, so this file stays correct on both without
+# needing its own platform-override mechanism (RISK-005) — on macOS, brew's
+# neovim is already on PATH via `brew shellenv` below.
+[ -d /opt/nvim-linux-x86_64/bin ] && export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
+
+# macOS-only: puts brew itself, and everything brew installs, on PATH. The
+# prefix differs by architecture (/opt/homebrew on Apple Silicon, /usr/local
+# on Intel) and must be discovered, never hard-coded (CON-004).
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
 
 ZSH_THEME=""
 

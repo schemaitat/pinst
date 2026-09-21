@@ -104,6 +104,7 @@ pub enum Privilege {
 #[serde(rename_all = "snake_case")]
 pub enum StepKind {
     AptUpdate,
+    BrewUpdate,
     Install,
     Upgrade,
     PostInstall,

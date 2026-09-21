@@ -28,11 +28,23 @@ REPO_URL="${PINST_REPO:-https://github.com/$SLUG.git}"
 INSTALL_DIR="${PINST_INSTALL_DIR:-$HOME/.local/bin}"
 SRC_DIR="${PINST_SRC_DIR:-$HOME/.local/share/pinst/src}"
 VERSION="${PINST_VERSION:-}"
-# The one target releases are built for; anything else builds from source.
-TARGET="x86_64-unknown-linux-musl"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; }
+
+# The release target for this machine's `uname -s`/`uname -m`, or empty when
+# none is built. A lookup table, not a formula: `uname -m` reports `arm64`
+# on Apple Silicon, not `aarch64` the way the Rust target triple spells it,
+# so the two have to be mapped rather than assembled.
+detect_target() {
+  os="$(uname -s)"; arch="$(uname -m)"
+  case "$os/$arch" in
+    Linux/x86_64) echo "x86_64-unknown-linux-musl" ;;
+    Darwin/arm64) echo "aarch64-apple-darwin" ;;
+    Darwin/x86_64) echo "x86_64-apple-darwin" ;;
+    *) return 1 ;;
+  esac
+}
 
 in_checkout() {
   [ -f "Cargo.toml" ] && grep -q '^name = "pinst"' Cargo.toml 2>/dev/null
@@ -63,15 +75,14 @@ verify() {
 # release, no network) so the caller can fall back to building. A download
 # that arrives but fails verification is different: that is a hard stop.
 download_release() {
-  os="$(uname -s)"; arch="$(uname -m)"
-  if [ "$os" != "Linux" ] || [ "$arch" != "x86_64" ]; then
-    log "no prebuilt binary for $os/$arch"
+  target="$(detect_target)" || {
+    log "no prebuilt binary for $(uname -s)/$(uname -m)"
     return 1
-  fi
+  }
   command -v curl >/dev/null 2>&1 || { log "curl not found"; return 1; }
   command -v tar >/dev/null 2>&1 || { log "tar not found"; return 1; }
 
-  asset="pinst-$TARGET.tar.gz"
+  asset="pinst-$target.tar.gz"
   if [ -n "${PINST_RELEASE_BASE:-}" ]; then
     base="$PINST_RELEASE_BASE"
   elif [ -n "$VERSION" ]; then

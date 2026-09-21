@@ -619,7 +619,7 @@ into "the reader's next command succeeds".
 **Seen in:** 260920-juwako-mechanize-lesson-renumbering (ISSUE-005), found on
 review rather than by `just qc`
 
-### LESSON-035: Verify a resume instruction's factual claims before acting on them
+### LESSON-038: Verify a resume instruction's factual claims before acting on them
 **Lesson:** When resuming interrupted work from an instruction describing the
 state to resume from ("you have no commits yet," "you were about to..."),
 check that description against `git log` and the run log before acting on it,
@@ -636,7 +636,7 @@ ground truth; an instruction describing them is a snapshot that can expire.
 **Status:** prose
 **Seen in:** 260920-zqapye-installable-harness (ISSUE-001)
 
-### LESSON-036: A checker given an explicit root must resolve every input relative to that root
+### LESSON-039: A checker given an explicit root must resolve every input relative to that root
 **Lesson:** When a function receives an explicit root to check something
 against, derive every other input (a source tree, a config, a sibling
 directory) from that same root, rather than accepting it from the caller or
@@ -655,3 +655,58 @@ nothing more specific was named; once something more specific *was* named,
 falling back past it answers a different question than was asked.
 **Status:** prose
 **Seen in:** 260920-zqapye-installable-harness (ISSUE-003)
+
+### LESSON-035: A new resolved view over an entity leaves old consumers of its base fields un-migrated
+**Lesson:** When a piece of state gains a context-dependent "effective"
+resolution (a platform, a mode, a tenant), grep for every existing function
+that reads the *base* field directly — not just the fields the new work
+touches, but neighboring fields an older, unrelated function also reads for
+its own purpose. The new work naturally migrates its own call sites; it does
+not naturally surface the ones it never had a reason to look at.
+**Why:** `graph::topo_order` read `Tool::requires` directly, and kept doing
+so for two phases after `Tool::resolve(platform)` gave every install/detect/
+post_install consumer a resolved view. It orders on structure, not on
+installs, so it was never in the diff of "make installs platform-aware" —
+until a platform-only `requires` edge (`ripgrep` on macOS needing
+`homebrew`) made the base-graph order wrong for a real manifest, not just a
+fixture.
+**Status:** prose
+**Seen in:** 260920-qcrrqs-macos-support (ISSUE-001)
+
+### LESSON-036: Protect the case a heuristic already gets right before fixing the case it doesn't
+**Lesson:** When narrowing or widening a comparison that already has a
+known-working case, write that case down as a check before changing
+anything — not just the new failure motivating the fix. A fix aimed at one
+direction of "too strict" or "too loose" can overshoot into the other
+direction for the case that used to pass.
+**Why:** `just dist`'s cross-vs-native check compared only the architecture
+field, which was too strict for a Darwin target (arm64 host, x86_64 target,
+same OS). The instinctive fix — compare the whole triple after the
+architecture — would have been too loose in the other direction: an
+`x86_64-unknown-linux-gnu` host building the existing
+`x86_64-unknown-linux-musl` release target differ in the trailing libc
+field, so a whole-triple comparison would have sent that down `cross` too,
+regressing a case (LESSON-005) the fix wasn't looking at. The right
+granularity — vendor+OS, neither more nor less — only became visible by
+holding both cases at once.
+**Status:** prose
+**Seen in:** 260920-qcrrqs-macos-support (ISSUE-005)
+
+### LESSON-037: A reused narrowing function carries all of its behaviors, not just the one you wanted
+**Lesson:** When a new command narrows a collection by calling an existing
+command's narrowing function "for consistency," check every behavior that
+function bundles, not only the one being reused. A function that filters by
+tag *and* by platform-install-support *and* orders by dependency is three
+behaviors in one call, and a caller that only wants the first inherits the
+other two whether it wants them or not.
+**Why:** `pinst docs search`/`dump --tag` started going through
+`graph::select`, which also drops any tool the current host cannot install
+— correct for a command about to plan an install, wrong for a command
+about to look up documentation. It was invisible on Linux because the
+test's fixture manifest happened to be apt-only tools resolving fine there,
+and `--platform macos` simulation from Linux could not catch it either: the
+bug only exists when `Platform::host()` genuinely resolves to the platform
+being tested, which only a real runner provides. It surfaced on the very
+first real `macos-latest` CI run.
+**Status:** prose
+**Seen in:** 260920-qcrrqs-macos-support (ISSUE-008)

@@ -7,8 +7,8 @@ use crate::core::plan::Action;
 pub struct GitClone;
 
 impl Executor for GitClone {
-    fn install(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::GitClone { url, dest, depth } = &tool.install else {
+    fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::GitClone { url, dest, depth } = install else {
             bail!("git_clone executor called for tool '{}'", tool.name);
         };
         let depth_arg = depth.map(|d| format!("--depth={d} ")).unwrap_or_default();
@@ -17,8 +17,8 @@ impl Executor for GitClone {
         }])
     }
 
-    fn upgrade(&self, tool: &Tool) -> Result<Vec<Action>> {
-        let Install::GitClone { dest, .. } = &tool.install else {
+    fn upgrade(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
+        let Install::GitClone { dest, .. } = install else {
             bail!("git_clone executor called for tool '{}'", tool.name);
         };
         Ok(vec![Action::Shell {

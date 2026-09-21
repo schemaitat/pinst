@@ -220,6 +220,7 @@ mod tests {
             },
             upgrade: None,
             post_install: Vec::new(),
+            platform_overrides: Default::default(),
         }
     }
 

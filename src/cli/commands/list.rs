@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::cli::SelectArgs;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
+use crate::core::manifest::Resolved;
 use crate::core::probe;
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -19,26 +20,37 @@ pub struct ToolStatus {
 
 pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
     let loaded = super::load_manifest(ctx)?;
-    let tools = super::resolve(&loaded, &args.selection())?;
+    let selected = super::resolve(&loaded, ctx, &args.selection())?;
+    let tools = selected.tools;
 
     ctx.note(format!(
-        "manifest: {} ({} tools selected)",
+        "manifest: {} ({} tools selected, {} unsupported on {})",
         loaded.source,
-        tools.len()
+        tools.len(),
+        selected.unsupported.len(),
+        ctx.platform
     ));
 
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, ctx.platform).await;
 
     let items: Vec<ToolStatus> = tools
         .iter()
         .map(|tool| {
             let probe = probes.get(&tool.name);
+            // `tools` is already filtered to what `ctx.platform` supports, so
+            // this is always `Supported`; the base method name is a harmless
+            // fallback for the one caller path (none today) that might hand
+            // in an unfiltered tool.
+            let install_method = match tool.resolve(ctx.platform) {
+                Resolved::Supported(effective) => effective.method_name().to_string(),
+                Resolved::Unsupported(_) => tool.method_name().to_string(),
+            };
             ToolStatus {
                 name: tool.name.clone(),
                 summary: tool.summary.clone(),
                 tags: tool.tags.clone(),
                 requires: tool.requires.clone(),
-                install_method: tool.method_name().to_string(),
+                install_method,
                 installed: probe.map(|p| p.installed).unwrap_or(false),
                 version: probe.and_then(|p| p.version.clone()),
             }

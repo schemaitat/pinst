@@ -13,7 +13,8 @@ use serde::Serialize;
 
 use super::configs::{ConfigSet, FileState};
 use super::exec;
-use super::manifest::{Install, Tool};
+use super::manifest::{Install, Resolved, Tool};
+use super::platform::Platform;
 use super::probe::ProbeResult;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, JsonSchema)]
@@ -62,14 +63,20 @@ pub fn summarize(findings: &[Finding]) -> DoctorSummary {
 }
 
 /// Runs every check and returns the findings, most severe first.
+///
+/// `tools` is expected to already be narrowed to `platform` (the shape
+/// `graph::select` produces) — a tool that platform cannot install has
+/// nothing here to check, and belongs in the caller's
+/// `commands::unsupported_findings` instead.
 pub fn diagnose(
     tools: &[&Tool],
     probes: &BTreeMap<String, ProbeResult>,
     configs: &ConfigSet,
+    platform: Platform,
 ) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
 
-    check_tools(tools, probes, &mut findings);
+    check_tools(tools, probes, platform, &mut findings);
     check_configs(configs, &mut findings)?;
     check_shell(&mut findings);
 
@@ -77,12 +84,39 @@ pub fn diagnose(
     Ok(findings)
 }
 
-fn check_tools(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult>, out: &mut Vec<Finding>) {
+/// The `tool.unsupported.<name>` finding for a tool `graph::select` dropped
+/// for the platform being planned for. Info, not warning — an apt tool
+/// missing on macOS is a correct absence, and a check that fires on a normal
+/// state is a check that gets switched off (LESSON-011).
+pub fn unsupported_finding(name: &str, note: &str) -> Finding {
+    Finding {
+        id: format!("tool.unsupported.{name}"),
+        severity: Severity::Info,
+        message: format!("{name} is not supported on this platform"),
+        remediation: note.to_string(),
+        fixable: false,
+    }
+}
+
+fn check_tools(
+    tools: &[&Tool],
+    probes: &BTreeMap<String, ProbeResult>,
+    platform: Platform,
+    out: &mut Vec<Finding>,
+) {
     for tool in tools {
+        // `tools` is already platform-filtered, so this is always
+        // `Supported` in practice; falling back to the base install rather
+        // than panicking keeps a caller that forgot to filter from crashing
+        // doctor outright.
+        let effective = match tool.resolve(platform) {
+            Resolved::Supported(effective) => effective,
+            Resolved::Unsupported(_) => continue,
+        };
         let installed = probes.get(&tool.name).map(|p| p.installed).unwrap_or(false);
 
         if !installed {
-            match &tool.install {
+            match effective.install {
                 Install::Manual { note } => out.push(Finding {
                     id: format!("tool.manual.{}", tool.name),
                     severity: Severity::Warning,
@@ -106,7 +140,7 @@ fn check_tools(tools: &[&Tool], probes: &BTreeMap<String, ProbeResult>, out: &mu
 
         // Installed, but pinst cannot verify what it got: a piped installer
         // has no version pin and no signature to check (RISK-006).
-        if tool.is_unpinnable() {
+        if effective.is_unpinnable() {
             out.push(Finding {
                 id: format!("tool.unpinnable.{}", tool.name),
                 severity: Severity::Info,
@@ -219,9 +253,16 @@ mod tests {
     #[test]
     fn missing_tools_are_fixable_errors_and_manual_ones_are_not() {
         let manifest = manifest::embedded().unwrap();
-        let tools = select(&manifest, &Selection::default()).unwrap();
+        let tools = select(&manifest, &Selection::default(), Platform::Linux)
+            .unwrap()
+            .tools;
         let mut findings = Vec::new();
-        check_tools(&tools, &probe_map(&tools, &[]), &mut findings);
+        check_tools(
+            &tools,
+            &probe_map(&tools, &[]),
+            Platform::Linux,
+            &mut findings,
+        );
 
         let zsh = findings
             .iter()
@@ -248,12 +289,15 @@ mod tests {
                 names: vec!["claude".to_string()],
                 ..Default::default()
             },
+            Platform::Linux,
         )
-        .unwrap();
+        .unwrap()
+        .tools;
         let mut findings = Vec::new();
         check_tools(
             &tools,
             &probe_map(&tools, &["claude", "curl"]),
+            Platform::Linux,
             &mut findings,
         );
 

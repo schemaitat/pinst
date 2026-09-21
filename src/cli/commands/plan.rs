@@ -10,10 +10,18 @@ use crate::core::probe;
 /// `install --dry-run`, but it never executes even a confirmation prompt.
 pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
     let loaded = super::load_manifest(ctx)?;
-    let tools = super::resolve(&loaded, &args.selection())?;
+    let selected = super::resolve(&loaded, ctx, &args.selection())?;
+    let tools = selected.tools;
+    if !ctx.json && !selected.unsupported.is_empty() {
+        ctx.note(format!(
+            "{} tool(s) skipped: not supported on {}",
+            selected.unsupported.len(),
+            ctx.platform
+        ));
+    }
 
-    let probes = probe::probe_all(&tools).await;
-    let plan = engine::build_install_plan(&tools, &probes)?;
+    let probes = probe::probe_all(&tools, ctx.platform).await;
+    let plan = engine::build_install_plan(&tools, &probes, ctx.platform)?;
 
     if !ctx.json {
         for step in &plan.steps {

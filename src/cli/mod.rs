@@ -45,17 +45,31 @@ pub struct GlobalArgs {
     /// Use this manifest instead of the discovered/embedded one.
     #[arg(long, global = true, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+    /// Plan for this platform instead of the one pinst is running on
+    /// (linux | macos). Falls back to `PINST_PLATFORM`, then the host.
+    #[arg(long, global = true, value_name = "PLATFORM")]
+    pub platform: Option<String>,
 }
 
 impl GlobalArgs {
-    pub fn ctx(&self) -> Ctx {
-        Ctx {
+    pub fn ctx(&self) -> Result<Ctx> {
+        let explicit = self
+            .platform
+            .as_deref()
+            .map(|s| {
+                s.parse::<crate::core::platform::Platform>()
+                    .map_err(|_| crate::core::usage(format!("unrecognized --platform '{s}'")))
+            })
+            .transpose()?;
+        let platform = crate::core::platform::Platform::resolve(explicit)?;
+        Ok(Ctx {
             json: self.json,
             dry_run: self.dry_run,
             yes: self.yes,
             quiet: self.quiet,
             manifest_path: self.manifest.clone(),
-        }
+            platform,
+        })
     }
 }
 
@@ -421,7 +435,7 @@ pub enum SchemaKind {
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
-    let ctx = cli.global.ctx();
+    let ctx = cli.global.ctx()?;
     match &cli.command {
         Commands::List(args) => commands::list::run(&ctx, args).await,
         Commands::Plan(args) => commands::plan::run(&ctx, args).await,

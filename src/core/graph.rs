@@ -4,14 +4,62 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use color_eyre::eyre::Result;
 
+use crate::core::platform::Platform;
 use crate::core::usage;
 
-use super::manifest::{Manifest, Tool};
+use super::manifest::{Manifest, Resolved, Tool};
+
+/// A tool that was in scope for the selection but that `platform` cannot
+/// install — `note` is why, exactly as [`crate::core::manifest::Tool::resolve`]
+/// produced it. Carried separately from the selected tools rather than
+/// silently dropped, so a caller (`pinst doctor`, in particular) can still
+/// report it.
+#[derive(Debug, Clone)]
+pub struct UnsupportedTool {
+    pub name: String,
+    pub note: String,
+}
+
+/// The result of narrowing the manifest for one platform: the tools to plan
+/// for, dependency-ordered, and the ones that were in scope but that the
+/// platform cannot install.
+#[derive(Debug, Clone, Default)]
+pub struct Selected<'m> {
+    pub tools: Vec<&'m Tool>,
+    pub unsupported: Vec<UnsupportedTool>,
+}
 
 /// Returns tool names in dependency order (every tool after everything it
 /// requires). Ties break alphabetically so the order is deterministic — a plan
 /// an agent diffs between runs should not shuffle.
+///
+/// Orders on each tool's *base* `requires` — the edges every platform
+/// agrees on. Used for [`Manifest::validate`]'s cycle check and by callers
+/// that have no platform in hand; a plan that must respect a
+/// platform-specific edge (`ripgrep` on macOS requiring `homebrew`, which
+/// `ripgrep`'s base definition says nothing about) needs
+/// [`topo_order_for`] instead.
 pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
+    topo_order_with(tools, |tool| tool.requires.as_slice())
+}
+
+/// [`topo_order`], but ordering on each tool's *effective* `requires` for
+/// `platform` — the edges a `[tool.platform.<key>]` override adds or
+/// changes. An unsupported tool contributes its base `requires`, matching
+/// `select`'s own closure walk: the tool itself is dropped from the plan,
+/// but its position among tools that still depend on it must stay
+/// well-defined.
+pub fn topo_order_for(tools: &[Tool], platform: Platform) -> Result<Vec<String>> {
+    topo_order_with(tools, move |tool| match tool.resolve(platform) {
+        Resolved::Supported(effective) => effective.requires,
+        Resolved::Unsupported(_) => tool.requires.as_slice(),
+    })
+}
+
+fn topo_order_with<'a>(
+    tools: &'a [Tool],
+    requires_of: impl Fn(&'a Tool) -> &'a [String],
+) -> Result<Vec<String>> {
     let mut dependents: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let mut indegree: BTreeMap<&str, usize> = BTreeMap::new();
 
@@ -19,7 +67,7 @@ pub fn topo_order(tools: &[Tool]) -> Result<Vec<String>> {
         indegree.entry(tool.name.as_str()).or_insert(0);
     }
     for tool in tools {
-        for dep in &tool.requires {
+        for dep in requires_of(tool) {
             dependents.entry(dep.as_str()).or_default().push(&tool.name);
             *indegree.entry(tool.name.as_str()).or_insert(0) += 1;
         }
@@ -78,7 +126,11 @@ impl Selection {
 ///
 /// Explicitly named tools pull in their `requires` closure — asking for
 /// `node` without `nvm` would otherwise produce a plan that cannot succeed.
-pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&'m Tool>> {
+pub fn select<'m>(
+    manifest: &'m Manifest,
+    selection: &Selection,
+    platform: Platform,
+) -> Result<Selected<'m>> {
     let mut wanted: BTreeSet<String> = BTreeSet::new();
 
     if let Some(profile_name) = &selection.profile {
@@ -126,25 +178,46 @@ pub fn select<'m>(manifest: &'m Manifest, selection: &Selection) -> Result<Vec<&
         wanted.extend(manifest.tools.iter().map(|t| t.name.clone()));
     }
 
-    // Pull in the transitive requires closure.
+    // Pull in the transitive requires closure. An unsupported tool's own
+    // `requires` edges are still walked here — its dependents stay wanted
+    // even though the tool itself will be dropped below, and one tool
+    // failing honestly at install time (RISK, engine.rs's existing
+    // contract) is preferable to silently narrowing what a dependent
+    // chain asked for.
     let mut queue: VecDeque<String> = wanted.iter().cloned().collect();
     while let Some(name) = queue.pop_front() {
         let Some(tool) = manifest.tool(&name) else {
             continue;
         };
-        for dep in &tool.requires {
+        let requires: &[String] = match tool.resolve(platform) {
+            Resolved::Supported(effective) => effective.requires,
+            Resolved::Unsupported(_) => &tool.requires,
+        };
+        for dep in requires {
             if wanted.insert(dep.clone()) {
                 queue.push_back(dep.clone());
             }
         }
     }
 
-    let order = topo_order(&manifest.tools)?;
-    Ok(order
-        .into_iter()
-        .filter(|name| wanted.contains(name))
-        .filter_map(|name| manifest.tool(&name))
-        .collect())
+    let order = topo_order_for(&manifest.tools, platform)?;
+    let mut selected = Selected::default();
+    for name in order {
+        if !wanted.contains(&name) {
+            continue;
+        }
+        let Some(tool) = manifest.tool(&name) else {
+            continue;
+        };
+        match tool.resolve(platform) {
+            Resolved::Supported(_) => selected.tools.push(tool),
+            Resolved::Unsupported(note) => selected.unsupported.push(UnsupportedTool {
+                name: tool.name.clone(),
+                note,
+            }),
+        }
+    }
+    Ok(selected)
 }
 
 #[cfg(test)]
@@ -200,8 +273,9 @@ mod tests {
             names: vec!["node".to_string()],
             ..Default::default()
         };
-        let selected: Vec<&str> = select(&manifest, &selection)
+        let selected: Vec<&str> = select(&manifest, &selection, Platform::Linux)
             .unwrap()
+            .tools
             .iter()
             .map(|t| t.name.as_str())
             .collect();
@@ -221,8 +295,9 @@ mod tests {
             profile: Some("minimal".to_string()),
             ..Default::default()
         };
-        let selected: Vec<&str> = select(&manifest, &selection)
+        let selected: Vec<&str> = select(&manifest, &selection, Platform::Linux)
             .unwrap()
+            .tools
             .iter()
             .map(|t| t.name.as_str())
             .collect();
@@ -243,6 +318,7 @@ mod tests {
                 profile: Some("nope".into()),
                 ..Default::default()
             },
+            Platform::Linux,
         )
         .unwrap_err();
         assert!(err.to_string().contains("unknown profile"), "{err}");
@@ -253,8 +329,80 @@ mod tests {
                 names: vec!["nope".into()],
                 ..Default::default()
             },
+            Platform::Linux,
         )
         .unwrap_err();
         assert!(err.to_string().contains("unknown tool"), "{err}");
+    }
+
+    // TEST-004: an apt-only tool set plus one entry whose macOS override
+    // changes only `post_install` (not `install`) — proving per-field
+    // substitution and unsupported-filtering together, on a fixture rather
+    // than the real manifest, since Phase 1 introduces no macOS-capable
+    // install method for the real apt tools to switch to yet.
+    #[test]
+    fn platform_selection_drops_unsupported_apt_tools_and_keeps_field_overrides() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+            [meta]
+            schema_version = 1
+
+            [[tool]]
+            name = "ripgrep"
+            detect = { command = "command -v rg" }
+            install = { method = "apt", packages = ["ripgrep"] }
+
+            [[tool]]
+            name = "direnv"
+            detect = { command = "command -v direnv" }
+            install = { method = "apt", packages = ["direnv"] }
+
+            [[tool]]
+            name = "fd"
+            detect = { command = "command -v fd" }
+            install = { method = "apt", packages = ["fd-find"] }
+            post_install = [
+              { description = "symlink fdfind to fd", command = "ln -sf fdfind fd" },
+            ]
+
+              [tool.platform.macos]
+              post_install = []
+            "#,
+        )
+        .unwrap();
+        manifest.validate().unwrap();
+
+        let selected = select(&manifest, &Selection::default(), Platform::MacOS).unwrap();
+
+        let names: Vec<&str> = selected.tools.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["fd"],
+            "the two apt-only tools have no macos override and are dropped"
+        );
+
+        let unsupported: Vec<&str> = selected
+            .unsupported
+            .iter()
+            .map(|u| u.name.as_str())
+            .collect();
+        assert!(unsupported.contains(&"ripgrep"));
+        assert!(unsupported.contains(&"direnv"));
+
+        let fd = selected.tools[0];
+        let Resolved::Supported(effective) = fd.resolve(Platform::MacOS) else {
+            panic!("fd has a macos override and resolves as supported");
+        };
+        assert!(
+            effective.post_install.is_empty(),
+            "post_install was overridden to empty"
+        );
+        // install was not overridden, so it is inherited unchanged — this
+        // fixture is about proving the substitution mechanism, not about
+        // fd actually being installable via apt on macOS.
+        assert!(matches!(
+            effective.install,
+            crate::core::manifest::Install::Apt { .. }
+        ));
     }
 }

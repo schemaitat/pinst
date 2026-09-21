@@ -20,24 +20,27 @@ pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
 /// selection and their framing, not in what converging means.
 pub async fn converge(ctx: &Ctx, args: &SelectArgs, command: &str) -> Result<ExitCode> {
     let loaded = super::load_manifest(ctx)?;
-    let tools = super::resolve(&loaded, &args.selection())?;
+    let selected = super::resolve(&loaded, ctx, &args.selection())?;
+    let tools = selected.tools;
     let home = home_dir()?;
     let configs = ConfigSet::load(&loaded.manifest, &home)?;
 
     ctx.note(format!(
-        "converging {} tools and {} config files ({})",
+        "converging {} tools and {} config files ({}); {} unsupported on {}",
         tools.len(),
         configs.files.len(),
-        configs.source.describe()
+        configs.source.describe(),
+        selected.unsupported.len(),
+        ctx.platform
     ));
 
-    let probes = probe::probe_all(&tools).await;
+    let probes = probe::probe_all(&tools, ctx.platform).await;
 
     // Tools first, then configs: a config is only useful once the tool that
     // reads it exists.
     let mut plan = Plan::default();
     plan.steps
-        .extend(engine::build_install_plan(&tools, &probes)?.steps);
+        .extend(engine::build_install_plan(&tools, &probes, ctx.platform)?.steps);
     plan.steps.extend(configs.build_plan()?.steps);
 
     let ctx_for_auth = ctx.clone();
@@ -59,8 +62,10 @@ pub async fn converge(ctx: &Ctx, args: &SelectArgs, command: &str) -> Result<Exi
     );
 
     // Re-probe so the closing diagnosis reflects what just happened.
-    let probes = probe::probe_all(&tools).await;
-    let findings = doctor::diagnose(&tools, &probes, &configs)?;
+    let probes = probe::probe_all(&tools, ctx.platform).await;
+    let mut findings = doctor::diagnose(&tools, &probes, &configs, ctx.platform)?;
+    findings.extend(super::unsupported_findings(&selected.unsupported));
+    findings.sort_by(|a, b| a.severity.cmp(&b.severity).then(a.id.cmp(&b.id)));
     let doctor_summary = doctor::summarize(&findings);
 
     if !ctx.json {

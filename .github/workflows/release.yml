@@ -88,16 +88,28 @@ jobs:
   artifacts:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
       id-token: write
       attestations: write
     strategy:
       matrix:
-        # One row today (ASSUMPTION-002: Linux x86_64 is what this manifest
-        # targets). A second platform is a row here, not a rewrite.
-        target: [x86_64-unknown-linux-musl]
+        # Musl builds on the Linux runner it targets; both Darwin triples
+        # build on macos-latest — Apple targets cannot be cross-compiled
+        # from a Linux runner, so a second platform here is a runner change
+        # per row, not a target change alone (CON-002, DEP-002). Whichever
+        # of the two Darwin rows matches macos-latest's own architecture
+        # takes `just dist`'s native path; the other takes its same-OS-cross
+        # path — both are exercised by Apple's own toolchain either way
+        # (ASSUMPTION-004).
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          - target: x86_64-apple-darwin
+            runner: macos-latest
     steps:
       # No `ref:` — the commit this workflow ran on *is* the release commit,
       # and a draft release has no git tag yet for a checkout to resolve.
@@ -116,7 +128,12 @@ jobs:
       # musl-tools gives the build a musl C compiler and cmake builds
       # aws-lc-rs, rustls' crypto provider. With both present the target
       # builds with plain cargo — no container, no cross-toolchain image.
+      # Linux-only: the Darwin rows need no equivalent — aws-lc-rs builds
+      # against the Xcode Command Line Tools the runner image already
+      # carries — so this step is conditioned rather than given a macOS
+      # counterpart.
       - name: Install musl toolchain
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools cmake
 
       # The same recipe a maintainer runs locally, so the released artifact
