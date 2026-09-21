@@ -247,6 +247,50 @@ pub enum HarnessAction {
     RenumberLesson(HarnessRenumberLessonArgs),
     /// Report where the harness is installed: project, global, or both.
     Status(HarnessStatusArgs),
+    /// Project skills and slash commands into a vendor's directories.
+    Install(HarnessInstallArgs),
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum LinkStyleArg {
+    /// Symlink into the source tree (the default for a project install).
+    Link,
+    /// Write real copies (the default for a global install, or when the
+    /// source is embedded).
+    Copy,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HarnessInstallArgs {
+    /// Which scope to install into. `both` is not valid here — install one
+    /// at a time, so the receipt written always describes exactly one.
+    #[arg(long, value_enum, default_value_t = ScopeArg::Project)]
+    pub scope: ScopeArg,
+    /// The runtime to install for. `claude` is the only one today.
+    #[arg(long, default_value = "claude")]
+    pub vendor: String,
+    /// Install only this skill (repeatable). Combine with `--command` to
+    /// select both kinds; with neither given and no `--all`, the picker
+    /// opens at a terminal.
+    #[arg(long = "skill", value_name = "NAME")]
+    pub skills: Vec<String>,
+    /// Install only this command (repeatable).
+    #[arg(long = "command", value_name = "NAME")]
+    pub commands: Vec<String>,
+    /// Install every skill and command.
+    #[arg(long)]
+    pub all: bool,
+    /// Force link or copy style, overriding the scope-based default.
+    #[arg(long, value_enum)]
+    pub style: Option<LinkStyleArg>,
+    /// Replace a target that is a symlink to something else. Never needed
+    /// for a plain drifted file — that is backed up and replaced either way.
+    #[arg(long)]
+    pub force: bool,
+    /// Skip scaffolding `.ash/` when a project install finds none.
+    #[arg(long)]
+    pub no_corpus: bool,
 }
 
 /// Which install scope(s) a harness command acts on.
@@ -342,6 +386,8 @@ pub enum SchemaKind {
     Docs,
     /// JSON Schema for a `pinst harness skills` report row.
     Harness,
+    /// JSON Schema for `.ash/harness.json` / the global harness receipt.
+    HarnessReceipt,
 }
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
@@ -354,7 +400,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
         Commands::Config(args) => commands::config::run(&ctx, args).await,
         Commands::Docs(args) => commands::docs::run(&ctx, args).await,
         Commands::Doctor(args) => commands::doctor::run(&ctx, args).await,
-        Commands::Harness(args) => commands::harness::run(&ctx, args),
+        Commands::Harness(args) => commands::harness::run(&ctx, args).await,
         Commands::Apply(args) => commands::apply::run(&ctx, args).await,
         Commands::Bootstrap(args) => commands::bootstrap::run(&ctx, args).await,
         Commands::Schema(args) => commands::schema::run(&ctx, args),

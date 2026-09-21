@@ -2,7 +2,7 @@
 id: 260920-zqapye
 slug: installable-harness
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — `pinst harness install`
@@ -26,7 +26,7 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
 
 ## Steps
 
-- [ ] TASK-010: verify ASSUMPTION-002 before building on it — install a skill
+- [x] TASK-010: verify ASSUMPTION-002 before building on it — install a skill
       and a command by hand into `~/.claude/skills/` and `~/.claude/commands/`,
       start a session, and confirm both load. Record the outcome in the run log
       either way.
@@ -35,7 +35,7 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
       scope that quietly installs into a directory nobody reads (LESSON-002).
       If commands turn out not to be read globally, install skills only at
       global scope and note it here — nothing downstream depends on the answer.
-- [ ] TASK-011: `src/core/harness/install/receipt.rs` — `Receipt {
+- [x] TASK-011: `src/core/harness/install/receipt.rs` — `Receipt {
       schema_version, scope, vendor, source, style, installed_at,
       pinst_version, entries: Vec<Entry> }` where `Entry { kind, name, path,
       style }`; `path_for(scope)` returning `<root>/.ash/harness.json` for
@@ -49,7 +49,7 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
       **Why `deny_unknown_fields`:** it is hand-editable the moment someone
       debugs an install, and serde silently drops what it does not recognise
       (LESSON-017).
-- [ ] TASK-012: `src/core/harness/install/plan.rs` — `build_install_plan`, one
+- [x] TASK-012: `src/core/harness/install/plan.rs` — `build_install_plan`, one
       `Step` per asset with id `harness:skill:<name>` / `harness:command:<name>`:
       `Skipped` when already in the desired state, `Blocked` on `Foreign` or
       `Unmanaged` without `--force`, `Backup` then `Link`/`Write` otherwise.
@@ -58,7 +58,7 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
       **Why the default flips by scope:** a link from `~/.claude/skills` into a
       git worktree dangles the moment that worktree is removed, and this repo
       is normally worked on through disposable worktrees (ALT-007).
-- [ ] TASK-013: `src/core/harness/install/corpus_init.rs` — create
+- [x] TASK-013: `src/core/harness/install/corpus_init.rs` — create
       `.ash/{plans/,INDEX.md,LEARNINGS.md,CHANGELOG.log}` when the scope is
       project and `.ash/` is absent, as ordinary plan steps so `--dry-run`
       reports them; skipped entirely under `--no-corpus`, and never touching an
@@ -66,7 +66,7 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
       **Why:** the skills are instructions for producing a corpus. Installing
       them into a repo with nowhere to write one leaves an agent to invent the
       layout, which is how the format drifts (REQ-007).
-- [ ] TASK-014: `src/cli/mod.rs` + `src/cli/commands/harness.rs` —
+- [x] TASK-014: `src/cli/mod.rs` + `src/cli/commands/harness.rs` —
       `HarnessAction::Install(HarnessInstallArgs)` with `--scope`, `--vendor`,
       `--skill <name>` (repeatable), `--command <name>` (repeatable), `--all`,
       `--copy`, `--link`, `--force`, `--no-corpus`; execute via
@@ -75,10 +75,10 @@ command that deletes, is the failure this plan most wants to avoid (SEC-001).
       **Why that ordering:** a receipt written before execution describes an
       intention, and uninstall would then try to remove paths that were never
       created.
-- [ ] TASK-015: `src/cli/mod.rs` + `src/cli/commands/schema.rs` — a
+- [x] TASK-015: `src/cli/mod.rs` + `src/cli/commands/schema.rs` — a
       `SchemaKind` variant emitting the receipt's JSON Schema, so the file an
       agent may have to read is documented by the same type that writes it.
-- [ ] TASK-016: tests — install into a tempdir project and assert the six links;
+- [x] TASK-016: tests — install into a tempdir project and assert the six links;
       a second run reports every step `Skipped`; `--dry-run` writes no file and
       no receipt; global scope from an embedded source produces copies; an
       existing real directory at a managed path comes back `Blocked` and

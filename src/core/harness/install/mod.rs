@@ -2,4 +2,7 @@
 //! `.claude/skills/` and `.claude/commands/` (or their `~/.claude/`
 //! equivalents), and undoing exactly that.
 
+pub mod corpus_init;
+pub mod plan;
+pub mod receipt;
 pub mod state;

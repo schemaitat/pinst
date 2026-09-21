@@ -1,10 +1,13 @@
-//! `pinst harness` — the checks over this repo's own agent corpus.
+//! `pinst harness` — the checks over this repo's own agent corpus, and now
+//! also the install/uninstall of the harness itself.
 //!
-//! The odd one out among the command families, in two ways worth stating
-//! where someone will read them. It loads **no manifest**: its subject is the
-//! repo the caller is standing in, not the machine. And it is **synchronous**
-//! — nothing here probes a tool or talks to the network, so there is no
-//! reason to make every caller `.await` a future that never yields.
+//! The odd one out among the command families in one way worth stating where
+//! someone will read it: it loads **no manifest**, because its subject is
+//! the repo the caller is standing in, not the machine. `run` is `async`
+//! only so `install` can share `commands::install::execute_and_report` —
+//! the same plan executor `config apply` uses — with every other command;
+//! nothing here actually awaits network or process I/O beyond what that
+//! shared executor already does.
 //!
 //! The exit codes carry the verdict as everywhere else: `0` clean, `2` a
 //! usage error, `3` ran fine and found things to act on.
@@ -15,10 +18,11 @@ use color_eyre::eyre::Result;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::cli::commands::install;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
-    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessNewIdArgs, HarnessRenumberLessonArgs,
-    HarnessSkillsArgs, HarnessStatusArgs, ScopeArg,
+    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs, HarnessNewIdArgs,
+    HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs, ScopeArg,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
@@ -40,7 +44,7 @@ pub struct MintedId {
     pub id: String,
 }
 
-pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
+pub async fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
     match &args.action {
         // `new-id` comes first because it is the one action that needs no
         // corpus: minting an id is what you do *before* there is a plan
@@ -52,9 +56,11 @@ pub fn run(ctx: &Ctx, args: &HarnessArgs) -> Result<ExitCode> {
         HarnessAction::RenumberLesson(renumber) => {
             self::renumber_lesson(ctx, &load(ctx, args)?, renumber)
         }
-        // `status` reads `.agents/` and the vendor directories it projects
-        // into, not the `.ash/` corpus, so it does not go through `load`.
+        // `status` and `install` read `.agents/` and the vendor directories
+        // it projects into, not the `.ash/` corpus, so neither goes through
+        // `load`.
         HarnessAction::Status(status_args) => self::status(ctx, args, status_args),
+        HarnessAction::Install(install_args) => self::install(ctx, args, install_args).await,
     }
 }
 
@@ -221,6 +227,163 @@ fn print_scope_banner(label: &str, root: &std::path::Path, rows: &[AssetStatus])
             row.state
         );
     }
+}
+
+/// `pinst harness install` — project the selected skills and commands into
+/// a vendor's directories, scaffold `.ash/` if a project install finds none,
+/// then write a receipt so `uninstall` (and `status`) know exactly what this
+/// run did.
+///
+/// Reuses `commands::install::execute_and_collect`, the same plan executor
+/// `config apply` runs through, so `--dry-run`, the confirmation gate and
+/// the JSON envelope cannot drift from what every other mutating command in
+/// pinst does (`CON-002`).
+async fn install(
+    ctx: &Ctx,
+    args: &HarnessArgs,
+    install_args: &HarnessInstallArgs,
+) -> Result<ExitCode> {
+    use crate::cli::LinkStyleArg;
+    use crate::core::harness::install::plan::{self as install_plan, InstallOptions, Selection};
+    use crate::core::harness::install::receipt::{
+        Entry as ReceiptEntry, LinkStyle, Receipt, ReceiptScope,
+    };
+    use crate::core::plan::{Outcome, Plan};
+
+    let vendor = Vendor::parse(&install_args.vendor).ok_or_else(|| {
+        usage(format!(
+            "unknown vendor '{}' (try: claude)",
+            install_args.vendor
+        ))
+    })?;
+    let scope: ReceiptScope = match install_args.scope {
+        ScopeArg::Both => {
+            return Err(usage(
+                "`--scope both` is not valid for install — a receipt describes one scope; \
+                 run install twice, once per scope",
+            ));
+        }
+        other => other.try_into().expect("Both was just excluded above"),
+    };
+
+    let root = match scope {
+        ReceiptScope::Project => InstallRoot::resolve(args.root.as_deref())?
+            .path()
+            .to_path_buf(),
+        ReceiptScope::Global => home_dir()?,
+    };
+
+    // Phase 4 replaces this branch with the interactive picker when nothing
+    // was named and a terminal is attached; until then an install with no
+    // selection is a usage error rather than a silent no-op or a guess at
+    // what the caller wanted.
+    let selection = if install_args.all {
+        Selection::All
+    } else if !install_args.skills.is_empty() || !install_args.commands.is_empty() {
+        Selection::Named {
+            skills: install_args.skills.clone(),
+            commands: install_args.commands.clone(),
+        }
+    } else {
+        return Err(usage(
+            "nothing selected — pass --all, or one or more --skill/--command",
+        ));
+    };
+
+    let style = install_args.style.map(|s| match s {
+        LinkStyleArg::Link => LinkStyle::Symlink,
+        LinkStyleArg::Copy => LinkStyle::Copy,
+    });
+
+    let source = asset::resolve_source();
+    let source_label = match &source {
+        asset::Source::Tree(path) => path.display().to_string(),
+        asset::Source::Embedded => "embedded".to_string(),
+    };
+
+    let mut plan = Plan::default();
+    if scope == ReceiptScope::Project && !install_args.no_corpus {
+        let scaffold = crate::core::harness::install::corpus_init::build_scaffold_plan(&root)?;
+        for step in scaffold.steps {
+            plan.push(step);
+        }
+    }
+
+    let options = InstallOptions {
+        vendor,
+        scope,
+        root: root.clone(),
+        style,
+        force: install_args.force,
+        selection: selection.clone(),
+    };
+    let resolved_style = style.unwrap_or(match (&source, scope) {
+        (asset::Source::Tree(_), ReceiptScope::Project) => LinkStyle::Symlink,
+        _ => LinkStyle::Copy,
+    });
+
+    let asset_plan = install_plan::build_install_plan(&source, &options)?;
+    for step in asset_plan.steps {
+        plan.push(step);
+    }
+
+    let (exit, reports) = install::execute_and_collect(ctx, "harness install", plan).await?;
+
+    // Only a real, failure-free run earns a receipt: one written before
+    // execution would describe an intention rather than what is on disk, and
+    // uninstall would then try to remove paths that were never created. Each
+    // report's step id already carries the asset's kind and name
+    // (`install_plan::step_id`/`parse_step_id`), so the receipt is built
+    // straight from what actually happened rather than re-deriving it from
+    // the selection.
+    let any_failed = reports.iter().any(|r| r.outcome == Outcome::Failed);
+    if !ctx.dry_run && !any_failed {
+        let new_entries: Vec<ReceiptEntry> = reports
+            .iter()
+            .filter(|r| matches!(r.outcome, Outcome::Ran | Outcome::Skipped))
+            .filter_map(|r| install_plan::parse_step_id(&r.id))
+            .map(|(kind, name)| {
+                let target = state::target_path(
+                    vendor,
+                    &root,
+                    &asset::Asset {
+                        kind,
+                        name: name.clone(),
+                        files: Vec::new(),
+                    },
+                );
+                ReceiptEntry {
+                    kind: kind.into(),
+                    name,
+                    path: target,
+                    style: resolved_style,
+                }
+            })
+            .collect();
+
+        if !new_entries.is_empty() {
+            let receipt_path = Receipt::path_for(scope, &root)?;
+            // Merge with whatever the receipt already recorded — a repeat
+            // install with a narrower `--skill` selection must not forget
+            // entries an earlier, broader run put there.
+            let mut merged = Receipt::load(&receipt_path)?
+                .map(|r| r.entries)
+                .unwrap_or_default();
+            for entry in new_entries {
+                merged.retain(|e| !(e.kind == entry.kind && e.name == entry.name));
+                merged.push(entry);
+            }
+            let receipt = Receipt::new(scope, vendor.label(), &source_label, merged);
+            receipt.save(&receipt_path)?;
+            ctx.note(format!(
+                "harness: wrote {} ({} scope)",
+                receipt_path.display(),
+                scope.label()
+            ));
+        }
+    }
+
+    Ok(exit)
 }
 
 /// Rewrites `.ash/INDEX.md`, or with `--check` reports whether it is current.

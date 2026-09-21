@@ -21,6 +21,19 @@ pub async fn run(ctx: &Ctx, args: &SelectArgs) -> Result<ExitCode> {
 /// Runs a plan and renders it in both output modes. Shared with `update`,
 /// `apply`, and `bootstrap` so every mutating command reports identically.
 pub async fn execute_and_report(ctx: &Ctx, command: &str, plan: Plan) -> Result<ExitCode> {
+    let (exit, _reports) = execute_and_collect(ctx, command, plan).await?;
+    Ok(exit)
+}
+
+/// `execute_and_report`, but also hands back every step's outcome. `harness
+/// install` needs this: a receipt can only record the assets a run actually
+/// materialized (`Ran` or already `Skipped`), and the envelope alone does not
+/// give a caller that back in a typed form worth matching on.
+pub async fn execute_and_collect(
+    ctx: &Ctx,
+    command: &str,
+    plan: Plan,
+) -> Result<(ExitCode, Vec<StepReport>)> {
     if plan.pending_count() == 0 {
         ctx.note("nothing to do — everything is already in the desired state");
     }
@@ -98,10 +111,11 @@ pub async fn execute_and_report(ctx: &Ctx, command: &str, plan: Plan) -> Result<
         ));
     }
 
-    ctx.finish(
-        Envelope::new(command, status, reports)
+    let exit = ctx.finish(
+        Envelope::new(command, status, reports.clone())
             .dry_run(ctx.dry_run)
             .errors(errors)
             .summary(serde_json::to_value(&summary)?),
-    )
+    )?;
+    Ok((exit, reports))
 }

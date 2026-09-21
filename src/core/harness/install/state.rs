@@ -13,12 +13,12 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::super::asset::{self, Asset, AssetKind, Source};
 use super::super::vendor::Vendor;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetState {
     /// A symlink pointing at the source tree.
@@ -56,7 +56,7 @@ pub struct AssetStatus {
 /// `AssetKind`, spelled for serialization — `AssetKind` itself carries no
 /// `Serialize` because it lives in `asset`, which nothing else needed to
 /// serialize before this.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetKindLabel {
     Skill,
