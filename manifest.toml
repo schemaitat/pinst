@@ -9,8 +9,12 @@
 #   tags       used by [profile.*] to select a subset for a given machine
 #   detect     how to tell whether it is already installed, and at what version
 #   install    method + its fields (apt | cargo | curl_script | shell |
-#              github_release | nvm | git_clone | manual)
+#              github_release | nvm | git_clone | brew | manual)
 #   post_install  extra steps; confirm = true gates them behind --yes
+#   platform   [tool.platform.<linux|macos>] overrides detect/install/
+#              upgrade/requires/post_install for that platform, or marks the
+#              tool unsupported there with a note. Unlisted fields are
+#              inherited from the tool's base definition.
 #
 # [[config]]   one entry per config package; source is a subdir of configs/,
 #              whose tree mirrors $HOME
@@ -24,7 +28,10 @@ schema_version = 1
 name = "homebrew"
 summary = "macOS package manager; what the brew install method uses"
 tags = ["base"]
-requires = ["curl"]
+# No `requires = ["curl"]`: macOS ships curl as part of the OS, and `curl`'s
+# own macOS override requires homebrew (TASK-018) — an edge back the other
+# way would be a two-node cycle. Unlike Linux, where curl is a package pinst
+# installs, on macOS it is simply already there.
 detect = { command = "command -v brew", bin = "brew", version_cmd = "brew --version" }
 # The `shell` method, not `curl_script`: NONINTERACTIVE is read from the
 # environment by the installer script itself, not from an argument, and
@@ -48,12 +55,22 @@ tags = ["base"]
 detect = { command = "command -v curl", bin = "curl", version_cmd = "curl --version" }
 install = { method = "apt", packages = ["curl"] }
 
+  # macOS ships curl, so this step normally has nothing to do; the override
+  # exists for the one machine where it does not (TASK-018).
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["curl"] }
+
 [[tool]]
 name = "git"
 summary = "Version control; required to clone oh-my-zsh plugins"
 tags = ["base"]
 detect = { command = "command -v git", bin = "git", version_cmd = "git --version" }
 install = { method = "apt", packages = ["git"] }
+
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["git"] }
 
 [[tool]]
 name = "unzip"
@@ -62,6 +79,10 @@ tags = ["base"]
 detect = { command = "command -v unzip", bin = "unzip", version_cmd = "unzip -v" }
 install = { method = "apt", packages = ["unzip"] }
 
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["unzip"] }
+
 [[tool]]
 name = "build-essential"
 summary = "gcc/make, needed to compile treesitter parsers and native crates"
@@ -69,6 +90,14 @@ tags = ["base", "dev"]
 detect = { command = "command -v gcc && command -v make", bin = "gcc", version_cmd = "gcc --version" }
 install = { method = "apt", packages = ["build-essential"] }
 upgrade = { method = "apt", package = "gcc" }
+
+  # `xcode-select --install` opens a GUI dialog and cannot be driven
+  # non-interactively, so this is declared unsupported rather than automated
+  # (DEP-003, TASK-019). tree-sitter-cli still requires this tool and will
+  # plan a `cargo install` whose compiler comes from the CLT rather than
+  # from a pinst-managed step — that is correct, not a gap.
+  [tool.platform.macos]
+  unsupported = "Xcode Command Line Tools provide cc/make: xcode-select --install"
 
 # --- shell -----------------------------------------------------------------
 
@@ -79,10 +108,20 @@ tags = ["base", "shell"]
 detect = { command = "command -v zsh", bin = "zsh", version_cmd = "zsh --version" }
 install = { method = "apt", packages = ["zsh"] }
 
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["zsh"] }
+
 [[tool.post_install]]
 description = "make zsh the default login shell"
 command = "chsh -s \"$(command -v zsh)\""
-skip_if = "[ \"${SHELL##*/}\" = zsh ]"
+# macOS ships zsh as the default shell already, so this is usually a no-op
+# there via the first clause. The second clause is what a *Homebrew* zsh
+# needs: `chsh -s` against a shell not listed in /etc/shells fails outright,
+# and editing that file is a root, system-wide action a post-install step
+# should not take unasked (ASSUMPTION-002, TASK-022) — so an unlisted zsh
+# is treated the same as "already done" rather than attempted and failed.
+skip_if = "[ \"${SHELL##*/}\" = zsh ] || ! grep -qx \"$(command -v zsh)\" /etc/shells 2>/dev/null"
 confirm = true
 
 [[tool]]
@@ -94,6 +133,9 @@ detect = { command = "[ -d \"$HOME/.oh-my-zsh\" ]" }
 help_cmd = ""   # a framework, not a command: nothing to capture
 # Uses the sh -c form rather than a pipe: the omz installer reads --unattended
 # from $1, which `curl | sh -s --` would not deliver the same way.
+# Portable as written (TASK-017 audit): the omz installer is pure POSIX
+# shell with no OS branch — it clones a git repo and templates .zshrc, the
+# same on macOS as on Linux.
 install = { method = "shell", command = "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" \"\" --unattended" }
 
 [[tool]]
@@ -122,6 +164,8 @@ summary = "Prompt engine; .zshrc initializes it with the catppuccin theme"
 tags = ["shell"]
 requires = ["curl", "unzip"]
 detect = { command = "command -v oh-my-posh", bin = "oh-my-posh", version_cmd = "oh-my-posh --version" }
+# Portable as written (TASK-017 audit): the installer detects `uname -s`
+# and fetches the darwin binary on a Mac.
 install = { method = "curl_script", url = "https://ohmyposh.dev/install.sh", shell = "bash", github_repo = "JanDeDobbeleer/oh-my-posh" }
 
 # --- editor / dev ----------------------------------------------------------
@@ -145,6 +189,14 @@ detect = { command = "command -v fd || command -v fdfind", bin = "fd", version_c
 install = { method = "apt", packages = ["fd-find"] }
 upgrade = { method = "apt", package = "fd-find" }
 
+  # Homebrew's fd formula installs the binary under its real name, so there
+  # is no Debian-style rename to work around — post_install is overridden to
+  # empty rather than inherited (TASK-018).
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["fd"] }
+  post_install = []
+
 [[tool.post_install]]
 description = "symlink fdfind to ~/.local/bin/fd (Debian ships it under the other name)"
 command = "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$(command -v fdfind)\" \"$HOME/.local/bin/fd\""
@@ -158,12 +210,24 @@ requires = ["curl"]
 detect = { command = "command -v nvim || [ -x /opt/nvim-linux-x86_64/bin/nvim ]", bin = "nvim", version_cmd = "nvim --version || /opt/nvim-linux-x86_64/bin/nvim --version" }
 install = { method = "github_release", repo = "neovim/neovim", asset = "nvim-linux-x86_64.tar.gz", dest = "/opt", confirm = true }
 
+  # `github_release` is a portable *method*, but this entry's asset
+  # (nvim-linux-x86_64.tar.gz) is not — nothing mechanical catches that, only
+  # this per-tool read (TASK-020, ASSUMPTION-003). Brew also removes the
+  # `/opt` write, its `sudo`, and the `confirm = true` gate that write needed.
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  detect = { command = "command -v nvim", bin = "nvim", version_cmd = "nvim --version" }
+  install = { method = "brew", formulae = ["neovim"] }
+
 [[tool]]
 name = "rust"
 summary = "Rust toolchain via rustup; .zshenv sources ~/.cargo/env"
 tags = ["dev"]
 requires = ["curl"]
 detect = { command = "command -v cargo", bin = "cargo", version_cmd = "rustc --version" }
+# Portable as written (TASK-017 audit): rustup's installer is the
+# canonical cross-platform Rust installer and branches on `uname -s`
+# for macOS/Linux/etc. itself.
 install = { method = "shell", command = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y" }
 upgrade = { method = "none" }
 
@@ -181,6 +245,8 @@ summary = "Python tool runner"
 tags = ["dev"]
 requires = ["curl"]
 detect = { command = "command -v uv", bin = "uv", version_cmd = "uv --version" }
+# Portable as written (TASK-017 audit): astral's installer detects
+# darwin/linux and arm64/x86_64 and fetches the matching release asset.
 install = { method = "curl_script", url = "https://astral.sh/uv/install.sh", shell = "sh", github_repo = "astral-sh/uv" }
 
 [[tool]]
@@ -192,6 +258,9 @@ detect = { command = "[ -s \"$HOME/.nvm/nvm.sh\" ]" }
 # A shell function, not a binary — `pinst docs` has to source it before nvm
 # will say anything.
 help_cmd = "bash -c '. \"$HOME/.nvm/nvm.sh\" && nvm --help'"
+# Portable as written (TASK-017 audit): pure POSIX shell, no compiled
+# binary and no OS branch — it clones/downloads nvm.sh itself, identical
+# on macOS and Linux.
 install = { method = "curl_script", url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh", shell = "bash", github_repo = "nvm-sh/nvm" }
 
 [[tool]]
@@ -218,6 +287,10 @@ summary = "GitHub CLI; .gitconfig uses it as a credential helper"
 tags = ["git"]
 detect = { command = "command -v gh", bin = "gh", version_cmd = "gh --version" }
 install = { method = "apt", packages = ["gh"] }
+
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["gh"] }
 
 [[tool]]
 name = "delta"
@@ -253,6 +326,8 @@ summary = "Terminal multiplexer for coding agents"
 tags = ["agents"]
 requires = ["curl"]
 detect = { command = "command -v herdr", bin = "herdr", version_cmd = "herdr --version" }
+# Portable as written (TASK-017 audit): the installer's own `case "$(uname
+# -s)"` names Darwin explicitly and fetches the macos/<arch> release asset.
 install = { method = "curl_script", url = "https://herdr.dev/install.sh", shell = "sh" }
 
 [[tool]]
@@ -261,6 +336,8 @@ summary = "Local-first task manager; .zshrc aliases av to `aven tui`"
 tags = ["agents"]
 requires = ["curl"]
 detect = { command = "command -v aven", bin = "aven", version_cmd = "aven --version" }
+# Portable as written (TASK-017 audit): the installer's own `case "$(uname
+# -s)"` names Darwin explicitly ("aven supports macOS and Linux").
 install = { method = "curl_script", url = "https://raw.githubusercontent.com/raine/aven/main/scripts/install", shell = "bash", github_repo = "raine/aven" }
 
 [[tool]]
@@ -269,6 +346,8 @@ summary = "AI coding agent"
 tags = ["agents"]
 requires = ["curl", "node"]
 detect = { command = "command -v opencode", bin = "opencode", version_cmd = "opencode --version" }
+# Portable as written (TASK-017 audit): the installer's own `case` maps
+# `Darwin*` to `darwin-x64`/`darwin-arm64` release assets.
 install = { method = "curl_script", url = "https://opencode.ai/install", shell = "bash", github_repo = "sst/opencode" }
 
 [[tool]]
@@ -277,6 +356,9 @@ summary = "Claude Code; .zshrc aliases clauded"
 tags = ["agents"]
 requires = ["curl"]
 detect = { command = "command -v claude", bin = "claude", version_cmd = "claude --version" }
+# Portable as written (TASK-017 audit): the installer's own `case "$(uname
+# -s)"` maps Darwin to a macOS build, and even detects Rosetta 2 to correct
+# the reported architecture.
 install = { method = "curl_script", url = "https://claude.ai/install.sh", shell = "bash" }
 
 # --- pinst itself ----------------------------------------------------------
@@ -287,6 +369,15 @@ summary = "This tool, installed from its own releases so it can update itself"
 tags = ["dev"]
 detect = { command = "command -v pinst", bin = "pinst", version_cmd = "pinst --version" }
 install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-x86_64-unknown-linux-musl.tar.gz", dest = "$HOME/.local/bin" }
+
+  # Names the aarch64 asset, not x86_64: the overwhelming majority of Macs
+  # sold since 2020 are Apple Silicon (ASSUMPTION-004). This manifest entry
+  # has one `asset` string and no architecture axis, so an Intel Mac's
+  # `pinst update pinst` is handled by install.sh's own `uname -m` check
+  # (TASK-032, Phase 5) rather than here — recorded so the asymmetry reads
+  # as deliberate, not as an oversight (TASK-021, REQ-006).
+  [tool.platform.macos]
+  install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-aarch64-apple-darwin.tar.gz", dest = "$HOME/.local/bin" }
 
 # --- configs ---------------------------------------------------------------
 # source is a subdirectory of configs/ whose tree mirrors $HOME.

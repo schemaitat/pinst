@@ -1,0 +1,24 @@
+what = "macOS's package manager: what the `brew` install method uses to install everything else on a Mac."
+when = "Rarely directly — pinst's brew-installed tools call it for you. Reach for it yourself to inspect what a formula would do (`brew info <formula>`) or to install something outside the manifest."
+keywords = ["macos", "package manager", "brew", "formula", "cask", "darwin"]
+status = "draft"
+see_also = ["ripgrep", "direnv", "delta", "neovim"]
+gotchas = """
+pinst declares this `unsupported` on Linux (there is nothing to install) and
+installs it on macOS via its official shell installer with NONINTERACTIVE=1,
+which still needs sudo once to create the prefix (/opt/homebrew on Apple
+Silicon, /usr/local on Intel — never hard-coded, always discovered).
+
+Homebrew refuses to run as root, so `pinst`'s brew executor never prefixes
+sudo onto anything it emits after the bootstrap step. Every tool whose
+`[tool.platform.macos]` block sets `method = "brew"` requires this one, so
+`pinst plan --platform macos` always orders it first among them.
+"""
+
+[[recipes]]
+cmd = "brew --version"
+does = "Confirm the install landed and see which Homebrew release is running."
+
+[[recipes]]
+cmd = "brew info --json=v2 --formula <formula>"
+does = "The machine-readable form pinst's own upgrade check reads to find a formula's latest stable version."

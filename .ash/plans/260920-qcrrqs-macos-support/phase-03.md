@@ -2,7 +2,7 @@
 id: 260920-qcrrqs
 slug: macos-support
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — A manifest and configs that cover macOS
@@ -32,7 +32,7 @@ than no artifact, and this order is what prevents that.
 
 ## Steps
 
-- [ ] TASK-017: `manifest.toml` (FILE-013) — audit each of the seven
+- [x] TASK-017: `manifest.toml` (FILE-013) — audit each of the seven
       `curl_script` and `shell` entries (`oh-my-zsh`, `oh-my-posh`, `uv`,
       `nvm`, `rust`, `herdr`, `aven`, `opencode`, `claude`) against its
       installer's own documentation and record the verdict as a comment on
@@ -42,7 +42,7 @@ than no artifact, and this order is what prevents that.
       discovered during implementation. The comment is what stops the next
       reader from re-doing the audit, and what makes a wrong verdict
       attributable later.
-- [ ] TASK-018: `manifest.toml` (FILE-013) — add `[tool.platform.macos]`
+- [x] TASK-018: `manifest.toml` (FILE-013) — add `[tool.platform.macos]`
       blocks for the remaining apt tools that have a Homebrew formula:
       `curl`, `git`, `unzip`, `zsh`, `fd`, `gh`. Each sets
       `method = "brew"` and `requires = ["homebrew"]`.
@@ -53,7 +53,7 @@ than no artifact, and this order is what prevents that.
       `fdfind` post-install step, since Homebrew installs the binary under
       its real name (LESSON-004's neighbourhood: the Debian rename is a
       packaging detail, not a property of the tool).
-- [ ] TASK-019: `manifest.toml` (FILE-013) — declare `build-essential`
+- [x] TASK-019: `manifest.toml` (FILE-013) — declare `build-essential`
       `unsupported` on macOS with the note
       `Xcode Command Line Tools provide cc/make: xcode-select --install`.
       Why: DEP-003. `xcode-select --install` opens a GUI dialog and cannot be
@@ -65,7 +65,7 @@ than no artifact, and this order is what prevents that.
       than from a pinst-managed step — that is correct, and it is why the
       dropped-dependency behaviour in TASK-007 had to be "carry on", not
       "drop the dependents too".
-- [ ] TASK-020: `manifest.toml` (FILE-013) — override `neovim` on macOS to
+- [x] TASK-020: `manifest.toml` (FILE-013) — override `neovim` on macOS to
       `method = "brew", formulae = ["neovim"]`, replacing the
       `nvim-linux-x86_64.tar.gz` / `/opt` install.
       Why: the entry that proves `Platform::admits` was deliberately not the
@@ -73,7 +73,7 @@ than no artifact, and this order is what prevents that.
       Linux-only *asset*, so nothing mechanical could have caught this — only
       the per-tool read in TASK-017. Brew also removes the `/opt` write and
       its `sudo`, and with it the `confirm = true` gate.
-- [ ] TASK-021: `manifest.toml` (FILE-013) — override pinst's own entry on
+- [x] TASK-021: `manifest.toml` (FILE-013) — override pinst's own entry on
       macOS so `asset` is `pinst-aarch64-apple-darwin.tar.gz`, and add an
       `[tool.platform.macos]` note that the Intel asset is selected by
       `install.sh` rather than here.
@@ -84,7 +84,7 @@ than no artifact, and this order is what prevents that.
       majority of Macs are; `install.sh`, which can read `uname -m`, is where
       the Intel case is handled (Phase 5, TASK-032). This asymmetry is
       recorded in the entry so it is not read as an oversight.
-- [ ] TASK-022: `manifest.toml` (FILE-013) — on the `zsh` entry's `chsh`
+- [x] TASK-022: `manifest.toml` (FILE-013) — on the `zsh` entry's `chsh`
       post-install step, extend `skip_if` so it also skips when the resolved
       zsh is absent from `/etc/shells`.
       Why: ASSUMPTION-002. macOS ships zsh as the default login shell, so the
@@ -93,7 +93,7 @@ than no artifact, and this order is what prevents that.
       there fails with a bare non-zero exit. Skipping is the right outcome —
       editing `/etc/shells` is a root action with a system-wide effect, well
       outside what a post-install step should do unasked.
-- [ ] TASK-023: `configs/zsh/.zshrc` (FILE-014) — guard the
+- [x] TASK-023: `configs/zsh/.zshrc` (FILE-014) — guard the
       `/opt/nvim-linux-x86_64/bin` `PATH` entry so it is added only when the
       directory exists, and add a `brew shellenv` eval guarded the same way,
       resolving the prefix from wherever `brew` actually is.
@@ -104,7 +104,7 @@ than no artifact, and this order is what prevents that.
       packages are not platform-aware — only tools are, and extending the
       override mechanism to configs to solve two `PATH` lines would be a
       schema change bought for nothing.
-- [ ] TASK-024: `docs/tools/homebrew.toml` (FILE-020) and `README.md`
+- [x] TASK-024: `docs/tools/homebrew.toml` (FILE-020) and `README.md`
       (FILE-019) — add the docs page for the `homebrew` entry, and document
       the `brew` install method row, the `[tool.platform.<name>]` block with a
       worked example, and `--platform`.

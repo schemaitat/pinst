@@ -518,6 +518,120 @@ mod tests {
         );
     }
 
+    // TEST-016: a macOS plan contains no apt step and no sudo outside the
+    // Homebrew bootstrap, and reports build-essential as unsupported with
+    // the xcode-select note.
+    #[test]
+    fn macos_plan_has_no_apt_and_names_the_xcode_clt_remediation() {
+        let manifest = manifest::embedded().unwrap();
+        let selected = select(&manifest, &Selection::default(), Platform::MacOS).unwrap();
+        let plan = build_install_plan(
+            &selected.tools,
+            &probes(&[], &selected.tools),
+            Platform::MacOS,
+        )
+        .unwrap();
+
+        assert!(
+            plan.steps.iter().all(|s| s.kind != StepKind::AptUpdate),
+            "a macOS plan should contain no apt-get step"
+        );
+        for step in &plan.steps {
+            for action in &step.actions {
+                if let Action::Shell { command } = action {
+                    // The only sudo in this manifest's macOS surface is
+                    // Homebrew's own bootstrap, which is a `shell` install
+                    // step, not one this loop should be finding sudo in —
+                    // every *brew* step must be sudo-free (RISK-002).
+                    if step.tool.as_deref() != Some("homebrew") {
+                        assert!(!command.contains("sudo"), "{}: {command}", step.id);
+                    }
+                }
+            }
+        }
+
+        let be = selected
+            .unsupported
+            .iter()
+            .find(|u| u.name == "build-essential")
+            .expect("build-essential has no macOS install path");
+        assert!(be.note.contains("xcode-select"), "{}", be.note);
+    }
+
+    // TEST-017: the resolved macOS neovim entry is a brew install with no
+    // confirm gate and no /opt destination.
+    #[test]
+    fn macos_neovim_is_a_brew_install_with_no_confirm_or_opt() {
+        let manifest = manifest::embedded().unwrap();
+        let neovim = manifest.tool("neovim").unwrap();
+        let Resolved::Supported(effective) = neovim.resolve(Platform::MacOS) else {
+            panic!("neovim has a macos override");
+        };
+        match effective.install {
+            Install::Brew { formulae, .. } => assert_eq!(formulae, &["neovim".to_string()]),
+            other => panic!("expected a brew install, got {other:?}"),
+        }
+    }
+
+    // TEST-018: the resolved macOS pinst entry names the aarch64 Darwin
+    // asset, and the Linux one is unchanged.
+    #[test]
+    fn macos_pinst_asset_is_the_aarch64_darwin_tarball() {
+        let manifest = manifest::embedded().unwrap();
+        let pinst = manifest.tool("pinst").unwrap();
+
+        let Resolved::Supported(linux) = pinst.resolve(Platform::Linux) else {
+            panic!("pinst is supported on linux");
+        };
+        match linux.install {
+            Install::GithubRelease { asset, .. } => {
+                assert_eq!(asset, "pinst-x86_64-unknown-linux-musl.tar.gz")
+            }
+            other => panic!("expected a github_release install, got {other:?}"),
+        }
+
+        let Resolved::Supported(macos) = pinst.resolve(Platform::MacOS) else {
+            panic!("pinst is supported on macos");
+        };
+        match macos.install {
+            Install::GithubRelease { asset, .. } => {
+                assert_eq!(asset, "pinst-aarch64-apple-darwin.tar.gz")
+            }
+            other => panic!("expected a github_release install, got {other:?}"),
+        }
+    }
+
+    // TEST-019: zsh's chsh step is skipped when the resolved zsh is absent
+    // from /etc/shells — exercised against a temporary stand-in file rather
+    // than the real /etc/shells (LESSON-018).
+    #[test]
+    fn chsh_is_skipped_when_zsh_is_not_listed_in_etc_shells() {
+        let manifest = manifest::embedded().unwrap();
+        let zsh = manifest.tool("zsh").unwrap();
+        let post = &zsh.post_install[0];
+        let skip_if = post.skip_if.as_deref().unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let fake_shells = dir.path().join("shells");
+        std::fs::write(&fake_shells, "/bin/bash\n").unwrap();
+
+        // Substitute the real /etc/shells for the fake one, and a fake zsh
+        // path that is not listed in it, and a $SHELL that is not zsh.
+        let check = skip_if
+            .replace("/etc/shells", fake_shells.to_str().unwrap())
+            .replace("\"$(command -v zsh)\"", "/usr/local/bin/zsh");
+        let status = std::process::Command::new("sh")
+            .env("SHELL", "/bin/bash")
+            .arg("-c")
+            .arg(&check)
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "skip_if should succeed (skip the chsh step) when zsh is absent from /etc/shells: {check}"
+        );
+    }
+
     #[test]
     fn manual_tools_are_blocked_with_instructions() {
         let manifest = manifest::embedded().unwrap();

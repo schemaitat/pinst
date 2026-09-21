@@ -592,6 +592,31 @@ mod tests {
         assert!(!manifest.configs.is_empty());
     }
 
+    // TEST-015: every tool in the embedded manifest has a macOS answer —
+    // either it resolves as supported, or it is explicitly marked
+    // unsupported with a hand-written note. A tool that falls through to
+    // the *generated* note (no override at all, apt not admitted) fails
+    // this test, so a future apt-only tool added without a macOS override
+    // is caught here instead of discovered on a Mac.
+    #[test]
+    fn every_tool_has_an_explicit_macos_answer() {
+        let manifest = embedded().unwrap();
+        let mut uncovered = Vec::new();
+        for tool in &manifest.tools {
+            let has_macos_override = tool.platform_overrides.contains_key("macos");
+            if let Resolved::Unsupported(_) = tool.resolve(Platform::MacOS)
+                && !has_macos_override
+            {
+                uncovered.push(tool.name.clone());
+            }
+        }
+        assert!(
+            uncovered.is_empty(),
+            "tools with no macOS answer at all (add a [tool.platform.macos] \
+             block, even just `unsupported = \"...\"`): {uncovered:?}"
+        );
+    }
+
     #[test]
     fn rejects_duplicate_tool() {
         let err = parse(
@@ -735,14 +760,29 @@ mod tests {
 
     #[test]
     fn resolve_generates_a_note_for_an_apt_tool_with_no_override() {
-        let manifest = embedded().unwrap();
-        let zsh = manifest.tool("zsh").unwrap();
+        // A fixture, not the embedded manifest: by design (TEST-015) every
+        // apt tool the real manifest ships now carries a macOS override, so
+        // there is no longer a real example of the generated-note path.
+        let manifest = parse(
+            r#"
+            [meta]
+            schema_version = 1
+            [[tool]]
+            name = "widget"
+            detect = { command = "command -v widget" }
+            install = { method = "apt", packages = ["widget"] }
+            "#,
+        )
+        .unwrap();
+        let widget = manifest.tool("widget").unwrap();
 
-        let Resolved::Unsupported(note) = zsh.resolve(Platform::MacOS) else {
-            panic!("zsh has no macos override and apt is not admitted there");
+        let Resolved::Unsupported(note) = widget.resolve(Platform::MacOS) else {
+            panic!("widget has no macos override and apt is not admitted there");
         };
-        assert!(note.contains("zsh"), "{note}");
+        assert!(note.contains("widget"), "{note}");
         assert!(note.contains("apt"), "{note}");
+
+        let manifest = embedded().unwrap();
 
         // A non-apt tool with no override resolves unchanged on both
         // platforms.
