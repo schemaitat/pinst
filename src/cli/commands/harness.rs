@@ -277,17 +277,66 @@ async fn install(
         ReceiptScope::Global => home_dir()?,
     };
 
-    // Phase 4 replaces this branch with the interactive picker when nothing
-    // was named and a terminal is attached; until then an install with no
-    // selection is a usage error rather than a silent no-op or a guess at
-    // what the caller wanted.
-    let selection = if install_args.all {
-        Selection::All
-    } else if !install_args.skills.is_empty() || !install_args.commands.is_empty() {
-        Selection::Named {
-            skills: install_args.skills.clone(),
-            commands: install_args.commands.clone(),
-        }
+    let source = asset::resolve_source();
+
+    // With no selection flag at all, an attached terminal gets the picker;
+    // everything else — `--json`, a pipe, or any explicit `--all`/`--skill`/
+    // `--command` — takes the flag-driven path unchanged, so a script or an
+    // agent can never end up waiting on a prompt it cannot answer
+    // (`Ctx::interactive` is the same guard `confirm` already relies on for
+    // exactly that reason).
+    let nothing_named =
+        !install_args.all && install_args.skills.is_empty() && install_args.commands.is_empty();
+    let (scope, root, selection) = if nothing_named && ctx.interactive() {
+        let assets = asset::enumerate(&source)?;
+        let precheck = |kind: asset::AssetKind| -> Result<Vec<(String, bool)>> {
+            assets
+                .iter()
+                .filter(|a| a.kind == kind)
+                .map(|a| {
+                    let target = state::target_path(vendor, &root, a);
+                    let installed = state::classify(&source, a, &target)?.satisfied();
+                    Ok((a.name.clone(), installed))
+                })
+                .collect()
+        };
+        let skill_items = precheck(asset::AssetKind::Skill)?;
+        let command_items = precheck(asset::AssetKind::Command)?;
+
+        let initial_scope_arg = match scope {
+            ReceiptScope::Project => ScopeArg::Project,
+            ReceiptScope::Global => ScopeArg::Global,
+        };
+        let Some(picked) = crate::prompt::run(initial_scope_arg, skill_items, command_items)?
+        else {
+            ctx.note("install cancelled");
+            return Ok(ExitCode::Usage);
+        };
+
+        let picked_receipt_scope: ReceiptScope = picked.scope.try_into()?;
+        let picked_root = match picked_receipt_scope {
+            ReceiptScope::Project => root,
+            ReceiptScope::Global => home_dir()?,
+        };
+        (
+            picked_receipt_scope,
+            picked_root,
+            Selection::Named {
+                skills: picked.skills,
+                commands: picked.commands,
+            },
+        )
+    } else if install_args.all {
+        (scope, root, Selection::All)
+    } else if !nothing_named {
+        (
+            scope,
+            root,
+            Selection::Named {
+                skills: install_args.skills.clone(),
+                commands: install_args.commands.clone(),
+            },
+        )
     } else {
         return Err(usage(
             "nothing selected — pass --all, or one or more --skill/--command",
@@ -298,8 +347,6 @@ async fn install(
         LinkStyleArg::Link => LinkStyle::Symlink,
         LinkStyleArg::Copy => LinkStyle::Copy,
     });
-
-    let source = asset::resolve_source();
     let source_label = match &source {
         asset::Source::Tree(path) => path.display().to_string(),
         asset::Source::Embedded => "embedded".to_string(),

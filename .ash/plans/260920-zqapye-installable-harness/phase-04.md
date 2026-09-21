@@ -2,7 +2,7 @@
 id: 260920-zqapye
 slug: installable-harness
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — The interactive picker
@@ -27,14 +27,14 @@ it is legal to ask a human anything.
 
 ## Steps
 
-- [ ] TASK-022: `src/prompt.rs` — a selection state machine with no terminal in
+- [x] TASK-022: `src/prompt.rs` — a selection state machine with no terminal in
       it: `Selection { scope, skills: Vec<(String, bool)>, commands: Vec<(String,
       bool)> }`, a `Step` cursor over scope → skills → commands → confirm, and
       key handling as pure functions over that state.
       **Why pure first:** the awkward alternative is testing a picker by driving
       a terminal, which is the tell that the state wants to be a parameter
       rather than ambient (LESSON-018).
-- [ ] TASK-023: `src/prompt.rs` — the ratatui rendering over that state, entered
+- [x] TASK-023: `src/prompt.rs` — the ratatui rendering over that state, entered
       with `ratatui::init()` and left with `ratatui::restore()`, the way
       `editor::launch` already suspends and resumes the dashboard. Space toggles,
       `a` selects all, Enter advances, Esc cancels the whole run.
@@ -42,7 +42,7 @@ it is legal to ask a human anything.
       `ratatui` and `crossterm` are already linked in for the dashboard; a
       ~120-line selector over primitives already paid for beats a dependency that
       re-implements them (ALT-006, CON-003).
-- [ ] TASK-024: `src/cli/commands/harness.rs` — call the picker from `install`
+- [x] TASK-024: `src/cli/commands/harness.rs` — call the picker from `install`
       only when `ctx.interactive()` is true *and* no selection flag was given;
       pre-tick everything already installed at the chosen scope so the first
       screen shows the current state rather than an empty form; a cancel exits
@@ -51,7 +51,7 @@ it is legal to ask a human anything.
       **Why pre-ticked:** the question a returning user is answering is "what
       should be installed", not "what would you like to add", and those differ
       the moment anything is already there.
-- [ ] TASK-025: tests — the state machine, driven by key codes, produces the
+- [x] TASK-025: tests — the state machine, driven by key codes, produces the
       expected selection; `ctx.interactive()` is false under `--json` and on a
       non-TTY, so the picker is unreachable there; an explicit `--skill` skips
       the picker entirely.
