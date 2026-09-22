@@ -16,13 +16,13 @@ use crate::core::harness::asset as harness_asset;
 use crate::core::harness::install::plan as harness_plan;
 use crate::core::harness::install::receipt::{Receipt, ReceiptScope};
 use crate::core::harness::install::record;
-use crate::core::harness::install::state::{self as harness_state, AssetStatus};
+use crate::core::harness::install::state::{self as harness_state, AssetKindLabel, AssetStatus};
 use crate::core::harness::project::InstallRoot;
 use crate::core::harness::vendor::Vendor;
 use crate::core::manifest::{Manifest, Tool};
 use crate::core::platform::Platform;
 use crate::core::probe::{self, ProbeResult};
-use crate::core::upgrade::{self, UpgradeResult};
+use crate::core::upgrade::{self, UpgradeCheck};
 use crate::event::{self, AppEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +32,12 @@ pub enum Tab {
     Upgrades,
     Docs,
     Harness,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HealthFocus {
+    Findings,
+    Configs,
 }
 
 impl Tab {
@@ -78,13 +84,21 @@ impl HarnessModalAction {
 pub struct HarnessModal {
     pub scope: ReceiptScope,
     pub action: HarnessModalAction,
-    pub steps: usize,
+    pub steps: Option<usize>,
+    generation: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct EditorTarget {
     pub label: String,
     pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EventOutcome {
+    pub redraw: bool,
+    pub launch_editor: bool,
+    pub quit: bool,
 }
 
 pub struct App {
@@ -103,13 +117,19 @@ pub struct App {
     pub findings: Vec<Finding>,
     pub configs: Vec<FileStatus>,
     pub health_ready: bool,
+    health_generation: u64,
 
-    pub upgrades: BTreeMap<String, UpgradeResult>,
+    pub upgrades: BTreeMap<String, UpgradeCheck>,
     pub upgrades_loading: bool,
     pub upgrades_ever_run: bool,
 
     pub overview_selected: usize,
+    pub health_focus: HealthFocus,
+    pub health_findings_selected: usize,
+    pub health_configs_selected: usize,
+    pub upgrades_selected: usize,
     pub docs_selected: usize,
+    pub docs_scroll: u16,
 
     /// The tool catalogue, loaded once at startup. An unreadable catalogue is
     /// an empty Docs tab, not a dashboard that refuses to open.
@@ -128,15 +148,17 @@ pub struct App {
     pub harness_project_root: PathBuf,
     pub harness_project: Vec<AssetStatus>,
     pub harness_global: Vec<AssetStatus>,
+    pub harness_project_summary: String,
+    pub harness_global_summary: String,
     pub harness_ready: bool,
     pub harness_selected: usize,
     /// True while a spawned install/uninstall run is in flight — blocks a
     /// second `i`/`u` from opening a modal on top of one still running.
     pub harness_busy: bool,
     pub harness_modal: Option<HarnessModal>,
+    harness_plan_generation: u64,
 
     pub status: String,
-    pub tick_count: u64,
 }
 
 impl App {
@@ -156,6 +178,8 @@ impl App {
         let harness_project_root = InstallRoot::resolve(None)
             .map(|root| root.path().to_path_buf())
             .unwrap_or_else(|_| PathBuf::from("."));
+        let harness_project_summary = harness_scope_summary("project", &harness_project_root, &[]);
+        let harness_global_summary = harness_scope_summary("global", &home_dir, &[]);
         Self {
             tab: Tab::Overview,
             should_quit: false,
@@ -169,11 +193,17 @@ impl App {
             findings: Vec::new(),
             configs: Vec::new(),
             health_ready: false,
+            health_generation: 0,
             upgrades: BTreeMap::new(),
             upgrades_loading: false,
             upgrades_ever_run: false,
             overview_selected: 0,
+            health_focus: HealthFocus::Findings,
+            health_findings_selected: 0,
+            health_configs_selected: 0,
+            upgrades_selected: 0,
             docs_selected: 0,
+            docs_scroll: 0,
             catalogue,
             search_query: String::new(),
             search_mode: false,
@@ -183,12 +213,14 @@ impl App {
             harness_project_root,
             harness_project: Vec::new(),
             harness_global: Vec::new(),
+            harness_project_summary,
+            harness_global_summary,
             harness_ready: false,
             harness_selected: 0,
             harness_busy: false,
             harness_modal: None,
+            harness_plan_generation: 0,
             status: "probing tools...".to_string(),
-            tick_count: 0,
         }
     }
 
@@ -215,31 +247,111 @@ impl App {
         });
     }
 
-    pub fn handle_event(&mut self, event: AppEvent) {
-        match event {
+    pub fn handle_event(&mut self, event: AppEvent) -> EventOutcome {
+        let redraw = match event {
             AppEvent::Term(term_event) => self.handle_term_event(term_event),
-            AppEvent::Tick => self.tick_count = self.tick_count.wrapping_add(1),
-            AppEvent::Probe(result) => self.on_probe(result),
-            AppEvent::Health { findings, configs } => {
+            AppEvent::Probe(result) => {
+                self.on_probe(result);
+                true
+            }
+            AppEvent::Health {
+                generation,
+                findings,
+                configs,
+            } if generation == self.health_generation => {
                 self.findings = findings;
                 self.configs = configs;
+                self.health_findings_selected = self
+                    .health_findings_selected
+                    .min(self.findings.len().saturating_sub(1));
+                self.health_configs_selected = self
+                    .health_configs_selected
+                    .min(self.configs.len().saturating_sub(1));
                 self.health_ready = true;
                 self.status = "diagnosis complete".to_string();
+                true
             }
+            AppEvent::Health { .. } => false,
             AppEvent::Upgrade(result) => {
                 self.upgrades.insert(result.tool.clone(), result);
+                true
             }
             AppEvent::UpgradesDone => {
                 self.upgrades_loading = false;
                 self.status = "upgrade check complete".to_string();
+                true
             }
             AppEvent::Harness { project, global } => {
                 self.harness_project = project;
                 self.harness_global = global;
+                self.harness_project_summary = harness_scope_summary(
+                    "project",
+                    &self.harness_project_root,
+                    &self.harness_project,
+                );
+                self.harness_global_summary =
+                    harness_scope_summary("global", &self.home_dir, &self.harness_global);
                 self.harness_ready = true;
                 self.harness_busy = false;
                 self.status = "harness state refreshed".to_string();
+                true
             }
+            AppEvent::HarnessPlan {
+                generation,
+                scope,
+                action,
+                steps,
+            } => {
+                if let Some(modal) = self.harness_modal.as_mut() {
+                    if modal.generation != generation
+                        || modal.scope != scope
+                        || modal.action != action
+                    {
+                        false
+                    } else if let Some(steps) = steps {
+                        modal.steps = Some(steps);
+                        self.status =
+                            format!("harness {} ready ({} scope)", action.label(), scope.label());
+                        true
+                    } else {
+                        self.harness_modal = None;
+                        self.status = format!(
+                            "harness: nothing to {} for {} scope",
+                            action.label(),
+                            scope.label()
+                        );
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+            AppEvent::HarnessScope { scope, rows } => {
+                match scope {
+                    ReceiptScope::Project => {
+                        self.harness_project = rows;
+                        self.harness_project_summary = harness_scope_summary(
+                            "project",
+                            &self.harness_project_root,
+                            &self.harness_project,
+                        );
+                    }
+                    ReceiptScope::Global => {
+                        self.harness_global = rows;
+                        self.harness_global_summary =
+                            harness_scope_summary("global", &self.home_dir, &self.harness_global);
+                    }
+                }
+                self.harness_ready = true;
+                self.harness_busy = false;
+                self.status = format!("harness {} scope refreshed", scope.label());
+                true
+            }
+        };
+        EventOutcome {
+            redraw,
+            launch_editor: self.pending_editor.is_some(),
+            quit: self.should_quit,
         }
     }
 
@@ -257,7 +369,9 @@ impl App {
         }
     }
 
-    fn spawn_health_check(&self) {
+    fn spawn_health_check(&mut self) {
+        self.health_generation = self.health_generation.wrapping_add(1);
+        let generation = self.health_generation;
         let manifest = self.manifest.clone();
         let home_dir = self.home_dir.clone();
         let probes = self.probes.clone();
@@ -284,11 +398,25 @@ impl App {
             let findings =
                 doctor::diagnose(&refs, &probes, &set, Platform::host()).unwrap_or_default();
             let configs = set.status().unwrap_or_default();
-            let _ = tx.send(AppEvent::Health { findings, configs });
+            let _ = tx.send(AppEvent::Health {
+                generation,
+                findings,
+                configs,
+            });
         });
     }
 
+    pub fn on_editor_closed(&mut self, result: Result<(), String>) {
+        self.status = match result {
+            Ok(()) => "editor closed; refreshing health...".to_string(),
+            Err(error) => format!("editor failed: {error}; refreshing health..."),
+        };
+        self.spawn_health_check();
+    }
+
     pub fn refresh_upgrades(&mut self, force: bool) {
+        self.upgrades.clear();
+        self.upgrades_selected = 0;
         self.upgrades_loading = true;
         self.upgrades_ever_run = true;
         self.status = "checking for upgrades...".to_string();
@@ -342,17 +470,17 @@ impl App {
                         page: self.catalogue.get(&tool.name),
                     })
                     .collect();
-                find::search(&entries, &query)
-                    .into_iter()
-                    .map(|hit| hit.tool)
-                    .collect()
+                find::search_tools(&entries, &query)
             }
         }
     }
 
-    /// The page shown in the Docs tab's reading pane.
-    pub fn selected_doc(&self) -> Option<(&Tool, Option<&ToolDoc>)> {
-        let tools = self.filtered_docs();
+    /// The page shown in the Docs tab's reading pane, selected from a result
+    /// set the caller already computed for this frame.
+    pub fn selected_doc_in<'a>(
+        &'a self,
+        tools: &[&'a Tool],
+    ) -> Option<(&'a Tool, Option<&'a ToolDoc>)> {
         let index = self.docs_selected.min(tools.len().saturating_sub(1));
         let tool = *tools.get(index)?;
         Some((tool, self.catalogue.get(&tool.name)))
@@ -426,79 +554,123 @@ impl App {
         targets
     }
 
-    fn handle_term_event(&mut self, event: Event) {
-        let Event::Key(key) = event else { return };
+    fn handle_term_event(&mut self, event: Event) -> bool {
+        let Event::Key(key) = event else {
+            return matches!(event, Event::Resize(_, _));
+        };
         if key.kind != KeyEventKind::Press {
-            return;
+            return false;
         }
         if self.harness_modal.is_some() {
-            self.handle_harness_modal_key(key.code);
-            return;
+            return self.handle_harness_modal_key(key.code);
         }
         if self.picker_open {
-            self.handle_picker_key(key.code);
-            return;
+            return self.handle_picker_key(key.code);
         }
         if self.search_mode {
-            self.handle_search_key(key.code);
-            return;
+            return self.handle_search_key(key.code);
         }
         match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+                false
+            }
             KeyCode::Esc => {
                 if self.search_query.is_empty() {
                     self.should_quit = true;
+                    false
                 } else {
                     // First Esc clears an active filter instead of quitting,
                     // so a search doesn't trap the user into an extra quit.
                     self.search_query.clear();
                     self.reset_selections();
+                    true
                 }
             }
-            KeyCode::Char('/') => self.search_mode = true,
-            KeyCode::Tab => self.next_tab(),
-            KeyCode::BackTab => self.prev_tab(),
-            KeyCode::Char('1') => self.tab = Tab::Overview,
-            KeyCode::Char('2') => self.tab = Tab::Health,
-            KeyCode::Char('3') => self.tab = Tab::Upgrades,
-            KeyCode::Char('4') => self.tab = Tab::Docs,
-            KeyCode::Char('5') => self.tab = Tab::Harness,
+            KeyCode::Char('/') => {
+                self.search_mode = true;
+                true
+            }
+            KeyCode::Tab => {
+                self.next_tab();
+                true
+            }
+            KeyCode::BackTab => {
+                self.prev_tab();
+                true
+            }
+            KeyCode::Char('1') => self.select_tab(Tab::Overview),
+            KeyCode::Char('2') => self.select_tab(Tab::Health),
+            KeyCode::Char('3') => self.select_tab(Tab::Upgrades),
+            KeyCode::Char('4') => self.select_tab(Tab::Docs),
+            KeyCode::Char('5') => self.select_tab(Tab::Harness),
+            KeyCode::Left | KeyCode::Right if self.tab == Tab::Health => {
+                self.health_focus = match self.health_focus {
+                    HealthFocus::Findings => HealthFocus::Configs,
+                    HealthFocus::Configs => HealthFocus::Findings,
+                };
+                true
+            }
+            KeyCode::PageDown if self.tab == Tab::Docs => {
+                self.docs_scroll = self.docs_scroll.saturating_add(5);
+                true
+            }
+            KeyCode::PageUp if self.tab == Tab::Docs => {
+                let previous = self.docs_scroll;
+                self.docs_scroll = self.docs_scroll.saturating_sub(5);
+                self.docs_scroll != previous
+            }
             KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('e') => {
                 self.picker_open = true;
                 self.picker_selected = 0;
+                true
             }
             KeyCode::Char('r') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
+                self.refresh_upgrades(false);
+                true
+            }
+            KeyCode::Char('R') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
                 self.refresh_upgrades(true);
+                true
             }
             KeyCode::Char('i') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Install);
+                self.open_harness_modal(HarnessModalAction::Install)
             }
             KeyCode::Char('u') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Uninstall);
+                self.open_harness_modal(HarnessModalAction::Uninstall)
             }
-            _ => {}
+            _ => false,
         }
     }
 
-    fn handle_search_key(&mut self, code: KeyCode) {
+    fn handle_search_key(&mut self, code: KeyCode) -> bool {
         match code {
             KeyCode::Esc => {
                 self.search_mode = false;
                 self.search_query.clear();
                 self.reset_selections();
+                true
             }
-            KeyCode::Enter => self.search_mode = false,
+            KeyCode::Enter => {
+                self.search_mode = false;
+                true
+            }
             KeyCode::Backspace => {
-                self.search_query.pop();
-                self.reset_selections();
+                if self.search_query.pop().is_some() {
+                    self.reset_selections();
+                    true
+                } else {
+                    false
+                }
             }
             KeyCode::Char(c) => {
                 self.search_query.push(c);
                 self.reset_selections();
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -506,7 +678,11 @@ impl App {
     /// nothing.
     fn reset_selections(&mut self) {
         self.overview_selected = 0;
+        self.health_findings_selected = 0;
+        self.health_configs_selected = 0;
+        self.upgrades_selected = 0;
         self.docs_selected = 0;
+        self.docs_scroll = 0;
         self.harness_selected = 0;
     }
 
@@ -520,47 +696,98 @@ impl App {
         self.tab = Tab::ALL[(idx + Tab::ALL.len() - 1) % Tab::ALL.len()];
     }
 
+    fn select_tab(&mut self, tab: Tab) -> bool {
+        if self.tab == tab {
+            false
+        } else {
+            self.tab = tab;
+            true
+        }
+    }
+
     /// Moves the selection on whichever tab owns one.
-    fn move_selection(&mut self, delta: i32) {
+    fn move_selection(&mut self, delta: i32) -> bool {
         match self.tab {
             Tab::Overview => {
                 let len = self.filtered_registry().len() as i32;
                 if len > 0 {
+                    let previous = self.overview_selected;
                     self.overview_selected =
                         (self.overview_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.overview_selected != previous;
+                }
+            }
+            Tab::Health => {
+                let len = match self.health_focus {
+                    HealthFocus::Findings => self.filtered_findings().len(),
+                    HealthFocus::Configs => self.filtered_configs().len(),
+                };
+                let selected = match self.health_focus {
+                    HealthFocus::Findings => &mut self.health_findings_selected,
+                    HealthFocus::Configs => &mut self.health_configs_selected,
+                };
+                if len > 0 {
+                    let previous = *selected;
+                    *selected = (*selected as i32 + delta).rem_euclid(len as i32) as usize;
+                    return *selected != previous;
+                }
+            }
+            Tab::Upgrades => {
+                let len = self.filtered_registry().len() as i32;
+                if len > 0 {
+                    let previous = self.upgrades_selected;
+                    self.upgrades_selected =
+                        (self.upgrades_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.upgrades_selected != previous;
                 }
             }
             Tab::Docs => {
                 let len = self.filtered_docs().len() as i32;
                 if len > 0 {
+                    let previous = self.docs_selected;
                     self.docs_selected =
                         (self.docs_selected as i32 + delta).rem_euclid(len) as usize;
+                    if self.docs_selected != previous {
+                        self.docs_scroll = 0;
+                    }
+                    return self.docs_selected != previous;
                 }
             }
             Tab::Harness => {
                 let len = self.filtered_harness().len() as i32;
                 if len > 0 {
+                    let previous = self.harness_selected;
                     self.harness_selected =
                         (self.harness_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.harness_selected != previous;
                 }
             }
-            _ => {}
         }
+        false
     }
 
-    fn handle_picker_key(&mut self, code: KeyCode) {
+    fn handle_picker_key(&mut self, code: KeyCode) -> bool {
         let targets = self.editor_targets();
         match code {
-            KeyCode::Esc | KeyCode::Char('e') => self.picker_open = false,
+            KeyCode::Esc | KeyCode::Char('e') => {
+                self.picker_open = false;
+                true
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 if !targets.is_empty() {
                     self.picker_selected = (self.picker_selected + 1) % targets.len();
+                    true
+                } else {
+                    false
                 }
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if !targets.is_empty() {
                     self.picker_selected =
                         (self.picker_selected + targets.len() - 1) % targets.len();
+                    true
+                } else {
+                    false
                 }
             }
             KeyCode::Enter => {
@@ -569,8 +796,9 @@ impl App {
                     self.status = format!("opening {}...", target.label);
                     self.pending_editor = Some(target.path.clone());
                 }
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -579,72 +807,41 @@ impl App {
     /// /repo/.claude" is a sentence someone can disagree with — "install?"
     /// is not. Silently does nothing if the harness state hasn't loaded yet,
     /// there is nothing selected, or the scope has nothing to do.
-    fn open_harness_modal(&mut self, action: HarnessModalAction) {
+    fn open_harness_modal(&mut self, action: HarnessModalAction) -> bool {
         if !self.harness_ready {
-            return;
+            return false;
         }
         let rows = self.filtered_harness();
         if rows.is_empty() {
-            return;
+            return false;
         }
         let index = self.harness_selected.min(rows.len() - 1);
         let scope = rows[index].0;
-
-        let Some(steps) = self.compute_harness_step_count(scope, action) else {
-            self.status = format!(
-                "harness: nothing to {} for {} scope",
-                action.label(),
-                scope.label()
-            );
-            return;
-        };
+        self.harness_plan_generation = self.harness_plan_generation.wrapping_add(1);
+        let generation = self.harness_plan_generation;
         self.harness_modal = Some(HarnessModal {
             scope,
             action,
-            steps,
+            steps: None,
+            generation,
         });
-    }
-
-    /// A read-only, synchronous count of what an install/uninstall *would*
-    /// do — building the same `Plan` the mutation itself will build, purely
-    /// to size the confirmation modal. Cheap enough for the UI thread: no
-    /// subprocess, just enumerating `.agents/` and stat-ing a handful of
-    /// paths, the same work `filtered_harness`'s data already came from.
-    fn compute_harness_step_count(
-        &self,
-        scope: ReceiptScope,
-        action: HarnessModalAction,
-    ) -> Option<usize> {
+        self.status = format!(
+            "calculating harness {} ({} scope)...",
+            action.label(),
+            scope.label()
+        );
+        let tx = self.tx.clone();
         let root = self.harness_root(scope);
-        let source = harness_asset::resolve_source();
-        let steps = match action {
-            HarnessModalAction::Install => {
-                let options = harness_plan::InstallOptions {
-                    vendor: Vendor::Claude,
-                    scope,
-                    root,
-                    style: None,
-                    force: false,
-                    selection: harness_plan::Selection::All,
-                };
-                harness_plan::build_install_plan(&source, &options)
-                    .ok()?
-                    .pending_count()
-            }
-            HarnessModalAction::Uninstall => {
-                let receipt_path = Receipt::path_for(scope, &root).ok()?;
-                let receipt = Receipt::load(&receipt_path).ok()??;
-                harness_plan::build_uninstall_plan(
-                    &source,
-                    &receipt.entries,
-                    &harness_plan::Selection::All,
-                    false,
-                )
-                .ok()?
-                .pending_count()
-            }
-        };
-        (steps > 0).then_some(steps)
+        tokio::task::spawn_blocking(move || {
+            let steps = compute_harness_step_count(root, scope, action);
+            let _ = tx.send(AppEvent::HarnessPlan {
+                generation,
+                scope,
+                action,
+                steps,
+            });
+        });
+        true
     }
 
     fn harness_root(&self, scope: ReceiptScope) -> PathBuf {
@@ -654,15 +851,25 @@ impl App {
         }
     }
 
-    fn handle_harness_modal_key(&mut self, code: KeyCode) {
+    fn handle_harness_modal_key(&mut self, code: KeyCode) -> bool {
         match code {
-            KeyCode::Esc => self.harness_modal = None,
+            KeyCode::Esc => {
+                self.harness_modal = None;
+                true
+            }
             KeyCode::Enter => {
-                if let Some(modal) = self.harness_modal.take() {
+                if self
+                    .harness_modal
+                    .is_some_and(|modal| modal.steps.is_some())
+                    && let Some(modal) = self.harness_modal.take()
+                {
                     self.run_harness_action(modal);
+                    true
+                } else {
+                    false
                 }
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -670,9 +877,10 @@ impl App {
     /// through the exact same `Plan`/`Runner`/`record` path the CLI uses —
     /// two ways to mutate would be two places for the blocked-on-drift rule
     /// to be wrong, and this tab has no `--dry-run` to fall back on
-    /// (`CON-002`, `SEC-001`). Refreshes both scopes on completion rather
-    /// than trusting its own plan, the same reason `pinst config status`
-    /// re-reads the filesystem instead of believing a just-applied plan.
+    /// (`CON-002`, `SEC-001`). Refreshes the changed scope on completion
+    /// rather than trusting its own plan, the same reason `pinst config
+    /// status` re-reads the filesystem instead of believing a just-applied
+    /// plan.
     fn run_harness_action(&mut self, modal: HarnessModal) {
         self.harness_busy = true;
         self.status = format!(
@@ -683,8 +891,6 @@ impl App {
 
         let tx = self.tx.clone();
         let root = self.harness_root(modal.scope);
-        let project_root = self.harness_project_root.clone();
-        let global_root = self.home_dir.clone();
         let scope = modal.scope;
         let action = modal.action;
 
@@ -746,13 +952,72 @@ impl App {
                 }
             }
 
-            let project =
-                harness_state::status(&source, Vendor::Claude, &project_root).unwrap_or_default();
-            let global =
-                harness_state::status(&source, Vendor::Claude, &global_root).unwrap_or_default();
-            let _ = tx.send(AppEvent::Harness { project, global });
+            let rows = harness_state::status(&source, Vendor::Claude, &root).unwrap_or_default();
+            let _ = tx.send(AppEvent::HarnessScope { scope, rows });
         });
     }
+}
+
+fn compute_harness_step_count(
+    root: PathBuf,
+    scope: ReceiptScope,
+    action: HarnessModalAction,
+) -> Option<usize> {
+    let source = harness_asset::resolve_source();
+    let steps = match action {
+        HarnessModalAction::Install => {
+            let scaffold_steps = if matches!(scope, ReceiptScope::Project) {
+                crate::core::harness::install::corpus_init::build_scaffold_plan(&root)
+                    .ok()?
+                    .pending_count()
+            } else {
+                0
+            };
+            let options = harness_plan::InstallOptions {
+                vendor: Vendor::Claude,
+                scope,
+                root,
+                style: None,
+                force: false,
+                selection: harness_plan::Selection::All,
+            };
+            harness_plan::build_install_plan(&source, &options)
+                .ok()?
+                .pending_count()
+                + scaffold_steps
+        }
+        HarnessModalAction::Uninstall => {
+            let receipt_path = Receipt::path_for(scope, &root).ok()?;
+            let receipt = Receipt::load(&receipt_path).ok()??;
+            harness_plan::build_uninstall_plan(
+                &source,
+                &receipt.entries,
+                &harness_plan::Selection::All,
+                false,
+            )
+            .ok()?
+            .pending_count()
+        }
+    };
+    (steps > 0).then_some(steps)
+}
+
+fn harness_scope_summary(label: &str, root: &std::path::Path, rows: &[AssetStatus]) -> String {
+    if !rows.iter().any(|row| row.state.satisfied()) {
+        return format!("{label:<8} {}   not installed", root.display());
+    }
+    let skills = rows
+        .iter()
+        .filter(|row| row.kind == AssetKindLabel::Skill)
+        .count();
+    let commands = rows
+        .iter()
+        .filter(|row| row.kind == AssetKindLabel::Command)
+        .count();
+    format!(
+        "{label:<8} {}   {skills} skills, {commands} commands",
+        root.display()
+    )
 }
 
 #[cfg(test)]
@@ -791,6 +1056,103 @@ mod tests {
             press(app, KeyCode::Char(c));
         }
         press(app, KeyCode::Enter);
+    }
+
+    fn rendered(app: &App, width: u16, height: u16) -> String {
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, app)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect()
+    }
+
+    #[test]
+    fn event_outcomes_only_redraw_for_visible_changes() {
+        let (_dir, mut app) = app(&[]);
+
+        let ignored = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+        ))));
+        assert_eq!(ignored, EventOutcome::default());
+
+        let resized = app.handle_event(AppEvent::Term(Event::Resize(100, 30)));
+        assert!(resized.redraw);
+        assert!(!resized.quit);
+
+        let probe = app.handle_event(AppEvent::Probe(ProbeResult {
+            tool: app.registry[0].name.clone(),
+            installed: true,
+            version: Some("1.0.0".to_string()),
+            path: None,
+        }));
+        assert!(probe.redraw);
+
+        let quit = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        ))));
+        assert!(quit.quit);
+        assert!(!quit.redraw, "quit must not request a final frame");
+    }
+
+    #[test]
+    fn opening_an_editor_is_an_explicit_event_outcome() {
+        let (_dir, mut app) = app(&[]);
+        press(&mut app, KeyCode::Char('e'));
+        let outcome = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        ))));
+
+        assert!(outcome.redraw);
+        assert!(outcome.launch_editor);
+        assert!(!outcome.quit);
+    }
+
+    #[test]
+    fn stale_health_results_cannot_overwrite_a_newer_refresh() {
+        let (_dir, mut app) = app(&[]);
+        app.health_generation = 2;
+        app.findings = vec![Finding {
+            id: "new".to_string(),
+            severity: crate::core::doctor::Severity::Info,
+            message: "new diagnosis".to_string(),
+            remediation: String::new(),
+            fixable: false,
+        }];
+
+        let stale = app.handle_event(AppEvent::Health {
+            generation: 1,
+            findings: Vec::new(),
+            configs: Vec::new(),
+        });
+        assert!(!stale.redraw);
+        assert_eq!(app.findings[0].id, "new");
+
+        let current = app.handle_event(AppEvent::Health {
+            generation: 2,
+            findings: Vec::new(),
+            configs: Vec::new(),
+        });
+        assert!(current.redraw);
+        assert!(app.findings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn closing_an_editor_starts_a_new_health_generation_and_reports_failures() {
+        let (_dir, mut app) = app(&[]);
+        let generation = app.health_generation;
+
+        app.on_editor_closed(Err("stub failed".to_string()));
+
+        assert_eq!(app.health_generation, generation + 1);
+        assert!(app.status.contains("stub failed"), "{}", app.status);
     }
 
     const RIPGREP: &str = r#"
@@ -853,7 +1215,8 @@ does = "Search a path."
         press(&mut app, KeyCode::Char('4'));
         typed(&mut app, "grep");
 
-        let (tool, page) = app.selected_doc().unwrap();
+        let tools = app.filtered_docs();
+        let (tool, page) = app.selected_doc_in(&tools).unwrap();
         assert_eq!(tool.name, "ripgrep");
         assert_eq!(page.unwrap().recipes.len(), 1);
     }
@@ -862,7 +1225,8 @@ does = "Search a path."
     fn a_tool_with_no_page_still_selects_and_reports_the_gap() {
         let (_dir, mut app) = app(&[]);
         press(&mut app, KeyCode::Char('4'));
-        let (tool, page) = app.selected_doc().unwrap();
+        let tools = app.filtered_docs();
+        let (tool, page) = app.selected_doc_in(&tools).unwrap();
         assert!(!tool.name.is_empty());
         assert!(page.is_none());
     }
@@ -873,7 +1237,8 @@ does = "Search a path."
         press(&mut app, KeyCode::Char('4'));
         typed(&mut app, "kubernetes");
         assert!(app.filtered_docs().is_empty());
-        assert!(app.selected_doc().is_none());
+        let tools = app.filtered_docs();
+        assert!(app.selected_doc_in(&tools).is_none());
     }
 
     #[test]
@@ -891,6 +1256,56 @@ does = "Search a path."
         press(&mut app, KeyCode::Char('j'));
         assert_eq!(app.overview_selected, 1);
         assert_eq!(app.docs_selected, 1, "the Docs cursor must not move");
+    }
+
+    #[test]
+    fn health_and_upgrade_navigation_own_persistent_selections() {
+        let (_dir, mut app) = app(&[]);
+        app.health_ready = true;
+        app.findings = (0..3)
+            .map(|index| Finding {
+                id: format!("finding.{index}"),
+                severity: crate::core::doctor::Severity::Info,
+                message: format!("finding {index}"),
+                remediation: String::new(),
+                fixable: false,
+            })
+            .collect();
+        app.configs = (0..3)
+            .map(|index| FileStatus {
+                package: "test".to_string(),
+                path: format!("config-{index}"),
+                target: PathBuf::from(format!("/tmp/config-{index}")),
+                state: crate::core::configs::FileState::Missing,
+                templated: false,
+            })
+            .collect();
+
+        press(&mut app, KeyCode::Char('2'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.health_findings_selected, 1);
+        press(&mut app, KeyCode::Right);
+        assert_eq!(app.health_focus, HealthFocus::Configs);
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.health_configs_selected, 1);
+
+        press(&mut app, KeyCode::Char('3'));
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.upgrades_selected, 1);
+        assert_eq!(app.health_findings_selected, 1);
+    }
+
+    #[test]
+    fn changing_docs_selection_or_query_resets_page_scroll() {
+        let (_dir, mut app) = app(&[("ripgrep", RIPGREP)]);
+        app.tab = Tab::Docs;
+        press(&mut app, KeyCode::PageDown);
+        assert_eq!(app.docs_scroll, 5);
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.docs_scroll, 0);
+        press(&mut app, KeyCode::PageDown);
+        typed(&mut app, "grep");
+        assert_eq!(app.docs_scroll, 0);
     }
 
     #[test]
@@ -927,6 +1342,138 @@ does = "Search a path."
         assert!(rendered.contains("ripgrep"), "{rendered}");
         assert!(rendered.contains("rg -n"), "the recipe must be on screen");
         assert!(rendered.contains("authored"), "the page's status is shown");
+    }
+
+    #[test]
+    fn completed_upgrade_rows_never_remain_checking() {
+        let (_dir, mut app) = app(&[]);
+        app.tab = Tab::Upgrades;
+        app.upgrades_ever_run = true;
+        app.upgrades_loading = false;
+        let name = app.registry[0].name.clone();
+        app.upgrades.insert(
+            name.clone(),
+            UpgradeCheck {
+                tool: name,
+                result: None,
+                state: crate::core::upgrade::UpgradeCheckState::Unsupported,
+            },
+        );
+
+        let backend = ratatui::backend::TestBackend::new(100, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+
+        assert!(rendered.contains("unsupported"), "{rendered}");
+        assert!(
+            !rendered.contains("checking..."),
+            "a completed run must not retain an in-progress label"
+        );
+    }
+
+    #[test]
+    fn a_short_terminal_scrolls_tables_to_the_selected_final_row() {
+        let (_dir, mut app) = app(&[]);
+        app.tab = Tab::Overview;
+        press(&mut app, KeyCode::Up);
+        let final_tool = app.registry.last().unwrap().name.clone();
+
+        let backend = ratatui::backend::TestBackend::new(100, 15);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+
+        assert!(rendered.contains(&final_tool), "{rendered}");
+    }
+
+    #[test]
+    fn health_upgrades_and_harness_reveal_their_final_rows() {
+        let (_dir, mut app) = app(&[]);
+        app.health_ready = true;
+        app.findings = (0..20)
+            .map(|index| Finding {
+                id: format!("finding.{index}"),
+                severity: crate::core::doctor::Severity::Info,
+                message: format!("finding-{index}"),
+                remediation: String::new(),
+                fixable: false,
+            })
+            .collect();
+        app.configs = (0..20)
+            .map(|index| FileStatus {
+                package: "test".to_string(),
+                path: format!("config-{index}"),
+                target: PathBuf::from(format!("/tmp/config-{index}")),
+                state: crate::core::configs::FileState::Missing,
+                templated: false,
+            })
+            .collect();
+        app.tab = Tab::Health;
+        press(&mut app, KeyCode::Up);
+        press(&mut app, KeyCode::Right);
+        press(&mut app, KeyCode::Up);
+        let health = rendered(&app, 100, 15);
+        assert!(health.contains("finding-19"), "{health}");
+        assert!(health.contains("config-19"), "{health}");
+
+        app.tab = Tab::Upgrades;
+        app.upgrades_ever_run = true;
+        press(&mut app, KeyCode::Up);
+        let final_tool = app.registry.last().unwrap().name.clone();
+        let upgrades = rendered(&app, 100, 15);
+        assert!(upgrades.contains(&final_tool), "{upgrades}");
+
+        app.tab = Tab::Harness;
+        app.harness_ready = true;
+        app.harness_project = (0..20)
+            .map(|index| seeded_row(&format!("asset-{index}"), HarnessState::Missing))
+            .collect();
+        press(&mut app, KeyCode::Up);
+        let harness = rendered(&app, 100, 15);
+        assert!(harness.contains("asset-19"), "{harness}");
+    }
+
+    #[test]
+    fn a_long_docs_page_scrolls_to_its_final_line() {
+        let long_page = format!(
+            "what = \"Long page.\"\nstatus = \"draft\"\ngotchas = \"\"\"{}\"\"\"\n",
+            (0..20)
+                .map(|index| format!("line-{index}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let (_dir, mut app) = app(&[("ripgrep", &long_page)]);
+        app.tab = Tab::Docs;
+        typed(&mut app, "grep");
+        for _ in 0..4 {
+            press(&mut app, KeyCode::PageDown);
+        }
+
+        let backend = ratatui::backend::TestBackend::new(100, 15);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+
+        assert!(rendered.contains("line-19"), "{rendered}");
     }
 
     use harness_state::AssetState as HarnessState;
@@ -987,10 +1534,14 @@ does = "Search a path."
         assert_eq!(app.harness_selected, 0, "a new query resets the cursor");
     }
 
-    #[test]
-    fn i_opens_a_modal_naming_the_step_count_and_esc_cancels_unchanged() {
+    #[tokio::test]
+    async fn i_opens_a_modal_then_reports_the_step_count_and_esc_cancels_unchanged() {
         let tmp = tempfile::tempdir().unwrap();
-        let (_dir, mut app) = app(&[]);
+        let dir = tempfile::tempdir().unwrap();
+        let catalogue = Catalogue::load_from(Source::Tree(dir.path().to_path_buf())).unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let manifest = manifest::load(None).unwrap().manifest;
+        let mut app = App::new(tx, manifest, PathBuf::from("/home/test"), catalogue);
         // Redirect the project scope at an empty sandbox rather than this
         // checkout — the modal's step count is computed by really building
         // an install plan, and this keeps that read entirely inside a
@@ -1002,9 +1553,16 @@ does = "Search a path."
         app.tab = Tab::Harness;
 
         press(&mut app, KeyCode::Char('i'));
-        let modal = app.harness_modal.expect("a modal should have opened");
+        let calculating = app.harness_modal.expect("a modal should have opened");
+        assert_eq!(calculating.steps, None);
+        let event = rx.recv().await.expect("the plan count must report back");
+        app.handle_event(event);
+        let modal = app.harness_modal.expect("the modal should now be ready");
         assert_eq!(modal.action, HarnessModalAction::Install);
-        assert!(modal.steps > 0, "a fresh sandbox has something to install");
+        assert!(
+            modal.steps.is_some_and(|steps| steps > 0),
+            "a fresh sandbox has something to install"
+        );
 
         press(&mut app, KeyCode::Esc);
         assert!(app.harness_modal.is_none());
@@ -1031,6 +1589,8 @@ does = "Search a path."
 
         press(&mut app, KeyCode::Char('i'));
         assert!(app.harness_modal.is_some());
+        let event = rx.recv().await.expect("the plan count must report back");
+        app.handle_event(event);
         press(&mut app, KeyCode::Enter);
         assert!(app.harness_modal.is_none(), "confirming closes the modal");
         assert!(app.harness_busy);
@@ -1109,11 +1669,13 @@ does = "Search a path."
         app.tab = Tab::Harness;
 
         press(&mut app, KeyCode::Char('u'));
+        let event = rx.recv().await.expect("the plan count must report back");
+        app.handle_event(event);
         let modal = app
             .harness_modal
             .expect("uninstall should have something to do");
         assert_eq!(modal.action, HarnessModalAction::Uninstall);
-        assert_eq!(modal.steps, 1);
+        assert_eq!(modal.steps, Some(1));
 
         press(&mut app, KeyCode::Enter);
         let event = rx.recv().await.unwrap();
@@ -1140,5 +1702,20 @@ does = "Search a path."
             "{:?}",
             app.harness_project
         );
+    }
+
+    #[test]
+    fn a_harness_mutation_refreshes_only_its_changed_scope() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_project = vec![seeded_row("old-project", HarnessState::Missing)];
+        app.harness_global = vec![seeded_row("unchanged-global", HarnessState::Missing)];
+
+        app.handle_event(AppEvent::HarnessScope {
+            scope: ReceiptScope::Project,
+            rows: vec![seeded_row("new-project", HarnessState::Linked)],
+        });
+
+        assert_eq!(app.harness_project[0].name, "new-project");
+        assert_eq!(app.harness_global[0].name, "unchanged-global");
     }
 }

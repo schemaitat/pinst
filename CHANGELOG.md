@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0](https://github.com/schemaitat/pinst/compare/v0.4.0...v1.0.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **harness:** scripts/agents-wire.sh no longer exists. Anything that called it directly (a personal script, a forked CI config) should call `pinst harness install`/`pinst harness check` instead.
+* **harness:** scripts/ash.sh is gone. Use `pinst harness check|index|skills|new-id`. Anything invoking the script directly needs updating; the finding ids, exit codes and JSON envelope are unchanged.
+
+### Features
+
+* add macOS support ([#19](https://github.com/schemaitat/pinst/issues/19)) ([5a1b28c](https://github.com/schemaitat/pinst/commit/5a1b28cc22b9e6b49ed861742f010962e2b9d8e1))
+* **agents:** distil the corpus on a schedule, into a pull request ([#14](https://github.com/schemaitat/pinst/issues/14)) ([d0c63ee](https://github.com/schemaitat/pinst/commit/d0c63ee7a0cc073147856cf60711e1e42f3a7ad5))
+* **agents:** make the harness measure itself ([#11](https://github.com/schemaitat/pinst/issues/11)) ([0cc43ca](https://github.com/schemaitat/pinst/commit/0cc43ca7c415cd3562304f87764984639a5465cf))
+* **docs:** add a baked-in, searchable catalogue of tool usage ([#12](https://github.com/schemaitat/pinst/issues/12)) ([e96fac0](https://github.com/schemaitat/pinst/commit/e96fac06fece35b356e51fc7547bd115876f9b43))
+* **harness:** install and manage the agent harness ([#20](https://github.com/schemaitat/pinst/issues/20)) ([9593185](https://github.com/schemaitat/pinst/commit/9593185e3d8e48d63f48d568d0a5e21a9bec5c8c))
+* **harness:** mechanize the lesson-renumbering remedy ([#18](https://github.com/schemaitat/pinst/issues/18)) ([d452ed8](https://github.com/schemaitat/pinst/commit/d452ed816f1e19364eed01e4d14d7418820058d1))
+* **harness:** move the agent harness into the pinst binary ([#13](https://github.com/schemaitat/pinst/issues/13)) ([2f4a111](https://github.com/schemaitat/pinst/commit/2f4a111643d64e5c59d02e96175feb4e4b3e69f5))
+
+
+### Bug Fixes
+
+* **ci:** make the scheduled distillation actually run ([#15](https://github.com/schemaitat/pinst/issues/15)) ([10b538b](https://github.com/schemaitat/pinst/commit/10b538bcf58e095068672ff08ea55638b6199780))
+* stop release-please re-releasing the whole history ([#10](https://github.com/schemaitat/pinst/issues/10)) ([5fb3b3b](https://github.com/schemaitat/pinst/commit/5fb3b3b989afabaefa83628d95aa2271f29ad1c5))
+
 ## [0.4.0](https://github.com/schemaitat/pinst/compare/v0.3.0...v0.4.0) (2026-09-19)
 
 

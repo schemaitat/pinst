@@ -27,12 +27,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
                     installed: false, ..
                 }) => ("[--]", "missing", theme::bad_style()),
             };
-            let version = probe
-                .and_then(|p| p.version.clone())
-                .unwrap_or_else(|| "-".to_string());
+            let version = probe.and_then(|p| p.version.as_deref()).unwrap_or("-");
             Row::new(vec![
                 Cell::from(icon).style(style),
-                Cell::from(spec.name.clone()),
+                Cell::from(spec.name.as_str()),
                 Cell::from(spec.tags.join(",")).style(theme::muted_style()),
                 Cell::from(status_text).style(style),
                 Cell::from(version),
