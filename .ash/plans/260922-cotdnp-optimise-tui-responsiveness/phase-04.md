@@ -2,7 +2,7 @@
 id: 260922-cotdnp
 slug: optimise-tui-responsiveness
 phase: 4
-status: Proposed
+status: Done
 ---
 
 # Phase 4 — Safe terminal handoff and background filesystem work
@@ -20,26 +20,26 @@ mixing process lifecycle changes into the upgrade pipeline or table-state
 work, while leaving one integration boundary to measure at the end.
 
 ## Steps
-- [ ] **TASK-017**: `src/event.rs` — replace the detached terminal reader
+- [x] **TASK-017**: `src/event.rs` — replace the detached terminal reader
   with an owned input-task handle that can be stopped and restarted without
   closing the shared application channel. Probe, health, upgrade, and harness
   producers must remain active while input is paused (RISK-004).
-- [ ] **TASK-018**: `src/cli/commands/tui.rs`, `src/editor.rs` — after
+- [x] **TASK-018**: `src/cli/commands/tui.rs`, `src/editor.rs` — after
   TASK-017, pause terminal input before restoring the terminal, launch
   `$EDITOR`, reinitialize and clear the terminal, discard stale terminal
   events, restart input, and turn success/failure into visible app status.
-- [ ] **TASK-019**: `src/app.rs` — after TASK-018, trigger a background
+- [x] **TASK-019**: `src/app.rs` — after TASK-018, trigger a background
   Health/config refresh after editor return while retaining the previous
   table until the new result arrives; prevent older health generations from
   replacing a newer refresh.
-- [ ] **TASK-020**: `src/app.rs`, `src/event.rs`, `src/ui/harness.rs` — after
+- [x] **TASK-020**: `src/app.rs`, `src/event.rs`, `src/ui/harness.rs` — after
   TASK-019, represent harness confirmation as calculating or ready, compute
   install/uninstall step counts in `spawn_blocking`, and ignore a stale plan
   result if the selection or requested action changed.
-- [ ] **TASK-021**: `src/app.rs` and harness state refresh — after TASK-020,
+- [x] **TASK-021**: `src/app.rs` and harness state refresh — after TASK-020,
   refresh only the scope changed by a successful harness action and merge it
   with the unchanged scope already in `App`; retain a two-scope startup load.
-- [ ] **TASK-022**: integration tests and measurement — after TASK-021,
+- [x] **TASK-022**: integration tests and measurement — after TASK-021,
   exercise pause/resume and editor failure with a stub command, prove
   background results survive the handoff, prove harness sizing returns
   asynchronously, rerun the 8-second and 20-second pseudo-terminal timing,

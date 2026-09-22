@@ -13,14 +13,10 @@ use ratatui::DefaultTerminal;
 /// then re-initializes the terminal and forces a full redraw. Errors from
 /// the editor itself are surfaced via the caller's status line rather than
 /// aborting pinst.
-pub fn launch(terminal: &mut DefaultTerminal, path: &Path) -> bool {
+pub fn launch(terminal: &mut DefaultTerminal, path: &Path) -> Result<(), String> {
     let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "nvim".to_string());
-    let mut parts = editor_cmd.split_whitespace();
-    let program = parts.next().unwrap_or("nvim").to_string();
-    let args: Vec<String> = parts.map(str::to_string).collect();
-
     ratatui::restore();
-    let status = Command::new(&program).args(&args).arg(path).status();
+    let status = run_command(&editor_cmd, path);
     *terminal = ratatui::init();
     // Re-entering the alternate screen can resurface whatever was on it
     // before we left (some terminals preserve the alt-screen buffer across
@@ -32,5 +28,44 @@ pub fn launch(terminal: &mut DefaultTerminal, path: &Path) -> bool {
     // the physical screen directly instead, which has no such dependency.
     let _ = execute!(stdout(), Clear(ClearType::All));
 
-    matches!(status, Ok(s) if s.success())
+    status
+}
+
+fn run_command(editor_cmd: &str, path: &Path) -> Result<(), String> {
+    let mut parts = editor_cmd.split_whitespace();
+    let program = parts.next().unwrap_or("nvim");
+    let args: Vec<&str> = parts.collect();
+    match Command::new(program).args(args).arg(path).status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("{program} exited with {status}")),
+        Err(error) => Err(format!("could not launch {program}: {error}")),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use super::run_command;
+
+    fn script(body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("editor");
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn editor_exit_status_is_reported() {
+        let (_dir, success) = script("exit 0");
+        assert!(run_command(success.to_str().unwrap(), Path::new("page.toml")).is_ok());
+
+        let (_dir, failure) = script("exit 7");
+        let error = run_command(failure.to_str().unwrap(), Path::new("page.toml")).unwrap_err();
+        assert!(error.contains("exit status: 7"), "{error}");
+    }
 }

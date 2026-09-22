@@ -123,10 +123,12 @@ fn draw_modal(frame: &mut Frame, modal: &HarnessModal) {
         HarnessModalAction::Install => "install",
         HarnessModalAction::Uninstall => "uninstall",
     };
-    let text = format!(
-        "{verb} {} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel",
-        modal.steps
-    );
+    let text = match modal.steps {
+        Some(steps) => format!(
+            "{verb} {steps} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel"
+        ),
+        None => format!("calculating {verb} plan for {scope_label} scope...\n\n[Esc] cancel"),
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
