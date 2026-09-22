@@ -109,7 +109,9 @@ Silence is the whole problem, which is why the check has to be mechanical.
 **Check:** wire.missing
 **Seen in:** the harness audit on `feat/agents-orchestration` — all four repo
 skills were unwired, and a drifted personal copy of `plan-write` was loading
-in their place.
+in their place; again in
+260921-nxtxzu-herdr-worktree-orchestrate-skill (ISSUE-001), where a phase that
+created a skill had deferred its projection to the next phase.
 
 ### LESSON-008: An invariant that lives only in prose has already drifted
 **Lesson:** When a convention is worth writing into a skill, write the check
@@ -714,7 +716,30 @@ first real `macos-latest` CI run.
 **Status:** prose
 **Seen in:** 260920-qcrrqs-macos-support (ISSUE-008)
 
-### LESSON-040: Cargo test accepts one positional filter
+### LESSON-040: Recover missing Git identity without changing global configuration
+**Lesson:** When a commit fails because Git has no author identity, inspect
+recent commits for one consistent repository author and supply that identity
+through `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for the commit. If history is
+ambiguous, ask; do not invent an identity or silently persist one globally.
+**Why:** Commit attribution belongs to the person and repository, while global
+Git configuration outlives both the task and the worktree. Per-command
+environment variables recover the established attribution without turning one
+automation failure into a machine-wide setting that affects unrelated repos.
+**Status:** prose
+**Seen in:** 260921-nxtxzu-herdr-worktree-orchestrate-skill (ISSUE-002)
+
+### LESSON-041: Do not assert today's absence against an append-only corpus
+**Lesson:** A test that reads the real, growing corpus may assert durable
+structure or the presence of established examples; exact zero counts and
+absences belong in synthetic fixtures whose complete input the test owns.
+**Why:** Appending a valid record changes the corpus without changing the code.
+A real-corpus test that expects one skill, category, or issue count to remain
+zero turns every honest new record into an unrelated test failure and pressures
+the record to lie. Fixtures can prove zero behavior without freezing production
+history in place.
+**Status:** prose
+**Seen in:** 260921-nxtxzu-herdr-worktree-orchestrate-skill (ISSUE-006)
+### LESSON-042: Cargo test accepts one positional filter
 **Lesson:** Give `cargo test` at most one `TESTNAME` filter per invocation.
 When several modules need coverage, run separate focused commands or the full
 suite; arguments for the test binary go after `--`.

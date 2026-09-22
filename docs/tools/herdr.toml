@@ -27,3 +27,7 @@ does = "Print the agent skill file — read this before driving herdr from an ag
 [[recipes]]
 cmd = "herdr workspace --help"
 does = "The workspace helpers; the same shape exists for tab, worktree, pane, agent and session."
+
+[[recipes]]
+cmd = "/orchestrate <bounded task>"
+does = "When this repo's optional agent harness is installed, delegate through Herdr and supervise the result beyond the first idle state."

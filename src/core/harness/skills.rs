@@ -535,7 +535,7 @@ mod tests {
                 ..Options::default()
             },
         );
-        assert_eq!(report.skills.len(), 6, "expected six skills");
+        assert_eq!(report.skills.len(), 7, "expected seven skills");
 
         for row in &report.skills {
             assert!(row.wired, "{} is not wired into .claude/skills", row.name);
@@ -594,7 +594,8 @@ mod tests {
             },
         );
         assert!(row(&report, "plan-write").issues > 0);
-        assert_eq!(row(&report, "conventional-commits").issues, 0);
+        assert!(row(&report, "conventional-commits").issues > 0);
+        assert!(row(&report, "orchestrate").issues > 0);
     }
 
     // --- fixtures -----------------------------------------------------------
