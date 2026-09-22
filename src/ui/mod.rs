@@ -44,7 +44,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 }
 
 fn draw_tabs(frame: &mut Frame, area: Rect, app: &App) {
-    let titles: Vec<Line> = Tab::ALL.iter().map(|t| Line::from(t.title())).collect();
+    let titles = Tab::ALL.map(|tab| Line::from(tab.title()));
     let selected = Tab::ALL.iter().position(|t| *t == app.tab).unwrap_or(0);
     let tabs = Tabs::new(titles)
         .select(selected)
@@ -66,7 +66,7 @@ fn draw_picker(frame: &mut Frame, app: &App) {
     let targets = app.editor_targets();
     let items: Vec<ListItem> = targets
         .iter()
-        .map(|t| ListItem::new(t.label.clone()))
+        .map(|t| ListItem::new(t.label.as_str()))
         .collect();
     let list = List::new(items)
         .block(

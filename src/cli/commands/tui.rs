@@ -1,12 +1,10 @@
-use color_eyre::eyre::{Result, bail};
-use tokio::sync::mpsc::UnboundedReceiver;
-
 use crate::app::App;
 use crate::cli::output::{Ctx, ExitCode};
 use crate::core;
 use crate::editor;
 use crate::event::{self, AppEvent};
 use crate::ui;
+use color_eyre::eyre::{Result, bail};
 
 pub async fn run(ctx: &Ctx) -> Result<ExitCode> {
     if ctx.json {
@@ -21,12 +19,12 @@ pub async fn run(ctx: &Ctx) -> Result<ExitCode> {
     // terminal-restoring panic hook runs before color_eyre's pretty printer.
     let mut terminal = ratatui::init();
 
-    let (tx, mut rx) = event::start_event_loop();
-    let mut app = App::new(tx, loaded.manifest, home_dir, catalogue);
+    let mut events = event::EventRuntime::start();
+    let mut app = App::new(events.sender(), loaded.manifest, home_dir, catalogue);
     app.start_probing();
     app.start_harness_load();
 
-    let result = event_loop(&mut terminal, &mut app, &mut rx).await;
+    let result = event_loop(&mut terminal, &mut app, &mut events).await;
 
     ratatui::restore();
     result.map(|()| ExitCode::Success)
@@ -35,27 +33,45 @@ pub async fn run(ctx: &Ctx) -> Result<ExitCode> {
 async fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
     app: &mut App,
-    rx: &mut UnboundedReceiver<AppEvent>,
+    events: &mut event::EventRuntime,
 ) -> Result<()> {
     terminal.draw(|frame| ui::draw(frame, app))?;
 
-    while let Some(event) = rx.recv().await {
-        app.handle_event(event);
+    while let Some(event) = events.recv().await {
+        let mut outcome = app.handle_event(event);
         // Drain anything else already queued (e.g. a burst of probe results
         // landing back-to-back) before redrawing, so ~25 concurrent checks
         // don't trigger ~25 separate frames.
-        while let Ok(event) = rx.try_recv() {
-            app.handle_event(event);
+        while let Ok(event) = events.try_recv() {
+            let next = app.handle_event(event);
+            outcome.redraw |= next.redraw;
+            outcome.launch_editor |= next.launch_editor;
+            outcome.quit |= next.quit;
         }
 
-        if let Some(path) = app.pending_editor.take() {
-            editor::launch(terminal, &path);
-        }
-
-        terminal.draw(|frame| ui::draw(frame, app))?;
-
-        if app.should_quit {
+        if outcome.quit {
             break;
+        }
+
+        if outcome.launch_editor
+            && let Some(path) = app.pending_editor.take()
+        {
+            events.pause_input().await;
+            let result = editor::launch(terminal, &path);
+            while let Ok(event) = events.try_recv() {
+                if !matches!(event, AppEvent::Term(_)) {
+                    let next = app.handle_event(event);
+                    outcome.redraw |= next.redraw;
+                    outcome.quit |= next.quit;
+                }
+            }
+            events.resume_input();
+            app.on_editor_closed(result);
+            outcome.redraw = true;
+        }
+
+        if outcome.redraw {
+            terminal.draw(|frame| ui::draw(frame, app))?;
         }
     }
 

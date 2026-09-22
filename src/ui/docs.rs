@@ -21,12 +21,12 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Length(28), Constraint::Min(20)])
         .split(area);
 
-    draw_list(frame, chunks[0], app);
-    draw_page(frame, chunks[1], app);
+    let tools = app.filtered_docs();
+    draw_list(frame, chunks[0], app, &tools);
+    draw_page(frame, chunks[1], app, &tools);
 }
 
-fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
-    let tools = app.filtered_docs();
+fn draw_list(frame: &mut Frame, area: Rect, app: &App, tools: &[&Tool]) {
     let items: Vec<ListItem> = tools
         .iter()
         .map(|tool| {
@@ -39,7 +39,7 @@ fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
             };
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{mark} "), style),
-                Span::raw(tool.name.clone()),
+                Span::raw(tool.name.as_str()),
             ]))
         })
         .collect();
@@ -67,7 +67,7 @@ fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_page(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_page(frame: &mut Frame, area: Rect, app: &App, tools: &[&Tool]) {
     let block = |title: String| {
         Block::default()
             .borders(Borders::ALL)
@@ -77,7 +77,7 @@ fn draw_page(frame: &mut Frame, area: Rect, app: &App) {
             .title_style(theme::accent_style())
     };
 
-    let Some((tool, page)) = app.selected_doc() else {
+    let Some((tool, page)) = app.selected_doc_in(tools) else {
         frame.render_widget(
             Paragraph::new("nothing matches this search")
                 .style(theme::muted_style())
@@ -95,6 +95,7 @@ fn draw_page(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
+            .scroll((app.docs_scroll, 0))
             .block(block(format!(" {} ", tool.name))),
         area,
     );

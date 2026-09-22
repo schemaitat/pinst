@@ -27,13 +27,16 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(4), Constraint::Min(0)])
-        .split(area);
-
-    draw_banner(frame, chunks[0], app);
-    draw_table(frame, chunks[1], app);
+    if area.height < 10 {
+        draw_table(frame, area, app);
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(0)])
+            .split(area);
+        draw_banner(frame, chunks[0], app);
+        draw_table(frame, chunks[1], app);
+    }
 
     if let Some(modal) = &app.harness_modal {
         draw_modal(frame, modal);
@@ -43,17 +46,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
 /// Two fixed lines — "where is it installed" has exactly two possible
 /// answers on this machine, and a reader should get both without scrolling.
 fn draw_banner(frame: &mut Frame, area: Rect, app: &App) {
-    let project = scope_line(
-        "project",
-        &app.harness_project_root.display().to_string(),
-        &app.harness_project,
+    let text = format!(
+        "{}\n{}",
+        app.harness_project_summary, app.harness_global_summary
     );
-    let global = scope_line(
-        "global",
-        &app.home_dir.display().to_string(),
-        &app.harness_global,
-    );
-    let text = format!("{project}\n{global}");
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -61,26 +57,6 @@ fn draw_banner(frame: &mut Frame, area: Rect, app: &App) {
         .title(" Harness install state ")
         .title_style(theme::accent_style());
     frame.render_widget(Paragraph::new(text).block(block), area);
-}
-
-fn scope_line(
-    label: &str,
-    root: &str,
-    rows: &[crate::core::harness::install::state::AssetStatus],
-) -> String {
-    let installed = rows.iter().any(|r| r.state.satisfied());
-    if !installed {
-        return format!("{label:<8} {root}   not installed");
-    }
-    let skills = rows
-        .iter()
-        .filter(|r| r.kind == crate::core::harness::install::state::AssetKindLabel::Skill)
-        .count();
-    let commands = rows
-        .iter()
-        .filter(|r| r.kind == crate::core::harness::install::state::AssetKindLabel::Command)
-        .count();
-    format!("{label:<8} {root}   {skills} skills, {commands} commands")
 }
 
 fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
@@ -101,7 +77,7 @@ fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
             Row::new(vec![
                 Cell::from(scope.label()),
                 Cell::from(row.kind.label()),
-                Cell::from(row.name.clone()),
+                Cell::from(row.name.as_str()),
                 Cell::from(label).style(style),
             ])
         })
@@ -147,10 +123,12 @@ fn draw_modal(frame: &mut Frame, modal: &HarnessModal) {
         HarnessModalAction::Install => "install",
         HarnessModalAction::Uninstall => "uninstall",
     };
-    let text = format!(
-        "{verb} {} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel",
-        modal.steps
-    );
+    let text = match modal.steps {
+        Some(steps) => format!(
+            "{verb} {steps} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel"
+        ),
+        None => format!("calculating {verb} plan for {scope_label} scope...\n\n[Esc] cancel"),
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)

@@ -1,9 +1,9 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 
 use super::theme;
-use crate::app::App;
+use crate::app::{App, HealthFocus};
 use crate::core::configs::FileState;
 use crate::core::doctor::Severity;
 
@@ -50,7 +50,7 @@ fn draw_findings(frame: &mut Frame, area: Rect, app: &App) {
             };
             Row::new(vec![
                 Cell::from(label).style(style),
-                Cell::from(finding.message.clone()),
+                Cell::from(finding.message.as_str()),
             ])
         })
         .collect();
@@ -62,15 +62,27 @@ fn draw_findings(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let widths = [Constraint::Length(9), Constraint::Min(20)];
-    let table = Table::new(rows, widths).header(header).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(theme::muted_style())
-            .title(title)
-            .title_style(theme::accent_style()),
-    );
-    frame.render_widget(table, area);
+    let selected = app
+        .health_findings_selected
+        .min(filtered.len().saturating_sub(1));
+    let mut state = TableState::default().with_selected((!filtered.is_empty()).then_some(selected));
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(if app.health_focus == HealthFocus::Findings {
+                    theme::accent_style()
+                } else {
+                    theme::muted_style()
+                })
+                .title(title)
+                .title_style(theme::accent_style()),
+        )
+        .row_highlight_style(theme::selected_style())
+        .highlight_symbol("> ");
+    frame.render_stateful_widget(table, area, &mut state);
 }
 
 fn draw_configs(frame: &mut Frame, area: Rect, app: &App) {
@@ -92,7 +104,7 @@ fn draw_configs(frame: &mut Frame, area: Rect, app: &App) {
                 FileState::Unrenderable => ("no values", theme::bad_style()),
             };
             Row::new(vec![
-                Cell::from(file.path.clone()),
+                Cell::from(file.path.as_str()),
                 Cell::from(label).style(style),
             ])
         })
@@ -106,13 +118,25 @@ fn draw_configs(frame: &mut Frame, area: Rect, app: &App) {
     let title = format!(" Configs ({}/{} ok) ", ok, app.configs.len());
 
     let widths = [Constraint::Min(16), Constraint::Length(10)];
-    let table = Table::new(rows, widths).header(header).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(theme::muted_style())
-            .title(title)
-            .title_style(theme::accent_style()),
-    );
-    frame.render_widget(table, area);
+    let selected = app
+        .health_configs_selected
+        .min(filtered.len().saturating_sub(1));
+    let mut state = TableState::default().with_selected((!filtered.is_empty()).then_some(selected));
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(if app.health_focus == HealthFocus::Configs {
+                    theme::accent_style()
+                } else {
+                    theme::muted_style()
+                })
+                .title(title)
+                .title_style(theme::accent_style()),
+        )
+        .row_highlight_style(theme::selected_style())
+        .highlight_symbol("> ");
+    frame.render_stateful_widget(table, area, &mut state);
 }

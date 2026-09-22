@@ -79,17 +79,47 @@ pub struct Hit<'a> {
     pub recipes: Vec<&'a Recipe>,
 }
 
+struct Ranked<'a> {
+    entry: Entry<'a>,
+    score: u32,
+    field: Field,
+}
+
 /// Ranks entries against a query, best first. Entries that match nothing are
 /// left out entirely; an empty result is a correct answer, not an error.
 pub fn search<'a>(entries: &[Entry<'a>], query: &str) -> Vec<Hit<'a>> {
     let terms = terms(query);
+    rank(entries, &terms)
+        .into_iter()
+        .map(|ranked| Hit {
+            tool: ranked.entry.tool,
+            page: ranked.entry.page,
+            score: ranked.score,
+            field: ranked.field,
+            recipes: matching_recipes(&ranked.entry, &terms),
+        })
+        .collect()
+}
+
+/// The same ranking as [`search`], without collecting matching recipes.
+/// The TUI only needs ordered tools and should not lowercase every recipe
+/// merely because a frame was drawn.
+pub fn search_tools<'a>(entries: &[Entry<'a>], query: &str) -> Vec<&'a Tool> {
+    let terms = terms(query);
+    rank(entries, &terms)
+        .into_iter()
+        .map(|ranked| ranked.entry.tool)
+        .collect()
+}
+
+fn rank<'a>(entries: &[Entry<'a>], terms: &[String]) -> Vec<Ranked<'a>> {
     if terms.is_empty() {
         return Vec::new();
     }
 
-    let mut hits: Vec<Hit<'a>> = entries
+    let mut hits: Vec<Ranked<'a>> = entries
         .iter()
-        .filter_map(|entry| score(entry, &terms))
+        .filter_map(|entry| score(entry, terms))
         .collect();
 
     // Ties break on name so the order is stable across runs — a result set
@@ -97,7 +127,7 @@ pub fn search<'a>(entries: &[Entry<'a>], query: &str) -> Vec<Hit<'a>> {
     hits.sort_by(|a, b| {
         b.score
             .cmp(&a.score)
-            .then_with(|| a.tool.name.cmp(&b.tool.name))
+            .then_with(|| a.entry.tool.name.cmp(&b.entry.tool.name))
     });
     hits
 }
@@ -125,7 +155,7 @@ fn terms(query: &str) -> Vec<String> {
 
 /// Sums each term's best field score. Summing rather than taking the maximum
 /// is what makes a two-word query prefer the entry that answers both halves.
-fn score<'a>(entry: &Entry<'a>, terms: &[String]) -> Option<Hit<'a>> {
+fn score<'a>(entry: &Entry<'a>, terms: &[String]) -> Option<Ranked<'a>> {
     let mut total = 0;
     let mut best: Option<(u32, Field)> = None;
 
@@ -139,12 +169,10 @@ fn score<'a>(entry: &Entry<'a>, terms: &[String]) -> Option<Hit<'a>> {
     }
 
     let (_, field) = best?;
-    Some(Hit {
-        tool: entry.tool,
-        page: entry.page,
+    Some(Ranked {
+        entry: *entry,
         score: total,
         field,
-        recipes: matching_recipes(entry, terms),
     })
 }
 

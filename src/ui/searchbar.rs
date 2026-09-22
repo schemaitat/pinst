@@ -11,7 +11,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         (
             Line::from(vec![
                 Span::styled("/ ", theme::accent_style()),
-                Span::styled(app.search_query.clone(), theme::title_style()),
+                Span::styled(app.search_query.as_str(), theme::title_style()),
                 Span::styled("_", theme::accent_style()),
             ]),
             theme::accent_style(),
@@ -20,7 +20,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         (
             Line::from(vec![
                 Span::styled("filter: ", theme::muted_style()),
-                Span::styled(app.search_query.clone(), theme::title_style()),
+                Span::styled(app.search_query.as_str(), theme::title_style()),
                 Span::styled("   [/] edit   [Esc] clear", theme::muted_style()),
             ]),
             theme::muted_style(),
