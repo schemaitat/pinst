@@ -2,7 +2,7 @@
 id: 260922-cotdnp
 slug: optimise-tui-responsiveness
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Bounded, cache-correct upgrade discovery
@@ -19,29 +19,29 @@ navigation because correctness of cache, timeout, and completion state can be
 tested without involving ratatui layout.
 
 ## Steps
-- [ ] **TASK-005**: `src/app.rs`, `src/ui/statusbar.rs` — introduce explicit
+- [x] **TASK-005**: `src/app.rs`, `src/ui/statusbar.rs` — introduce explicit
   cache-aware and forced upgrade requests: `r` starts a normal cached check,
   `R` forces lookups, both remain disabled while a run is active, and each
   new run clears or generation-tags prior progress (ASSUMPTION-001).
-- [ ] **TASK-006**: `src/core/upgrade/strategies.rs` — after TASK-005, make
+- [x] **TASK-006**: `src/core/upgrade/strategies.rs` — after TASK-005, make
   lookup strategies asynchronous, reuse one `reqwest::Client`, and put the
   existing eight-second bound around both HTTP and subprocess completion.
   Keep failure advisory by returning an unavailable result rather than
   failing the whole run.
-- [ ] **TASK-007**: `src/core/upgrade/mod.rs` — after TASK-006, split fresh
+- [x] **TASK-007**: `src/core/upgrade/mod.rs` — after TASK-006, split fresh
   cache resolution from remote lookup, run stale/missing lookups with a
   four-operation cap, and return completions through one coordinator that
   alone mutates and saves the cache (ASSUMPTION-002, RISK-001).
-- [ ] **TASK-008**: `src/core/upgrade/mod.rs`, CLI update call sites — after
+- [x] **TASK-008**: `src/core/upgrade/mod.rs`, CLI update call sites — after
   TASK-007, migrate `check_all` and streaming callers to the asynchronous
   implementation while preserving manifest-order CLI output, comparison
   behavior, cache format, and exit codes (CON-001).
-- [ ] **TASK-009**: `src/app.rs`, `src/ui/upgrades.rs` — after TASK-008,
+- [x] **TASK-009**: `src/app.rs`, `src/ui/upgrades.rs` — after TASK-008,
   represent checking, cached, current, upgrade-available, unavailable, and
   unsupported states explicitly; make progress count the run generation
   rather than stale map entries, and ensure completion removes every
   “checking...” label.
-- [ ] **TASK-010**: upgrade tests — after TASK-009, use local stubs and
+- [x] **TASK-010**: upgrade tests — after TASK-009, use local stubs and
   injected timeouts/cache paths to prove cache-aware versus forced behavior,
   the concurrency cap, timeout degradation, deterministic CLI ordering, and
   complete TUI row states without real network access.

@@ -9,8 +9,10 @@ use crate::app::{App, Tab};
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     let hints = if app.tab == Tab::Harness {
         "[Tab/1-5] view  [j/k] move  [/] search  [i] install  [u] uninstall  [q] quit"
+    } else if app.tab == Tab::Upgrades {
+        "[Tab/1-5] view  [/] search  [r] check cached  [R] force refresh  [q] quit"
     } else {
-        "[Tab/1-5] view  [j/k] move  [/] search  [e] edit config  [r] refresh upgrades  [q] quit"
+        "[Tab/1-5] view  [j/k] move  [/] search  [e] edit config  [q] quit"
     };
     let line = Line::from(vec![
         Span::styled(app.status.clone(), theme::title_style()),

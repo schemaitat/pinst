@@ -4,6 +4,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table};
 
 use super::theme;
 use crate::app::App;
+use crate::core::upgrade::UpgradeCheckState;
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     if !app.upgrades_ever_run {
@@ -34,23 +35,51 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .copied()
         .map(|spec| {
-            let result = app.upgrades.get(&spec.name);
+            let check = app.upgrades.get(&spec.name);
+            let result = check.and_then(|check| check.result.as_ref());
             let current = result
-                .and_then(|r| r.current.clone())
+                .and_then(|result| result.current.clone())
                 .unwrap_or_else(|| "-".to_string());
-            let (latest, status_text, style) = match result {
-                None => ("-".to_string(), "checking...", theme::muted_style()),
-                Some(r) if r.upgrade_available => (
-                    r.latest.clone().unwrap_or_else(|| "-".to_string()),
-                    "upgrade available",
-                    theme::warn_style(),
-                ),
-                Some(r) if r.latest.is_some() => (
-                    r.latest.clone().unwrap_or_else(|| "-".to_string()),
-                    "up to date",
-                    theme::ok_style(),
-                ),
-                Some(_) => ("-".to_string(), "unknown", theme::muted_style()),
+            let (latest, status_text, style) = match check {
+                None if app.upgrades_loading => {
+                    ("-".to_string(), "checking...", theme::muted_style())
+                }
+                None => ("-".to_string(), "unavailable", theme::muted_style()),
+                Some(check) if check.state == UpgradeCheckState::Unsupported => {
+                    ("-".to_string(), "unsupported", theme::muted_style())
+                }
+                Some(check) if check.state == UpgradeCheckState::NotApplicable => {
+                    ("-".to_string(), "not checkable", theme::muted_style())
+                }
+                Some(check) if check.state == UpgradeCheckState::Unavailable => {
+                    ("-".to_string(), "unavailable", theme::muted_style())
+                }
+                Some(check) => {
+                    let result = check.result.as_ref().expect("completed check has a result");
+                    let latest = result.latest.clone().unwrap_or_else(|| "-".to_string());
+                    let cached = check.state == UpgradeCheckState::Cached;
+                    if result.upgrade_available {
+                        (
+                            latest,
+                            if cached {
+                                "cached upgrade"
+                            } else {
+                                "upgrade available"
+                            },
+                            theme::warn_style(),
+                        )
+                    } else {
+                        (
+                            latest,
+                            if cached {
+                                "cached current"
+                            } else {
+                                "up to date"
+                            },
+                            theme::ok_style(),
+                        )
+                    }
+                }
             };
             Row::new(vec![
                 Cell::from(spec.name.clone()),
@@ -86,7 +115,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(22),
         Constraint::Length(14),
         Constraint::Length(14),
-        Constraint::Min(16),
+        Constraint::Min(18),
     ];
     let table = Table::new(rows, widths).header(header).block(
         Block::default()

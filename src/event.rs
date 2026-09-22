@@ -10,7 +10,7 @@ use crate::core::configs::FileStatus;
 use crate::core::doctor::Finding;
 use crate::core::harness::install::state::AssetStatus;
 use crate::core::probe::ProbeResult;
-use crate::core::upgrade::UpgradeResult;
+use crate::core::upgrade::UpgradeCheck;
 
 #[derive(Debug)]
 pub enum AppEvent {
@@ -20,7 +20,7 @@ pub enum AppEvent {
         findings: Vec<Finding>,
         configs: Vec<FileStatus>,
     },
-    Upgrade(UpgradeResult),
+    Upgrade(UpgradeCheck),
     UpgradesDone,
     Harness {
         project: Vec<AssetStatus>,
@@ -62,8 +62,8 @@ pub fn forward_probes(tx: UnboundedSender<AppEvent>) -> UnboundedSender<ProbeRes
     probe_tx
 }
 
-pub fn forward_upgrades(tx: UnboundedSender<AppEvent>) -> UnboundedSender<Option<UpgradeResult>> {
-    let (up_tx, mut up_rx) = mpsc::unbounded_channel::<Option<UpgradeResult>>();
+pub fn forward_upgrades(tx: UnboundedSender<AppEvent>) -> UnboundedSender<Option<UpgradeCheck>> {
+    let (up_tx, mut up_rx) = mpsc::unbounded_channel::<Option<UpgradeCheck>>();
     tokio::spawn(async move {
         while let Some(message) = up_rx.recv().await {
             let event = match message {

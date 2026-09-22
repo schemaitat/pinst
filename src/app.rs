@@ -22,7 +22,7 @@ use crate::core::harness::vendor::Vendor;
 use crate::core::manifest::{Manifest, Tool};
 use crate::core::platform::Platform;
 use crate::core::probe::{self, ProbeResult};
-use crate::core::upgrade::{self, UpgradeResult};
+use crate::core::upgrade::{self, UpgradeCheck};
 use crate::event::{self, AppEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,7 +111,7 @@ pub struct App {
     pub configs: Vec<FileStatus>,
     pub health_ready: bool,
 
-    pub upgrades: BTreeMap<String, UpgradeResult>,
+    pub upgrades: BTreeMap<String, UpgradeCheck>,
     pub upgrades_loading: bool,
     pub upgrades_ever_run: bool,
 
@@ -305,6 +305,7 @@ impl App {
     }
 
     pub fn refresh_upgrades(&mut self, force: bool) {
+        self.upgrades.clear();
         self.upgrades_loading = true;
         self.upgrades_ever_run = true;
         self.status = "checking for upgrades...".to_string();
@@ -500,6 +501,10 @@ impl App {
                 true
             }
             KeyCode::Char('r') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
+                self.refresh_upgrades(false);
+                true
+            }
+            KeyCode::Char('R') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
                 self.refresh_upgrades(true);
                 true
             }
@@ -1042,6 +1047,40 @@ does = "Search a path."
         assert!(rendered.contains("ripgrep"), "{rendered}");
         assert!(rendered.contains("rg -n"), "the recipe must be on screen");
         assert!(rendered.contains("authored"), "the page's status is shown");
+    }
+
+    #[test]
+    fn completed_upgrade_rows_never_remain_checking() {
+        let (_dir, mut app) = app(&[]);
+        app.tab = Tab::Upgrades;
+        app.upgrades_ever_run = true;
+        app.upgrades_loading = false;
+        let name = app.registry[0].name.clone();
+        app.upgrades.insert(
+            name.clone(),
+            UpgradeCheck {
+                tool: name,
+                result: None,
+                state: crate::core::upgrade::UpgradeCheckState::Unsupported,
+            },
+        );
+
+        let backend = ratatui::backend::TestBackend::new(100, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|frame| crate::ui::draw(frame, &app)).unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+
+        assert!(rendered.contains("unsupported"), "{rendered}");
+        assert!(
+            !rendered.contains("checking..."),
+            "a completed run must not retain an in-progress label"
+        );
     }
 
     use harness_state::AssetState as HarnessState;
