@@ -40,22 +40,30 @@ async fn event_loop(
     terminal.draw(|frame| ui::draw(frame, app))?;
 
     while let Some(event) = rx.recv().await {
-        app.handle_event(event);
+        let mut outcome = app.handle_event(event);
         // Drain anything else already queued (e.g. a burst of probe results
         // landing back-to-back) before redrawing, so ~25 concurrent checks
         // don't trigger ~25 separate frames.
         while let Ok(event) = rx.try_recv() {
-            app.handle_event(event);
+            let next = app.handle_event(event);
+            outcome.redraw |= next.redraw;
+            outcome.launch_editor |= next.launch_editor;
+            outcome.quit |= next.quit;
         }
 
-        if let Some(path) = app.pending_editor.take() {
-            editor::launch(terminal, &path);
-        }
-
-        terminal.draw(|frame| ui::draw(frame, app))?;
-
-        if app.should_quit {
+        if outcome.quit {
             break;
+        }
+
+        if outcome.launch_editor
+            && let Some(path) = app.pending_editor.take()
+        {
+            editor::launch(terminal, &path);
+            outcome.redraw = true;
+        }
+
+        if outcome.redraw {
+            terminal.draw(|frame| ui::draw(frame, app))?;
         }
     }
 

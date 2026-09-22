@@ -1,0 +1,7 @@
+{"ts":"2026-09-22T18:51:39Z","event":"run_start","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":null,"task":null,"message":"started autonomous implementation at phase 1 task 1","detail":{"resume":"phase 1 TASK-001","head":"9593185e3d8e48d63f48d568d0a5e21a9bec5c8c"}}
+{"ts":"2026-09-22T18:51:39Z","event":"phase_start","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":null,"message":"started event-driven rendering","detail":{}}
+{"ts":"2026-09-22T18:53:57Z","event":"task_done","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":"TASK-001","message":"removed the unused periodic tick and tick counter","detail":{}}
+{"ts":"2026-09-22T18:53:57Z","event":"task_done","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":"TASK-002","message":"made event handling report redraw, editor, and quit outcomes","detail":{}}
+{"ts":"2026-09-22T18:53:57Z","event":"task_done","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":"TASK-003","message":"redraws now occur once per visible event batch with no final quit frame","detail":{}}
+{"ts":"2026-09-22T18:53:57Z","event":"task_done","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":"TASK-004","message":"added event outcome coverage for no-op, resize, probe, editor, and quit events","detail":{}}
+{"ts":"2026-09-22T18:53:57Z","event":"phase_done","plan":"260922-cotdnp-optimise-tui-responsiveness","phase":1,"task":null,"message":"event-driven rendering complete and quality checks pass","detail":{}}

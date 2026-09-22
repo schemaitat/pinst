@@ -87,6 +87,13 @@ pub struct EditorTarget {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EventOutcome {
+    pub redraw: bool,
+    pub launch_editor: bool,
+    pub quit: bool,
+}
+
 pub struct App {
     pub tab: Tab,
     pub should_quit: bool,
@@ -136,7 +143,6 @@ pub struct App {
     pub harness_modal: Option<HarnessModal>,
 
     pub status: String,
-    pub tick_count: u64,
 }
 
 impl App {
@@ -188,7 +194,6 @@ impl App {
             harness_busy: false,
             harness_modal: None,
             status: "probing tools...".to_string(),
-            tick_count: 0,
         }
     }
 
@@ -215,23 +220,28 @@ impl App {
         });
     }
 
-    pub fn handle_event(&mut self, event: AppEvent) {
-        match event {
+    pub fn handle_event(&mut self, event: AppEvent) -> EventOutcome {
+        let redraw = match event {
             AppEvent::Term(term_event) => self.handle_term_event(term_event),
-            AppEvent::Tick => self.tick_count = self.tick_count.wrapping_add(1),
-            AppEvent::Probe(result) => self.on_probe(result),
+            AppEvent::Probe(result) => {
+                self.on_probe(result);
+                true
+            }
             AppEvent::Health { findings, configs } => {
                 self.findings = findings;
                 self.configs = configs;
                 self.health_ready = true;
                 self.status = "diagnosis complete".to_string();
+                true
             }
             AppEvent::Upgrade(result) => {
                 self.upgrades.insert(result.tool.clone(), result);
+                true
             }
             AppEvent::UpgradesDone => {
                 self.upgrades_loading = false;
                 self.status = "upgrade check complete".to_string();
+                true
             }
             AppEvent::Harness { project, global } => {
                 self.harness_project = project;
@@ -239,7 +249,13 @@ impl App {
                 self.harness_ready = true;
                 self.harness_busy = false;
                 self.status = "harness state refreshed".to_string();
+                true
             }
+        };
+        EventOutcome {
+            redraw,
+            launch_editor: self.pending_editor.is_some(),
+            quit: self.should_quit,
         }
     }
 
@@ -426,79 +442,103 @@ impl App {
         targets
     }
 
-    fn handle_term_event(&mut self, event: Event) {
-        let Event::Key(key) = event else { return };
+    fn handle_term_event(&mut self, event: Event) -> bool {
+        let Event::Key(key) = event else {
+            return matches!(event, Event::Resize(_, _));
+        };
         if key.kind != KeyEventKind::Press {
-            return;
+            return false;
         }
         if self.harness_modal.is_some() {
-            self.handle_harness_modal_key(key.code);
-            return;
+            return self.handle_harness_modal_key(key.code);
         }
         if self.picker_open {
-            self.handle_picker_key(key.code);
-            return;
+            return self.handle_picker_key(key.code);
         }
         if self.search_mode {
-            self.handle_search_key(key.code);
-            return;
+            return self.handle_search_key(key.code);
         }
         match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+                false
+            }
             KeyCode::Esc => {
                 if self.search_query.is_empty() {
                     self.should_quit = true;
+                    false
                 } else {
                     // First Esc clears an active filter instead of quitting,
                     // so a search doesn't trap the user into an extra quit.
                     self.search_query.clear();
                     self.reset_selections();
+                    true
                 }
             }
-            KeyCode::Char('/') => self.search_mode = true,
-            KeyCode::Tab => self.next_tab(),
-            KeyCode::BackTab => self.prev_tab(),
-            KeyCode::Char('1') => self.tab = Tab::Overview,
-            KeyCode::Char('2') => self.tab = Tab::Health,
-            KeyCode::Char('3') => self.tab = Tab::Upgrades,
-            KeyCode::Char('4') => self.tab = Tab::Docs,
-            KeyCode::Char('5') => self.tab = Tab::Harness,
+            KeyCode::Char('/') => {
+                self.search_mode = true;
+                true
+            }
+            KeyCode::Tab => {
+                self.next_tab();
+                true
+            }
+            KeyCode::BackTab => {
+                self.prev_tab();
+                true
+            }
+            KeyCode::Char('1') => self.select_tab(Tab::Overview),
+            KeyCode::Char('2') => self.select_tab(Tab::Health),
+            KeyCode::Char('3') => self.select_tab(Tab::Upgrades),
+            KeyCode::Char('4') => self.select_tab(Tab::Docs),
+            KeyCode::Char('5') => self.select_tab(Tab::Harness),
             KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('e') => {
                 self.picker_open = true;
                 self.picker_selected = 0;
+                true
             }
             KeyCode::Char('r') if self.tab == Tab::Upgrades && !self.upgrades_loading => {
                 self.refresh_upgrades(true);
+                true
             }
             KeyCode::Char('i') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Install);
+                self.open_harness_modal(HarnessModalAction::Install)
             }
             KeyCode::Char('u') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Uninstall);
+                self.open_harness_modal(HarnessModalAction::Uninstall)
             }
-            _ => {}
+            _ => false,
         }
     }
 
-    fn handle_search_key(&mut self, code: KeyCode) {
+    fn handle_search_key(&mut self, code: KeyCode) -> bool {
         match code {
             KeyCode::Esc => {
                 self.search_mode = false;
                 self.search_query.clear();
                 self.reset_selections();
+                true
             }
-            KeyCode::Enter => self.search_mode = false,
+            KeyCode::Enter => {
+                self.search_mode = false;
+                true
+            }
             KeyCode::Backspace => {
-                self.search_query.pop();
-                self.reset_selections();
+                if self.search_query.pop().is_some() {
+                    self.reset_selections();
+                    true
+                } else {
+                    false
+                }
             }
             KeyCode::Char(c) => {
                 self.search_query.push(c);
                 self.reset_selections();
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -520,47 +560,72 @@ impl App {
         self.tab = Tab::ALL[(idx + Tab::ALL.len() - 1) % Tab::ALL.len()];
     }
 
+    fn select_tab(&mut self, tab: Tab) -> bool {
+        if self.tab == tab {
+            false
+        } else {
+            self.tab = tab;
+            true
+        }
+    }
+
     /// Moves the selection on whichever tab owns one.
-    fn move_selection(&mut self, delta: i32) {
+    fn move_selection(&mut self, delta: i32) -> bool {
         match self.tab {
             Tab::Overview => {
                 let len = self.filtered_registry().len() as i32;
                 if len > 0 {
+                    let previous = self.overview_selected;
                     self.overview_selected =
                         (self.overview_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.overview_selected != previous;
                 }
             }
             Tab::Docs => {
                 let len = self.filtered_docs().len() as i32;
                 if len > 0 {
+                    let previous = self.docs_selected;
                     self.docs_selected =
                         (self.docs_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.docs_selected != previous;
                 }
             }
             Tab::Harness => {
                 let len = self.filtered_harness().len() as i32;
                 if len > 0 {
+                    let previous = self.harness_selected;
                     self.harness_selected =
                         (self.harness_selected as i32 + delta).rem_euclid(len) as usize;
+                    return self.harness_selected != previous;
                 }
             }
             _ => {}
         }
+        false
     }
 
-    fn handle_picker_key(&mut self, code: KeyCode) {
+    fn handle_picker_key(&mut self, code: KeyCode) -> bool {
         let targets = self.editor_targets();
         match code {
-            KeyCode::Esc | KeyCode::Char('e') => self.picker_open = false,
+            KeyCode::Esc | KeyCode::Char('e') => {
+                self.picker_open = false;
+                true
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 if !targets.is_empty() {
                     self.picker_selected = (self.picker_selected + 1) % targets.len();
+                    true
+                } else {
+                    false
                 }
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if !targets.is_empty() {
                     self.picker_selected =
                         (self.picker_selected + targets.len() - 1) % targets.len();
+                    true
+                } else {
+                    false
                 }
             }
             KeyCode::Enter => {
@@ -569,8 +634,9 @@ impl App {
                     self.status = format!("opening {}...", target.label);
                     self.pending_editor = Some(target.path.clone());
                 }
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -579,13 +645,13 @@ impl App {
     /// /repo/.claude" is a sentence someone can disagree with — "install?"
     /// is not. Silently does nothing if the harness state hasn't loaded yet,
     /// there is nothing selected, or the scope has nothing to do.
-    fn open_harness_modal(&mut self, action: HarnessModalAction) {
+    fn open_harness_modal(&mut self, action: HarnessModalAction) -> bool {
         if !self.harness_ready {
-            return;
+            return false;
         }
         let rows = self.filtered_harness();
         if rows.is_empty() {
-            return;
+            return false;
         }
         let index = self.harness_selected.min(rows.len() - 1);
         let scope = rows[index].0;
@@ -596,13 +662,14 @@ impl App {
                 action.label(),
                 scope.label()
             );
-            return;
+            return true;
         };
         self.harness_modal = Some(HarnessModal {
             scope,
             action,
             steps,
         });
+        true
     }
 
     /// A read-only, synchronous count of what an install/uninstall *would*
@@ -654,15 +721,19 @@ impl App {
         }
     }
 
-    fn handle_harness_modal_key(&mut self, code: KeyCode) {
+    fn handle_harness_modal_key(&mut self, code: KeyCode) -> bool {
         match code {
-            KeyCode::Esc => self.harness_modal = None,
+            KeyCode::Esc => {
+                self.harness_modal = None;
+                true
+            }
             KeyCode::Enter => {
                 if let Some(modal) = self.harness_modal.take() {
                     self.run_harness_action(modal);
                 }
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -791,6 +862,50 @@ mod tests {
             press(app, KeyCode::Char(c));
         }
         press(app, KeyCode::Enter);
+    }
+
+    #[test]
+    fn event_outcomes_only_redraw_for_visible_changes() {
+        let (_dir, mut app) = app(&[]);
+
+        let ignored = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+        ))));
+        assert_eq!(ignored, EventOutcome::default());
+
+        let resized = app.handle_event(AppEvent::Term(Event::Resize(100, 30)));
+        assert!(resized.redraw);
+        assert!(!resized.quit);
+
+        let probe = app.handle_event(AppEvent::Probe(ProbeResult {
+            tool: app.registry[0].name.clone(),
+            installed: true,
+            version: Some("1.0.0".to_string()),
+            path: None,
+        }));
+        assert!(probe.redraw);
+
+        let quit = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        ))));
+        assert!(quit.quit);
+        assert!(!quit.redraw, "quit must not request a final frame");
+    }
+
+    #[test]
+    fn opening_an_editor_is_an_explicit_event_outcome() {
+        let (_dir, mut app) = app(&[]);
+        press(&mut app, KeyCode::Char('e'));
+        let outcome = app.handle_event(AppEvent::Term(Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        ))));
+
+        assert!(outcome.redraw);
+        assert!(outcome.launch_editor);
+        assert!(!outcome.quit);
     }
 
     const RIPGREP: &str = r#"
