@@ -634,7 +634,10 @@ meant redoing finished work or, worse, starting a second implementation
 alongside the first. `git log` and the append-only run log are always the
 ground truth; an instruction describing them is a snapshot that can expire.
 **Status:** prose
-**Seen in:** 260920-zqapye-installable-harness (ISSUE-001)
+**Seen in:** 260920-zqapye-installable-harness (ISSUE-001); again in
+260922-cotdnp-optimise-tui-responsiveness (ISSUE-003), where an interrupted
+patch had already reached the filesystem and retrying it would have duplicated
+work
 
 ### LESSON-039: A checker given an explicit root must resolve every input relative to that root
 **Lesson:** When a function receives an explicit root to check something
@@ -710,3 +713,14 @@ being tested, which only a real runner provides. It surfaced on the very
 first real `macos-latest` CI run.
 **Status:** prose
 **Seen in:** 260920-qcrrqs-macos-support (ISSUE-008)
+
+### LESSON-040: Cargo test accepts one positional filter
+**Lesson:** Give `cargo test` at most one `TESTNAME` filter per invocation.
+When several modules need coverage, run separate focused commands or the full
+suite; arguments for the test binary go after `--`.
+**Why:** A second bare filter is not another selection expression. Cargo
+rejects it before compiling, and moving several bare filters after `--` merely
+hands unsupported arguments to libtest. The failure is fast but easy to repeat
+when a validation checklist names several modules.
+**Status:** prose
+**Seen in:** 260922-cotdnp-optimise-tui-responsiveness (ISSUE-001)

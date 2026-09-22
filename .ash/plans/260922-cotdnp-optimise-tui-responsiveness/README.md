@@ -1,7 +1,7 @@
 ---
 id: 260922-cotdnp
 slug: optimise-tui-responsiveness
-status: In Progress
+status: Done
 created: 2026-09-22
 updated: 2026-09-22
 areas: [tui, events, upgrades, harness]
