@@ -112,7 +112,7 @@ four lookups (ASSUMPTION-002).
 |---|-------|------|--------|
 | 1 | Event-driven rendering | [phase-01.md](phase-01.md) | Done |
 | 2 | Bounded, cache-correct upgrade discovery | [phase-02.md](phase-02.md) | Done |
-| 3 | Navigable and cheaper views | [phase-03.md](phase-03.md) | Proposed |
+| 3 | Navigable and cheaper views | [phase-03.md](phase-03.md) | Done |
 | 4 | Safe terminal handoff and background filesystem work | [phase-04.md](phase-04.md) | Proposed |
 
 ## Affected Files

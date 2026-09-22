@@ -9,13 +9,17 @@ use crate::app::{App, Tab};
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     let hints = if app.tab == Tab::Harness {
         "[Tab/1-5] view  [j/k] move  [/] search  [i] install  [u] uninstall  [q] quit"
+    } else if app.tab == Tab::Health {
+        "[Tab/1-5] view  [←/→] pane  [j/k] move  [/] search  [e] edit config  [q] quit"
+    } else if app.tab == Tab::Docs {
+        "[Tab/1-5] view  [j/k] tool  [PgUp/PgDn] page  [/] search  [q] quit"
     } else if app.tab == Tab::Upgrades {
-        "[Tab/1-5] view  [/] search  [r] check cached  [R] force refresh  [q] quit"
+        "[Tab/1-5] view  [j/k] move  [/] search  [r] cached  [R] force  [q] quit"
     } else {
         "[Tab/1-5] view  [j/k] move  [/] search  [e] edit config  [q] quit"
     };
     let line = Line::from(vec![
-        Span::styled(app.status.clone(), theme::title_style()),
+        Span::styled(app.status.as_str(), theme::title_style()),
         Span::raw("   "),
         Span::styled(hints, theme::muted_style()),
     ]);

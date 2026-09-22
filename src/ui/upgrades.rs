@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState};
 
 use super::theme;
 use crate::app::App;
@@ -38,25 +38,23 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
             let check = app.upgrades.get(&spec.name);
             let result = check.and_then(|check| check.result.as_ref());
             let current = result
-                .and_then(|result| result.current.clone())
-                .unwrap_or_else(|| "-".to_string());
+                .and_then(|result| result.current.as_deref())
+                .unwrap_or("-");
             let (latest, status_text, style) = match check {
-                None if app.upgrades_loading => {
-                    ("-".to_string(), "checking...", theme::muted_style())
-                }
-                None => ("-".to_string(), "unavailable", theme::muted_style()),
+                None if app.upgrades_loading => ("-", "checking...", theme::muted_style()),
+                None => ("-", "unavailable", theme::muted_style()),
                 Some(check) if check.state == UpgradeCheckState::Unsupported => {
-                    ("-".to_string(), "unsupported", theme::muted_style())
+                    ("-", "unsupported", theme::muted_style())
                 }
                 Some(check) if check.state == UpgradeCheckState::NotApplicable => {
-                    ("-".to_string(), "not checkable", theme::muted_style())
+                    ("-", "not checkable", theme::muted_style())
                 }
                 Some(check) if check.state == UpgradeCheckState::Unavailable => {
-                    ("-".to_string(), "unavailable", theme::muted_style())
+                    ("-", "unavailable", theme::muted_style())
                 }
                 Some(check) => {
                     let result = check.result.as_ref().expect("completed check has a result");
-                    let latest = result.latest.clone().unwrap_or_else(|| "-".to_string());
+                    let latest = result.latest.as_deref().unwrap_or("-");
                     let cached = check.state == UpgradeCheckState::Cached;
                     if result.upgrade_available {
                         (
@@ -82,7 +80,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
                 }
             };
             Row::new(vec![
-                Cell::from(spec.name.clone()),
+                Cell::from(spec.name.as_str()),
                 Cell::from(current),
                 Cell::from(latest),
                 Cell::from(status_text).style(style),
@@ -117,13 +115,19 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(14),
         Constraint::Min(18),
     ];
-    let table = Table::new(rows, widths).header(header).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(theme::muted_style())
-            .title(title)
-            .title_style(theme::accent_style()),
-    );
-    frame.render_widget(table, area);
+    let selected = app.upgrades_selected.min(filtered.len().saturating_sub(1));
+    let mut state = TableState::default().with_selected((!filtered.is_empty()).then_some(selected));
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(theme::muted_style())
+                .title(title)
+                .title_style(theme::accent_style()),
+        )
+        .row_highlight_style(theme::selected_style())
+        .highlight_symbol("> ");
+    frame.render_stateful_widget(table, area, &mut state);
 }

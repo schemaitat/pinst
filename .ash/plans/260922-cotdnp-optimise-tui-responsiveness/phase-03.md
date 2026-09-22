@@ -2,7 +2,7 @@
 id: 260922-cotdnp
 slug: optimise-tui-responsiveness
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — Navigable and cheaper views
@@ -20,30 +20,30 @@ clamped and tested together; splitting them would create an intermediate UI
 whose state and rows can disagree.
 
 ## Steps
-- [ ] **TASK-011**: `src/app.rs` — add persistent selection for Upgrades and
+- [x] **TASK-011**: `src/app.rs` — add persistent selection for Upgrades and
   both Health panes, a Health pane focus, and a Docs page scroll offset.
   Reset or clamp each value when search, tab data, or selected document
   changes (RISK-003).
-- [ ] **TASK-012**: `src/app.rs`, `src/ui/health.rs`,
+- [x] **TASK-012**: `src/app.rs`, `src/ui/health.rs`,
   `src/ui/upgrades.rs`, `src/ui/statusbar.rs` — after TASK-011, route
   `j`/`k`, arrows, Tab or pane-focus keys, and PageUp/PageDown to the active
   table; render Health and Upgrades with persistent `TableState`; make hints
   tab-specific so every advertised key acts.
-- [ ] **TASK-013**: `src/app.rs`, `src/ui/docs.rs` — after TASK-012, keep
+- [x] **TASK-013**: `src/app.rs`, `src/ui/docs.rs` — after TASK-012, keep
   `j`/`k` for the Docs tool list, add explicit page scrolling, reset scroll
   when the selected tool or query changes, and apply the offset through
   `Paragraph::scroll`.
-- [ ] **TASK-014**: `src/ui/docs.rs`, `src/app.rs` — after TASK-013, compute
+- [x] **TASK-014**: `src/ui/docs.rs`, `src/app.rs` — after TASK-013, compute
   the ranked Docs result once per frame and pass it to both list and reading
   panes; avoid the third ranked search on navigation by exposing the current
   result length without rebuilding matching recipes the TUI discards.
-- [ ] **TASK-015**: `src/ui/overview.rs`, `src/ui/health.rs`,
+- [x] **TASK-015**: `src/ui/overview.rs`, `src/ui/health.rs`,
   `src/ui/upgrades.rs`, `src/ui/docs.rs`, `src/ui/harness.rs`,
   `src/ui/mod.rs`, `src/ui/statusbar.rs` — after TASK-014, borrow stable
   strings in cells and spans where ratatui lifetimes permit, avoid cloning
   upgrade versions twice, and compute fixed tab titles and harness summary
   data once per state change. Do not add a general widget cache (GUD-001).
-- [ ] **TASK-016**: rendering tests — after TASK-015, exercise every view in
+- [x] **TASK-016**: rendering tests — after TASK-015, exercise every view in
   a short `TestBackend`, navigating to the final row and scrolling a long
   Docs page; assert selection remains valid after filtering and data refresh.
 
