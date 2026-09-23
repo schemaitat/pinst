@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: 'Delegate a task to another coding agent through Herdr, choosing a sibling pane or isolated worktree, and supervise it until the task is verified as resolved. Use when the user explicitly asks to orchestrate, delegate, babysit, or run work in another Herdr pane or worktree.'
+description: 'Delegate and supervise a bounded task through Herdr until it is verified as resolved, including feature implementation requests that must run the implement-feature delivery chain. Use when the user explicitly asks to orchestrate, delegate, babysit, or run work in another Herdr pane or worktree.'
 ---
 
 # Orchestrate
@@ -17,6 +17,17 @@ This skill is portable and harness-agnostic. It requires Herdr, not pinst:
 - It does not invoke `pinst harness` or register repository findings.
 - It works outside git repositories when the requested topology does not need
   a git worktree.
+
+When the delegated request is to implement, build, or ship a feature end to
+end, recognize it as an `implement-feature` task. The child must run the full
+feature chain in its isolated worktree: persist a plan with `plan-write`,
+execute it with `plan-implement` (including `plan-learnings` on every
+outcome), verify the repository quality gate and acceptance criteria, and use
+`create-pr` when publication is authorized. The orchestrator supervises that
+whole chain through semantic resolution; it must not stop merely because the
+child delegated the work to another skill, became idle, or created a branch.
+The initial prompt must name the exact feature acceptance criteria and the
+required terminal evidence so the child cannot treat delegation as completion.
 
 ## Hard boundary — delegate, never implement
 
@@ -174,6 +185,14 @@ Before creating layout, write down:
 - the requested agent kind and optional model;
 - conditions that require user escalation;
 - the final report shape.
+
+For an `implement-feature` handoff, also require the child to report the
+isolated worktree and branch, committed base, persisted plan id/path, phase
+and task outcome, run-log and learnings paths, quality-gate result, PR URL
+when authorized, and every unresolved blocker. Publication, credentials,
+trust, dirty-base choices, destructive cleanup, and other user decisions
+remain approval points; the orchestrator escalates them rather than answering
+for the user.
 
 Do not delegate an open-ended request such as "finish everything". If
 acceptance cannot be observed from the response, filesystem, git state, or a
@@ -349,6 +368,14 @@ Resolution requires all of:
 3. every promised file, diff, branch, command result, or report exists;
 4. acceptance checks pass when independently inspected;
 5. no approval, question, or unresolved condition remains.
+
+For an `implement-feature` task, “every promised artifact” additionally
+means the plan is persisted under the repository's plan corpus, all required
+phases are complete or the user explicitly chose a partial draft outcome,
+`plan-learnings` recorded the implementation result, the quality gate passed,
+and `create-pr` produced the requested PR. A partial or local-only result is
+resolved only when that scope was explicitly authorized; otherwise it is
+blocked or aborted, never silently downgraded.
 
 Only then append `resolved` with `detail.verification`.
 

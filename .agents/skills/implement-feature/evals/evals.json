@@ -1,0 +1,14 @@
+{
+  "skill_name": "implement-feature",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Implement and ship a bounded feature request end to end.",
+      "expected_output": "A persisted plan, completed implementation run, learnings record, verified changes, and pull request when publication is authorized.",
+      "assertions": [
+        "The feature has a persisted implementation plan",
+        "Verification and learnings are recorded before publication"
+      ]
+    }
+  ]
+}
