@@ -77,6 +77,8 @@ one file"), write at least one test that executes the result end to end for
 each shape, not only tests that assert the plan/output structure. A plan
 that looks right and a plan that runs right are different claims.
 **Skill:** none
+**Gap:** answered — this is a code-shape regression, not recurring work a
+repository skill should own.
 **Distilled:** declined — specific to this plan's particular code shape
 (a two-representations-in-one-loop bug), not a pattern this codebase's other
 `Plan`-building code repeats today.
@@ -186,6 +188,8 @@ let this proceed without stopping or guessing. Worth continuing as a pattern
 for any TASK that depends on an environment an unattended run cannot
 guarantee.
 **Skill:** none
+**Gap:** answered — this is an environment-specific verification limitation,
+not recurring work a repository skill should own.
 **Distilled:** declined — already the exact practice LESSON-003 argues for
 (splitting a phase's Done criteria into what's provable locally and what
 needs a merge/environment); this is that pattern applied, not a new one.

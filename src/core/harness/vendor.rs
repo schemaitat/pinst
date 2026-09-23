@@ -7,9 +7,12 @@
 //! `install`, `status`, the TUI tab — already iterates `Vendor::ALL` and
 //! never spells a vendor path itself (REQ-008).
 
+use schemars::JsonSchema;
+use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum Vendor {
     Claude,
 }

@@ -87,6 +87,8 @@ logic (`derive_upgrade_spec`, unchanged and correct) — it was in a fallback
 chain that let a stale correction survive a change to what it was
 correcting.
 **Skill:** none.
+**Gap:** answered — this is a manifest-resolution edge case, not a missing
+repository workflow skill.
 **Distilled:** declined — narrow to this fallback-chain's specific shape (an override field correcting a derivation); LESSON-035 already covers the broader "old consumer of a base field" pattern this sits inside.
 
 ### ISSUE-003: A dependency cycle from copying the Linux `requires` pattern onto a platform-only tool
@@ -133,6 +135,8 @@ specific installer, check the installer's actual configuration mechanism
 is a narrower instance of LESSON-002's "verify against the real source
 while planning," specific to install-method field shapes.
 **Skill:** none.
+**Gap:** answered — this is an installer-specific interface detail, not a
+missing repository workflow skill.
 **Distilled:** declined — specific to `curl_script`'s field semantics; the general form ("check the installer's actual config mechanism") is already LESSON-002.
 
 ### ISSUE-005: `just dist`'s cross-vs-native comparison had two ways to be wrong, not one
@@ -247,4 +251,6 @@ caught by `--platform macos` simulation or by running the binary
 directly, but this one specifically needed `Platform::host()` to actually
 be `MacOS`, which only real hardware (or a real runner) provides.
 **Skill:** none.
+**Gap:** answered — this was a platform-specific implementation bug, not
+recurring work a repository skill should own.
 **Distilled:** promoted — LESSON-037.

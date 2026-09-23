@@ -60,7 +60,7 @@ fn draw_banner(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
-    let header = Row::new(vec!["Scope", "Kind", "Name", "State"])
+    let header = Row::new(vec!["Scope", "Harness", "Kind", "Name", "State"])
         .style(theme::title_style())
         .height(1);
 
@@ -76,6 +76,7 @@ fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
             };
             Row::new(vec![
                 Cell::from(scope.label()),
+                Cell::from(row.vendor.label()),
                 Cell::from(row.kind.label()),
                 Cell::from(row.name.as_str()),
                 Cell::from(label).style(style),
@@ -91,6 +92,7 @@ fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
 
     let widths = [
         Constraint::Length(8),
+        Constraint::Length(9),
         Constraint::Length(8),
         Constraint::Min(20),
         Constraint::Length(10),
@@ -123,11 +125,17 @@ fn draw_modal(frame: &mut Frame, modal: &HarnessModal) {
         HarnessModalAction::Install => "install",
         HarnessModalAction::Uninstall => "uninstall",
     };
+    let target = if modal.selected.is_some() {
+        " selected asset"
+    } else {
+        " all assets"
+    };
     let text = match modal.steps {
         Some(steps) => format!(
-            "{verb} {steps} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel"
+            "{verb}{target} at {scope_label} scope: {steps} step(s)\n\
+             drift: overwrite with backup\n\n[Enter] confirm   [Esc] cancel"
         ),
-        None => format!("calculating {verb} plan for {scope_label} scope...\n\n[Esc] cancel"),
+        None => format!("calculating {verb}{target} for {scope_label} scope...\n\n[Esc] cancel"),
     };
     let block = Block::default()
         .borders(Borders::ALL)

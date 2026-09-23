@@ -462,6 +462,9 @@ finding id as an example. The lesson resolved against that sentence rather
 than against the script that emits it, and deleting the script left the check
 silent. A passing check is not evidence until it has been seen to fail.
 **Status:** prose
+**Mechanize:** declined — this requires a deliberate deletion experiment and
+semantic review of the search scope; no repository check can safely infer that
+the experiment was meaningful.
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007); again in
 260920-zqapye-installable-harness (ISSUE-004), twice in one plan — a doc
 comment written to *explain* the literal-id convention named a real id as
@@ -640,6 +643,8 @@ meant redoing finished work or, worse, starting a second implementation
 alongside the first. `git log` and the append-only run log are always the
 ground truth; an instruction describing them is a snapshot that can expire.
 **Status:** prose
+**Mechanize:** declined — whether a resume instruction accurately describes
+the live state is a human/session judgment, not a durable corpus invariant.
 **Seen in:** 260920-zqapye-installable-harness (ISSUE-001); again in
 260922-cotdnp-optimise-tui-responsiveness (ISSUE-003), where an interrupted
 patch had already reached the filesystem and retrying it would have duplicated

@@ -84,6 +84,7 @@ impl HarnessModalAction {
 pub struct HarnessModal {
     pub scope: ReceiptScope,
     pub action: HarnessModalAction,
+    pub selected: Option<usize>,
     pub steps: Option<usize>,
     generation: u64,
 }
@@ -636,10 +637,16 @@ impl App {
                 true
             }
             KeyCode::Char('i') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Install)
+                self.open_harness_modal(HarnessModalAction::Install, true)
+            }
+            KeyCode::Char('s') if self.tab == Tab::Harness && !self.harness_busy => {
+                self.open_harness_modal(HarnessModalAction::Install, false)
             }
             KeyCode::Char('u') if self.tab == Tab::Harness && !self.harness_busy => {
-                self.open_harness_modal(HarnessModalAction::Uninstall)
+                self.open_harness_modal(HarnessModalAction::Uninstall, true)
+            }
+            KeyCode::Char('x') if self.tab == Tab::Harness && !self.harness_busy => {
+                self.open_harness_modal(HarnessModalAction::Uninstall, false)
             }
             _ => false,
         }
@@ -807,7 +814,7 @@ impl App {
     /// /repo/.claude" is a sentence someone can disagree with — "install?"
     /// is not. Silently does nothing if the harness state hasn't loaded yet,
     /// there is nothing selected, or the scope has nothing to do.
-    fn open_harness_modal(&mut self, action: HarnessModalAction) -> bool {
+    fn open_harness_modal(&mut self, action: HarnessModalAction, all: bool) -> bool {
         if !self.harness_ready {
             return false;
         }
@@ -817,11 +824,15 @@ impl App {
         }
         let index = self.harness_selected.min(rows.len() - 1);
         let scope = rows[index].0;
+        let selected = (!all).then_some(index);
+        let selected_asset =
+            selected.and_then(|i| rows.get(i).map(|(_, row)| (row.kind, row.name.clone())));
         self.harness_plan_generation = self.harness_plan_generation.wrapping_add(1);
         let generation = self.harness_plan_generation;
         self.harness_modal = Some(HarnessModal {
             scope,
             action,
+            selected,
             steps: None,
             generation,
         });
@@ -833,7 +844,7 @@ impl App {
         let tx = self.tx.clone();
         let root = self.harness_root(scope);
         tokio::task::spawn_blocking(move || {
-            let steps = compute_harness_step_count(root, scope, action);
+            let steps = compute_harness_step_count(root, scope, action, selected_asset);
             let _ = tx.send(AppEvent::HarnessPlan {
                 generation,
                 scope,
@@ -893,6 +904,11 @@ impl App {
         let root = self.harness_root(modal.scope);
         let scope = modal.scope;
         let action = modal.action;
+        let selected = modal.selected.and_then(|i| {
+            self.filtered_harness()
+                .get(i)
+                .map(|(_, row)| (row.kind, row.name.clone()))
+        });
 
         tokio::task::spawn_blocking(move || {
             let source = harness_asset::resolve_source();
@@ -917,7 +933,8 @@ impl App {
                         root: root.clone(),
                         style: None,
                         force: false,
-                        selection: harness_plan::Selection::All,
+                        drift: harness_plan::DriftResolution::Overwrite,
+                        selection: selection_for(selected.as_ref()),
                     };
                     if let Ok(asset_plan) = harness_plan::build_install_plan(&source, &options) {
                         for step in asset_plan.steps {
@@ -934,7 +951,7 @@ impl App {
                         && let Ok(plan) = harness_plan::build_uninstall_plan(
                             &source,
                             &receipt.entries,
-                            &harness_plan::Selection::All,
+                            &selection_for(selected.as_ref()),
                             false,
                         )
                     {
@@ -962,6 +979,7 @@ fn compute_harness_step_count(
     root: PathBuf,
     scope: ReceiptScope,
     action: HarnessModalAction,
+    selected: Option<(AssetKindLabel, String)>,
 ) -> Option<usize> {
     let source = harness_asset::resolve_source();
     let steps = match action {
@@ -979,7 +997,8 @@ fn compute_harness_step_count(
                 root,
                 style: None,
                 force: false,
-                selection: harness_plan::Selection::All,
+                drift: harness_plan::DriftResolution::Overwrite,
+                selection: selection_for(selected.as_ref()),
             };
             harness_plan::build_install_plan(&source, &options)
                 .ok()?
@@ -992,7 +1011,7 @@ fn compute_harness_step_count(
             harness_plan::build_uninstall_plan(
                 &source,
                 &receipt.entries,
-                &harness_plan::Selection::All,
+                &selection_for(selected.as_ref()),
                 false,
             )
             .ok()?
@@ -1000,6 +1019,22 @@ fn compute_harness_step_count(
         }
     };
     (steps > 0).then_some(steps)
+}
+
+fn selection_for(selected: Option<&(AssetKindLabel, String)>) -> harness_plan::Selection {
+    match selected {
+        None => harness_plan::Selection::All,
+        Some((kind, name)) => match kind {
+            AssetKindLabel::Skill => harness_plan::Selection::Named {
+                skills: vec![name.clone()],
+                commands: vec![],
+            },
+            AssetKindLabel::Command => harness_plan::Selection::Named {
+                skills: vec![],
+                commands: vec![name.clone()],
+            },
+        },
+    }
 }
 
 fn harness_scope_summary(label: &str, root: &std::path::Path, rows: &[AssetStatus]) -> String {
@@ -1480,6 +1515,7 @@ does = "Search a path."
 
     fn seeded_row(name: &str, state: HarnessState) -> AssetStatus {
         AssetStatus {
+            vendor: Vendor::Claude,
             kind: harness_state::AssetKindLabel::Skill,
             name: name.to_string(),
             target: PathBuf::from(format!("/tmp/{name}")),
@@ -1630,6 +1666,7 @@ does = "Search a path."
             root: tmp.path().to_path_buf(),
             style: None,
             force: false,
+            drift: harness_plan::DriftResolution::Overwrite,
             selection: harness_plan::Selection::Named {
                 skills: vec!["pinst".to_string()],
                 commands: vec![],
