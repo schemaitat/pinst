@@ -370,10 +370,9 @@ pub struct HarnessIndexArgs {
 /// and a rate that got interesting would fail the build.
 #[derive(Debug, Args, Clone)]
 pub struct HarnessSkillsArgs {
-    /// Skip the `evidence:` commands instead of running them. They are shell
-    /// taken from the repo being checked; see `pinst harness skills --help`.
+    /// Skip validation of standard eval manifests.
     #[arg(long)]
-    pub no_evidence: bool,
+    pub no_evals: bool,
     /// Also count invocations from a runtime's session transcripts. Opt-in,
     /// and never depended on: it corroborates, it does not decide.
     #[arg(long, value_name = "DIR")]

@@ -207,7 +207,7 @@ that parses, a plan that carries its ADR sections, a run log with a matching
 `run_start` and `run_end` — these are durable, in-repo, vendor-neutral, and
 none of them changes because you read it.
 **Status:** mechanized
-**Check:** skill.no-contract
+**Check:** skill.evals-failed.
 **Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005); again in
 260920-impoxu-daily-distil-action (ISSUE-010), which found the missing half:
 the artifact has to be *attributable*. `create-pr` was graded on every merged

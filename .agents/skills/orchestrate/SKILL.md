@@ -1,8 +1,6 @@
 ---
 name: orchestrate
 description: 'Delegate a task to another coding agent through Herdr, choosing a sibling pane or isolated worktree, and supervise it until the task is verified as resolved. Use when the user explicitly asks to orchestrate, delegate, babysit, or run work in another Herdr pane or worktree.'
-produces: none
-kind: reference
 ---
 
 # Orchestrate

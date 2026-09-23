@@ -1,0 +1,14 @@
+{
+  "skill_name": "pinst",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run a pinst command and report its machine-readable result.",
+      "expected_output": "A non-interactive JSON envelope with the command status and planned or observed items.",
+      "assertions": [
+        "The command uses the documented JSON envelope",
+        "The response reports an explicit status"
+      ]
+    }
+  ]
+}
