@@ -77,6 +77,8 @@ one file"), write at least one test that executes the result end to end for
 each shape, not only tests that assert the plan/output structure. A plan
 that looks right and a plan that runs right are different claims.
 **Skill:** none
+**Gap:** answered — this is a code-shape regression, not recurring work a
+repository skill should own.
 **Distilled:** declined — specific to this plan's particular code shape
 (a two-representations-in-one-loop bug), not a pattern this codebase's other
 `Plan`-building code repeats today.
@@ -106,6 +108,8 @@ accepting a separately-resolved value from the caller — a caller-supplied or
 ambient value can silently point somewhere else, and the failure mode is a
 confident wrong answer, not an error. Promoted to LESSON-039.
 **Skill:** none
+**Gap:** answered — this is a checker implementation bug, not a missing
+repository workflow skill.
 
 ### ISSUE-004: The lesson.unenforced trap this module exists about caught this module
 **What happened:** While writing `install/check.rs`'s own module-level doc
@@ -135,6 +139,8 @@ in this harness's own code, which is the threshold this file's own
 convention treats as "worth promoting." Merged into LESSON-025, which
 already covers this exact trap from its first occurrence.
 **Skill:** none
+**Gap:** answered — this is a text-matching implementation trap, not recurring
+work a repository skill should own.
 
 ### ISSUE-005: Receipt-update logic was about to be duplicated between the CLI and the TUI
 **What happened:** Partway into Phase 5's `run_harness_action` (the TUI's
@@ -180,6 +186,8 @@ let this proceed without stopping or guessing. Worth continuing as a pattern
 for any TASK that depends on an environment an unattended run cannot
 guarantee.
 **Skill:** none
+**Gap:** answered — this is an environment-specific verification limitation,
+not recurring work a repository skill should own.
 **Distilled:** declined — already the exact practice LESSON-003 argues for
 (splitting a phase's Done criteria into what's provable locally and what
 needs a merge/environment); this is that pattern applied, not a new one.
