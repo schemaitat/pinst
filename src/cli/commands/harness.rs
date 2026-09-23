@@ -21,9 +21,9 @@ use serde::Serialize;
 use crate::cli::commands::install;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
-    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs, HarnessNewIdArgs,
-    HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs, HarnessUninstallArgs,
-    ScopeArg,
+    DriftResolutionArg, HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs,
+    HarnessNewIdArgs, HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs,
+    HarnessUninstallArgs, ScopeArg,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
@@ -115,6 +115,7 @@ fn mint(ctx: &Ctx, args: &HarnessNewIdArgs) -> Result<ExitCode> {
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct StatusItem {
     pub scope: String,
+    pub vendor: Vendor,
     pub kind: AssetKindLabel,
     pub name: String,
     pub target: PathBuf,
@@ -125,6 +126,7 @@ impl StatusItem {
     fn from(scope: &str, row: AssetStatus) -> Self {
         Self {
             scope: scope.to_string(),
+            vendor: row.vendor,
             kind: row.kind,
             name: row.name,
             target: row.target,
@@ -359,6 +361,11 @@ async fn install(
         root: root.clone(),
         style,
         force: install_args.force,
+        drift: match install_args.drift {
+            DriftResolutionArg::Overwrite => install_plan::DriftResolution::Overwrite,
+            DriftResolutionArg::Merge => install_plan::DriftResolution::Merge,
+            DriftResolutionArg::Command => install_plan::DriftResolution::Command,
+        },
         selection: selection.clone(),
     };
     let asset_plan = install_plan::build_install_plan(&source, &options)?;

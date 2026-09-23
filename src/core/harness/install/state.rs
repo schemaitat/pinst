@@ -48,6 +48,7 @@ impl AssetState {
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct AssetStatus {
+    pub vendor: Vendor,
     pub kind: AssetKindLabel,
     pub name: String,
     pub target: PathBuf,
@@ -209,6 +210,7 @@ pub fn status(source: &Source, vendor: Vendor, root: &Path) -> Result<Vec<AssetS
             }
         }
         out.push(AssetStatus {
+            vendor,
             kind: asset.kind.into(),
             name: asset.name.clone(),
             target,
@@ -218,11 +220,13 @@ pub fn status(source: &Source, vendor: Vendor, root: &Path) -> Result<Vec<AssetS
 
     out.extend(unmanaged_entries(
         vendor.skills_dir(root),
+        vendor,
         AssetKindLabel::Skill,
         &known_skills,
     ));
     out.extend(unmanaged_entries(
         vendor.commands_dir(root),
+        vendor,
         AssetKindLabel::Command,
         &known_commands,
     ));
@@ -232,6 +236,7 @@ pub fn status(source: &Source, vendor: Vendor, root: &Path) -> Result<Vec<AssetS
 
 fn unmanaged_entries(
     dir: PathBuf,
+    vendor: Vendor,
     kind: AssetKindLabel,
     known: &std::collections::BTreeSet<String>,
 ) -> Vec<AssetStatus> {
@@ -259,6 +264,7 @@ fn unmanaged_entries(
         };
         if !known.contains(&name) {
             found.push(AssetStatus {
+                vendor,
                 kind,
                 name,
                 target: path,
