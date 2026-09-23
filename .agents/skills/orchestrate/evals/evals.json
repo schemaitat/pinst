@@ -1,0 +1,14 @@
+{
+  "skill_name": "orchestrate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Delegate a bounded task to another Herdr agent and supervise it.",
+      "expected_output": "A delegation log records the selected topology, bounded prompt, timeout, observed result, and independent verification.",
+      "assertions": [
+        "The delegated agent is not asked to edit the parent worktree",
+        "The result is independently verified before reporting success"
+      ]
+    }
+  ]
+}

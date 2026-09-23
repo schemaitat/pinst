@@ -1,8 +1,6 @@
 ---
 name: orchestrate
 description: 'Delegate and supervise a bounded task through Herdr until it is verified as resolved, including feature implementation requests that must run the implement-feature delivery chain. Use when the user explicitly asks to orchestrate, delegate, babysit, or run work in another Herdr pane or worktree.'
-produces: none
-kind: reference
 ---
 
 # Orchestrate

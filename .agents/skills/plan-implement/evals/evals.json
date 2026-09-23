@@ -1,0 +1,14 @@
+{
+  "skill_name": "plan-implement",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Implement the next phase of the selected plan.",
+      "expected_output": "The phase is completed, its checklist and status are updated, and a run log records run_start and run_end.",
+      "assertions": [
+        "The phase Done criteria are reported",
+        "The run log contains matching run_start and run_end events"
+      ]
+    }
+  ]
+}

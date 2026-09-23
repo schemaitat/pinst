@@ -96,9 +96,10 @@ preflight` asks the corpus whether there is anything to distil, and a clean
 one ends the run before a model is ever started. That is LESSON-013 surviving
 a cron line — the corpus is still the clock.
 
-### Two fields make the loop measurable
+### Eval manifests make the loop measurable
 
-Both are written by `plan-learnings` and read by `pinst harness`:
+The standard eval manifests under each skill's `evals/evals.json` are read by
+`pinst harness`:
 
 - **`**Status:**` on every lesson** in `.ash/LEARNINGS.md` — `prose`,
   `mechanized` or `retired`. A `mechanized` lesson also carries
@@ -256,39 +257,32 @@ Findings carry a stable `id` (`plan.id-mismatch.260919-qwerty-foo`) and a
 `remediation` string, exactly like `pinst doctor` — match on the id, don't
 parse the prose.
 
-## Grading the skills
+## Evaluating the skills
 
 `just review` runs the invariants and then `pinst harness skills`, which
-grades each skill **on the artifacts it leaves in the repo** — never on
-whether anyone invoked it. Each skill declares its own contract in its
-frontmatter:
+validates each skill's standard Agent Skills eval manifest. Evals are
+declarative test cases, not frontmatter extensions or shell commands:
 
-```yaml
-produces: 'every commit in this repo''s history parses as a Conventional Commit'
-evidence: 'echo $(git log --format=%s $ASH_RANGE | grep -cE ...) $(git log ...)'
+```text
+.agents/skills/conventional-commits/evals/evals.json
+{
+  "skill_name": "conventional-commits",
+  "evals": [{
+    "id": 1,
+    "prompt": "Commit the staged change using the repository convention.",
+    "expected_output": "A valid Conventional Commit subject.",
+    "assertions": ["The subject matches the documented pattern."]
+  }]
+}
 ```
 
-`evidence:` is a shell one-liner printing `<conforming> <total>`. It is run
-twice — once with `ASH_WINDOW=20` and `ASH_RANGE=-n 20`, once with both empty
-for all time — so a regression shows up while it is still one commit old
-instead of being buried under a hundred conformant ones. A skill that produces
-no artifact says `produces: none` with `kind: reference`; `pinst` is the only
-one, and that exemption is written down rather than inferred from silence.
-
-The measure lives in the skill because the skill is the only thing that knows
-what it is for. Put it in the script and the two drift — which is the failure
-this whole audit exists to catch. It is also code: `evidence:` is executed, so
-review it like any other line in `qc`.
-
-**A low rate is a conversation, not a failure.** The only findings here are
-structural — `skill.no-contract` when a skill says nothing about what it
-produces, `skill.evidence-failed` when the measure would not run. A measure
-that cannot run reports `unmeasured` and never `0`, because a zero meaning
-"offline" is worse than a gap that admits it.
-
-Read the `issues` column against the rate. A skill at 100% conformance with
-six issues naming it is producing perfectly-shaped artifacts by a procedure
-that keeps going wrong, and it is the most interesting row in the table.
+Each case has a numeric `id`, realistic `prompt`, human-readable
+`expected_output`, optional skill-relative `files`, and optional objective
+`assertions`. `pinst harness skills` parses the manifests, checks names,
+duplicate ids, required text, and safe in-skill file paths. It reports
+`passed/total` with a clear failure message. It does not execute prompts,
+assertions, or arbitrary files; an agent runtime performs the actual task and
+grades its output separately.
 
 ### Invocation counts are a second opinion
 

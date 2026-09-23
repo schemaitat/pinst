@@ -1,0 +1,14 @@
+{
+  "skill_name": "plan-learnings",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write learnings for a completed implementation plan.",
+      "expected_output": "The plan has learnings.md with issues, lessons, and explicit decisions about what generalizes.",
+      "assertions": [
+        "The plan's learnings.md exists",
+        "Each issue names a skill or none"
+      ]
+    }
+  ]
+}

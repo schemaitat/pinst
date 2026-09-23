@@ -1,8 +1,6 @@
 ---
 name: implement-feature
 description: 'Drive a feature request from a safe isolated worktree through a persisted implementation plan, phase-by-phase delivery, verification, learnings, and a pull request. Use when the user asks to implement, build, or ship a feature end to end.'
-produces: 'a feature delivery leaves one persisted plan, a completed implementation run and learnings record, verified changes, and a pull request when publication is authorized'
-evidence: 'echo $(for d in .ash/plans/*/; do grep -q ''^status: Done'' "$d/README.md" 2>/dev/null && grep -qh ''"event":"run_start"'' "$d"/logs/*.log 2>/dev/null && grep -qh ''"event":"run_end"'' "$d"/logs/*.log 2>/dev/null && [ -f "$d/learnings.md" ] && echo x; done | grep -c x) $(ls -d .ash/plans/*/ 2>/dev/null | grep -c .)'
 ---
 
 # Implement Feature
