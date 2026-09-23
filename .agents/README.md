@@ -134,6 +134,7 @@ prose.
 | "distil the corpus", "triage the untriaged" | `/distil` → `plan-learnings` Step 6 |
 | "commit this" | `/cc` → `conventional-commits` |
 | "open a PR", "ship this branch", "get this reviewed" | `/pr` → `create-pr` |
+| "implement/build/ship a feature end to end" | `/feature` → `implement-feature` |
 | "install X", "is this machine set up", "add a tool to the manifest" | `pinst` |
 | "delegate this in Herdr", "babysit another agent", "run this in a worktree" | `/orchestrate` → `orchestrate` |
 | a one-line fix with no design content | none of the above — just do it |
@@ -143,6 +144,13 @@ nobody will need to trace next quarter should not pay for it. Reach for
 `plan-write` when the *why* is worth more than the diff, which is roughly:
 more than one phase, more than one plausible approach, or a decision someone
 will later ask about.
+
+`implement-feature` is the explicit end-to-end route when the request itself
+authorizes feature delivery rather than only planning or implementing an
+existing plan. It creates or verifies isolated topology, composes the
+existing plan lifecycle, runs the quality gate, and hands publication to
+`create-pr`. It does not replace `/plan`, `/implement`, `/learn`, or `/pr`;
+those remain the reusable stage entry points.
 
 ## Slash commands are the entry points
 
@@ -377,6 +385,12 @@ If concurrent work is genuinely wanted, the unit of concurrency is a *plan*,
 not a phase: separate plans, separate indices, separate git worktrees. This
 repo is normally worked on through worktrees under `.herdr/worktrees/`, which
 already gives each line of work its own checkout.
+
+For a feature request delegated through `/orchestrate`, the child owns the
+whole `implement-feature` chain in its isolated worktree. The orchestrator
+remains delegation-only but supervises through the plan, implementation,
+learnings, quality-gate, and PR evidence; “delegated” or “idle” is not a
+terminal success state.
 
 ## Adding a skill
 
