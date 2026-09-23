@@ -62,8 +62,8 @@ field is read directly — not just the fields the new work directly touches
 older function also reads for an unrelated purpose (ordering, not planning).
 **Skill:** none — this is a review discipline for a specific kind of
 refactor, not a step a generic skill would have covered.
-**Gap:** answered — this is domain-specific code review, not recurring work a
-repository skill should own.
+**Gap:** answered — this is domain-specific review discipline, not recurring
+workflow that a repository skill should own.
 
 ### ISSUE-002: A tool-level explicit upgrade override leaked across a platform's install substitution
 **What happened:** `delta`'s macOS override replaces `install` (apt → brew)
@@ -113,8 +113,8 @@ because `topo_order_for`'s cycle detection is a hard error, not a silent
 misordering; a similar semantic bug (as opposed to a structural one) in a
 `requires` edge would not get caught this way.
 **Skill:** none — this is domain-specific to the manifest, not a skill gap.
-**Gap:** answered — this is domain-specific manifest authoring, not recurring
-work a repository skill should own.
+**Gap:** answered — this is a one-off manifest data error, not a missing
+workflow skill.
 **Distilled:** declined — a one-off manifest-authoring mistake (copying a Linux-true edge onto a platform where it wasn't), not a pattern likely to recur in a different shape.
 
 ### ISSUE-004: `curl_script`'s `args` field cannot express an env-var prefix
@@ -161,8 +161,8 @@ motivating the fix. TEST-023 in this plan (byte-identical musl output) is
 what caught this in review before it shipped; without it, the fix would
 have looked complete on a Mac and silently broken the Linux release build.
 **Skill:** none — but this generalizes; see LESSON promotion below.
-**Gap:** answered — this is a domain-specific build heuristic, not recurring
-work a repository skill should own.
+**Gap:** answered — the general lesson is already recorded for promotion;
+there is no separate missing skill for this review judgment.
 
 ### ISSUE-006: An "authored" docs page implicitly claims local verification
 **What happened:** `docs/tools/homebrew.toml` was written with
@@ -182,9 +182,9 @@ environment cannot run, default to `draft` from the start rather than
 not worth routing around with a guessed `verified_with` value.
 **Skill:** none — the `pinst` skill's existing docs-page guidance already
 covers this if read carefully; this was not following it, not a gap in it.
-**Gap:** answered — this is a docs contract and environment limitation, not a
-missing repository workflow skill.
 **Distilled:** declined — this is `PageStatus`'s existing, correct contract working as designed; nothing generalizes beyond "read the docs-page convention before authoring one".
+**Gap:** answered — the existing `pinst` skill already owns this guidance;
+the issue was a missed instruction, not a missing skill.
 
 ### ISSUE-007: A plan's own task-level instruction conflicted with the supervising session's explicit override
 **What happened:** TASK-038 (Phase 5) says in its own text "**do not mark
@@ -212,9 +212,9 @@ either instruction without a trace of why.
 **Skill:** none — this is a real conflict between two legitimate sources of
 authority (the plan document and the session's actual operator), not
 something a skill's instructions could have resolved in advance.
-**Gap:** answered — this is an authorization conflict specific to one run, not
-a missing repository workflow skill.
 **Distilled:** declined — one occurrence, and the resolution (record the conflict and the authorization by name) is already stated as the recommendation; nothing further to mechanize.
+**Gap:** answered — this was an operator-authority decision, not recurring
+work a repository skill could own.
 
 ### ISSUE-008: `pinst docs search`/`dump --tag` filtered out every tool the host couldn't install
 **What happened:** PR #19's first real `macos-latest` CI run failed

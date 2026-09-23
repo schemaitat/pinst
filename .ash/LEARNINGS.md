@@ -473,6 +473,10 @@ was originally about. Caught only by a deliberate grep sweep run before, not
 instead of, the delete-and-restore experiment; the experiment alone would
 have passed either way, because the doc comment and the real emitter sat in
 the same file and vanished together.
+**Mechanize:** declined — a meaningful check would need to remove or hide the
+emitter and prove the finding fires, which is destructive test choreography
+rather than a stable repository invariant; the lesson remains the guidance
+for reviewing text-based checks.
 
 ### LESSON-026: A deletion that still compiles has not been verified
 **Lesson:** After removing code programmatically, compare the test count
@@ -645,6 +649,9 @@ the live state is a human/session judgment, not a durable corpus invariant.
 260922-cotdnp-optimise-tui-responsiveness (ISSUE-003), where an interrupted
 patch had already reached the filesystem and retrying it would have duplicated
 work
+**Mechanize:** declined — whether a resume message is stale depends on the
+live session and external interruption; the required comparison against git
+and run-log state is judgment at the handoff, not a corpus invariant.
 
 ### LESSON-039: A checker given an explicit root must resolve every input relative to that root
 **Lesson:** When a function receives an explicit root to check something

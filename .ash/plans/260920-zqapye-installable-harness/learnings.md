@@ -82,6 +82,8 @@ repository skill should own.
 **Distilled:** declined — specific to this plan's particular code shape
 (a two-representations-in-one-loop bug), not a pattern this codebase's other
 `Plan`-building code repeats today.
+**Gap:** answered — this is a representation-specific implementation bug, not
+recurring work that a repository skill should own.
 
 ### ISSUE-003: A read-only checker picked up the wrong `.agents/` for a test fixture
 **What happened:** `install::check::run` was first wired to take a `Source`
@@ -108,8 +110,8 @@ accepting a separately-resolved value from the caller — a caller-supplied or
 ambient value can silently point somewhere else, and the failure mode is a
 confident wrong answer, not an error. Promoted to LESSON-039.
 **Skill:** none
-**Gap:** answered — this is a checker implementation bug, not a missing
-repository workflow skill.
+**Gap:** answered — this is a checker implementation boundary, already
+addressed by LESSON-039; no additional workflow skill would prevent it.
 
 ### ISSUE-004: The lesson.unenforced trap this module exists about caught this module
 **What happened:** While writing `install/check.rs`'s own module-level doc
@@ -139,8 +141,8 @@ in this harness's own code, which is the threshold this file's own
 convention treats as "worth promoting." Merged into LESSON-025, which
 already covers this exact trap from its first occurrence.
 **Skill:** none
-**Gap:** answered — this is a text-matching implementation trap, not recurring
-work a repository skill should own.
+**Gap:** answered — this is a narrowly documented harness invariant, already
+covered by LESSON-025 rather than a missing workflow skill.
 
 ### ISSUE-005: Receipt-update logic was about to be duplicated between the CLI and the TUI
 **What happened:** Partway into Phase 5's `run_harness_action` (the TUI's
@@ -191,3 +193,5 @@ not recurring work a repository skill should own.
 **Distilled:** declined — already the exact practice LESSON-003 argues for
 (splitting a phase's Done criteria into what's provable locally and what
 needs a merge/environment); this is that pattern applied, not a new one.
+**Gap:** answered — this was an environment-limited verification choice with
+an explicit fallback in the plan, not recurring work for a new skill.
