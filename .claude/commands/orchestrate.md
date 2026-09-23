@@ -1,1 +1,1 @@
-/home/dev/.herdr/worktrees/pinst/feat-skill-layout-evals/.agents/commands/orchestrate.md
+../../.agents/commands/orchestrate.md
