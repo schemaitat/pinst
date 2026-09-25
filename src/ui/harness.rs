@@ -1,14 +1,17 @@
 //! The Harness tab: where the agent harness is installed, right now, at
-//! both scopes, in view without moving the cursor (`REQ-004`, `REQ-005`).
+//! both scopes, grouped so project and global cannot be confused, with each
+//! asset's install path in view (`REQ-004`, `REQ-005`, `REQ-001`, `REQ-002`).
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
 use super::theme;
-use crate::app::{App, HarnessModal, HarnessModalAction};
+use crate::app::{App, HarnessModal, HarnessModalAction, HarnessScopeStat};
 use crate::core::harness::install::receipt::ReceiptScope;
-use crate::core::harness::install::state::AssetState;
+use crate::core::harness::install::state::{AssetState, AssetStatus};
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     if !app.harness_ready {
@@ -28,14 +31,14 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     if area.height < 10 {
-        draw_table(frame, area, app);
+        draw_assets(frame, area, app);
     } else {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(4), Constraint::Min(0)])
             .split(area);
-        draw_banner(frame, chunks[0], app);
-        draw_table(frame, chunks[1], app);
+        draw_scope_summary(frame, chunks[0], app);
+        draw_assets(frame, chunks[1], app);
     }
 
     if let Some(modal) = &app.harness_modal {
@@ -43,74 +46,135 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 
-/// Two fixed lines — "where is it installed" has exactly two possible
-/// answers on this machine, and a reader should get both without scrolling.
-fn draw_banner(frame: &mut Frame, area: Rect, app: &App) {
-    let text = format!(
-        "{}\n{}",
-        app.harness_project_summary, app.harness_global_summary
-    );
+/// One digest line per scope: label, install root, and the state counts. Two
+/// scopes means both fit without scrolling, which is the point of the tab.
+fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App) {
+    let lines: Vec<Line> = app.harness_scopes().iter().map(scope_line).collect();
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme::muted_style())
         .title(" Harness install state ")
         .title_style(theme::accent_style());
-    frame.render_widget(Paragraph::new(text).block(block), area);
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
-fn draw_table(frame: &mut Frame, area: Rect, app: &App) {
-    let header = Row::new(vec!["Scope", "Kind", "Name", "State"])
-        .style(theme::title_style())
-        .height(1);
+fn scope_line(stat: &HarnessScopeStat) -> Line<'static> {
+    let installed_style = if stat.total > 0 && stat.installed == stat.total {
+        theme::ok_style()
+    } else {
+        theme::muted_style()
+    };
+    let mut spans = vec![
+        Span::styled(format!("{:<8}", stat.scope.label()), theme::title_style()),
+        Span::styled(stat.root.display().to_string(), theme::muted_style()),
+        Span::raw("   "),
+        Span::styled(
+            format!("{}/{} installed", stat.installed, stat.total),
+            installed_style,
+        ),
+    ];
+    for (count, label, style) in [
+        (stat.missing, "missing", theme::bad_style()),
+        (stat.drifted, "drifted", theme::warn_style()),
+        (stat.unmanaged, "unmanaged", theme::muted_style()),
+    ] {
+        if count > 0 {
+            spans.push(Span::raw("   "));
+            spans.push(Span::styled(format!("{count} {label}"), style));
+        }
+    }
+    Line::from(spans)
+}
 
+/// The grouped asset list. Section headers are display-only lines; the
+/// selection still indexes `filtered_harness()` so `i`/`u` keep working, and
+/// is mapped to a display row here by counting the headers it skips.
+fn draw_assets(frame: &mut Frame, area: Rect, app: &App) {
     let filtered = app.filtered_harness();
-    let rows: Vec<Row> = filtered
-        .iter()
-        .map(|(scope, row)| {
-            let (label, style) = match row.state {
-                AssetState::Linked | AssetState::Copied => ("ok", theme::ok_style()),
-                AssetState::Missing => ("missing", theme::bad_style()),
-                AssetState::Drifted | AssetState::Foreign => ("drifted", theme::warn_style()),
-                AssetState::Unmanaged => ("unmanaged", theme::muted_style()),
-            };
-            Row::new(vec![
-                Cell::from(scope.label()),
-                Cell::from(row.kind.label()),
-                Cell::from(row.name.as_str()),
-                Cell::from(label).style(style),
-            ])
-        })
-        .collect();
-
     let title = if app.search_query.is_empty() {
         format!(" Assets ({}) ", filtered.len())
     } else {
         format!(" Assets ({} match) ", filtered.len())
     };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme::muted_style())
+        .title(title)
+        .title_style(theme::accent_style());
 
-    let widths = [
-        Constraint::Length(8),
-        Constraint::Length(8),
-        Constraint::Min(20),
-        Constraint::Length(10),
-    ];
-    let mut state = ratatui::widgets::TableState::default();
-    if !filtered.is_empty() {
-        state.select(Some(app.harness_selected.min(filtered.len() - 1)));
+    if filtered.is_empty() {
+        let message = if app.harness_project.is_empty() && app.harness_global.is_empty() {
+            "no harness assets found in .agents/"
+        } else {
+            "nothing matches this search"
+        };
+        frame.render_widget(
+            Paragraph::new(message)
+                .style(theme::muted_style())
+                .block(block),
+            area,
+        );
+        return;
     }
-    let table = Table::new(rows, widths)
-        .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(theme::muted_style())
-                .title(title)
-                .title_style(theme::accent_style()),
-        )
-        .row_highlight_style(theme::selected_style());
-    frame.render_stateful_widget(table, area, &mut state);
+
+    let selected = app.harness_selected.min(filtered.len() - 1);
+    let mut items: Vec<ListItem> = Vec::new();
+    let mut display_selected = None;
+    let mut current: Option<ReceiptScope> = None;
+    for (index, (scope, row)) in filtered.into_iter().enumerate() {
+        if current != Some(scope) {
+            let stat = app.harness_scope_stat(scope);
+            items.push(ListItem::new(section_line(&stat)));
+            current = Some(scope);
+        }
+        if index == selected {
+            display_selected = Some(items.len());
+        }
+        items.push(ListItem::new(asset_line(row)));
+    }
+
+    let mut state = ListState::default();
+    state.select(display_selected);
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(theme::selected_style())
+        .highlight_symbol("> ");
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+fn section_line(stat: &HarnessScopeStat) -> Line<'static> {
+    Line::from(Span::styled(
+        format!(
+            "── {} · {} · {}/{} installed",
+            stat.scope.label(),
+            stat.root.display(),
+            stat.installed,
+            stat.total
+        ),
+        theme::accent_style(),
+    ))
+}
+
+/// One asset, its state, and the path it is installed at.
+fn asset_line(row: &AssetStatus) -> Line<'static> {
+    let (label, style) = state_label(row.state);
+    Line::from(vec![
+        Span::styled(format!("{:<7} ", row.kind.label()), theme::muted_style()),
+        Span::styled(format!("{:<20} ", row.name), theme::title_style()),
+        Span::styled(format!("{label:<10} "), style),
+        Span::styled(row.target.display().to_string(), theme::muted_style()),
+    ])
+}
+
+fn state_label(state: AssetState) -> (&'static str, Style) {
+    match state {
+        AssetState::Linked | AssetState::Copied => ("ok", theme::ok_style()),
+        AssetState::Missing => ("missing", theme::bad_style()),
+        AssetState::Drifted | AssetState::Foreign => ("drifted", theme::warn_style()),
+        AssetState::Unmanaged => ("unmanaged", theme::muted_style()),
+    }
 }
 
 fn draw_modal(frame: &mut Frame, modal: &HarnessModal) {

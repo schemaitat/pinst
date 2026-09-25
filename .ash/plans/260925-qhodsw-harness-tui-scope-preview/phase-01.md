@@ -2,7 +2,7 @@
 id: 260925-qhodsw
 slug: harness-tui-scope-preview
 phase: 1
-status: Proposed
+status: Done
 ---
 
 # Phase 1 — Group installs per scope with roots, counts, and paths
@@ -21,7 +21,7 @@ also delivers the largest readability win on its own, so the tab is already
 better if phase 2 is ever cut short.
 
 ## Steps
-- [ ] **TASK-001**: `src/app.rs` — add `pub struct HarnessScopeStat` and
+- [x] **TASK-001**: `src/app.rs` — add `pub struct HarnessScopeStat` and
   `pub fn harness_scopes()`/`harness_scope_stat()`, computing installed
   (Linked/Copied), missing, drifted (Drifted/Foreign), and unmanaged counts
   plus the scope root; delete `harness_project_summary`,
@@ -29,7 +29,7 @@ better if phase 2 is ever cut short.
   and the `Harness`/`HarnessScope` event arms.
   Why: one typed source of truth for counts and roots prevents the banner and
   section headers from drifting apart (ASSUMPTION-001, RISK-004).
-- [ ] **TASK-002**: `src/ui/harness.rs` — after TASK-001, render a scope
+- [x] **TASK-002**: `src/ui/harness.rs` — after TASK-001, render a scope
   summary line per scope (label, root, `installed/total`, per-state counts)
   and replace the flat table with a grouped `List`: a styled section header
   before each scope's assets, and one line per asset carrying kind, name,
@@ -37,7 +37,7 @@ better if phase 2 is ever cut short.
   counting inserted headers, and keep the empty/loading states explicit.
   Why: a `List` groups without column-span limits that a `Table` header row
   cannot satisfy (ALT-001, ALT-002, RISK-002).
-- [ ] **TASK-003**: `src/app.rs`, `src/ui/harness.rs` tests — after TASK-002,
+- [x] **TASK-003**: `src/app.rs`, `src/ui/harness.rs` tests — after TASK-002,
   add `TestBackend` coverage asserting both section headers with their roots
   and counts render, the target path appears, and the final asset is reachable
   on a short terminal; add a unit test for `harness_scope_stat` counts.

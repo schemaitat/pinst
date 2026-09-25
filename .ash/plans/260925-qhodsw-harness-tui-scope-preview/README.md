@@ -102,7 +102,7 @@ loading states get real sentences. No new dependencies are introduced
 ## Phases
 | # | Phase | File | Status |
 |---|-------|------|--------|
-| 1 | Group installs per scope with roots, counts, and paths | [phase-01.md](phase-01.md) | Proposed |
+| 1 | Group installs per scope with roots, counts, and paths | [phase-01.md](phase-01.md) | Done |
 | 2 | Safe content preview, scrolling, and states | [phase-02.md](phase-02.md) | Proposed |
 
 ## Affected Files
