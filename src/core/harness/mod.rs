@@ -19,11 +19,12 @@
 pub mod asset;
 pub mod check;
 pub mod corpus;
-pub mod evidence;
+pub mod evals;
 pub mod frontmatter;
 pub mod id;
 pub mod index;
 pub mod install;
+pub mod preview;
 pub mod project;
 pub mod renumber;
 pub mod root;

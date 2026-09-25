@@ -179,52 +179,53 @@ fn check_wiring(source: &Source, assets: &[Asset], project_root: &Path) -> Vec<F
                 known_commands.insert(asset.name.clone());
             }
         }
-        let target = state::target_path(Vendor::Claude, project_root, asset);
-        let Ok(current) = state::classify(source, asset, &target) else {
-            continue;
-        };
-        let dest = target.display();
-        match current {
-            AssetState::Linked => {}
-            AssetState::Missing => findings.push(error(
-                format!("wire.missing.{}", asset.name),
-                format!("{} is not wired into {}", asset.name, target.display()),
-                format!(
-                    "run: pinst harness install --scope project --{} {}",
-                    match asset.kind {
-                        AssetKind::Skill => "skill",
-                        AssetKind::Command => "command",
-                    },
-                    asset.name
-                ),
-            )),
-            AssetState::Foreign => findings.push(error(
-                format!("wire.broken.{}", asset.name),
-                format!("{dest} is a symlink that does not resolve to the harness source"),
-                "run: pinst harness install --scope project --force",
-            )),
-            AssetState::Copied | AssetState::Drifted => findings.push(error(
-                format!("wire.not-a-link.{}", asset.name),
-                format!("{dest} exists but is not a symlink"),
-                "remove it and run: pinst harness install --scope project",
-            )),
-            // A known asset never classifies as Unmanaged — that state is
-            // only reachable by name lookup failing, and every asset here
-            // has a name.
-            AssetState::Unmanaged => {}
+        for vendor in Vendor::ALL {
+            let target = state::target_path(vendor, project_root, asset);
+            let Ok(current) = state::classify(source, asset, &target) else {
+                continue;
+            };
+            let dest = target.display();
+            match current {
+                AssetState::Linked => {}
+                AssetState::Missing => findings.push(error(
+                    format!("wire.missing.{}", asset.name),
+                    format!("{} is not wired into {}", asset.name, target.display()),
+                    format!(
+                        "run: pinst harness install --scope project --{} {} --drift overwrite",
+                        match asset.kind {
+                            AssetKind::Skill => "skill",
+                            AssetKind::Command => "command",
+                        },
+                        asset.name
+                    ),
+                )),
+                AssetState::Foreign => findings.push(error(
+                    format!("wire.broken.{}", asset.name),
+                    format!("{dest} is a symlink that does not resolve to the harness source"),
+                    "run: pinst harness install --scope project --force",
+                )),
+                AssetState::Copied | AssetState::Drifted => findings.push(error(
+                    format!("wire.not-a-link.{}", asset.name),
+                    format!("{dest} exists but is not a symlink"),
+                    "run: pinst harness install --scope project --drift overwrite",
+                )),
+                AssetState::Unmanaged => {}
+            }
         }
     }
 
-    findings.extend(check_unmanaged(
-        Vendor::Claude.skills_dir(project_root),
-        &known_skills,
-        false,
-    ));
-    findings.extend(check_unmanaged(
-        Vendor::Claude.commands_dir(project_root),
-        &known_commands,
-        true,
-    ));
+    for vendor in Vendor::ALL {
+        findings.extend(check_unmanaged(
+            vendor.skills_dir(project_root),
+            &known_skills,
+            false,
+        ));
+        findings.extend(check_unmanaged(
+            vendor.commands_dir(project_root),
+            &known_commands,
+            true,
+        ));
+    }
 
     findings
 }
@@ -419,6 +420,7 @@ mod tests {
             root: dir.path().to_path_buf(),
             style: None,
             force: false,
+            drift: super::super::plan::DriftResolution::Overwrite,
             selection: super::super::plan::Selection::All,
         };
         let plan = super::super::plan::build_install_plan(&source, &opts).unwrap();

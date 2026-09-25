@@ -207,7 +207,7 @@ that parses, a plan that carries its ADR sections, a run log with a matching
 `run_start` and `run_end` — these are durable, in-repo, vendor-neutral, and
 none of them changes because you read it.
 **Status:** mechanized
-**Check:** skill.no-contract
+**Check:** skill.evals-failed.
 **Seen in:** 260919-vldfei-self-improving-agent-harness (ISSUE-005); again in
 260920-impoxu-daily-distil-action (ISSUE-010), which found the missing half:
 the artifact has to be *attributable*. `create-pr` was graded on every merged
@@ -462,6 +462,9 @@ finding id as an example. The lesson resolved against that sentence rather
 than against the script that emits it, and deleting the script left the check
 silent. A passing check is not evidence until it has been seen to fail.
 **Status:** prose
+**Mechanize:** declined — this requires a deliberate deletion experiment and
+semantic review of the search scope; no repository check can safely infer that
+the experiment was meaningful.
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-007); again in
 260920-zqapye-installable-harness (ISSUE-004), twice in one plan — a doc
 comment written to *explain* the literal-id convention named a real id as
@@ -470,6 +473,10 @@ was originally about. Caught only by a deliberate grep sweep run before, not
 instead of, the delete-and-restore experiment; the experiment alone would
 have passed either way, because the doc comment and the real emitter sat in
 the same file and vanished together.
+**Mechanize:** declined — a meaningful check would need to remove or hide the
+emitter and prove the finding fires, which is destructive test choreography
+rather than a stable repository invariant; the lesson remains the guidance
+for reviewing text-based checks.
 
 ### LESSON-026: A deletion that still compiles has not been verified
 **Lesson:** After removing code programmatically, compare the test count
@@ -636,10 +643,15 @@ meant redoing finished work or, worse, starting a second implementation
 alongside the first. `git log` and the append-only run log are always the
 ground truth; an instruction describing them is a snapshot that can expire.
 **Status:** prose
+**Mechanize:** declined — whether a resume instruction accurately describes
+the live state is a human/session judgment, not a durable corpus invariant.
 **Seen in:** 260920-zqapye-installable-harness (ISSUE-001); again in
 260922-cotdnp-optimise-tui-responsiveness (ISSUE-003), where an interrupted
 patch had already reached the filesystem and retrying it would have duplicated
 work
+**Mechanize:** declined — whether a resume message is stale depends on the
+live session and external interruption; the required comparison against git
+and run-log state is judgment at the handoff, not a corpus invariant.
 
 ### LESSON-039: A checker given an explicit root must resolve every input relative to that root
 **Lesson:** When a function receives an explicit root to check something
@@ -749,3 +761,17 @@ hands unsupported arguments to libtest. The failure is fast but easy to repeat
 when a validation checklist names several modules.
 **Status:** prose
 **Seen in:** 260922-cotdnp-optimise-tui-responsiveness (ISSUE-001)
+
+### LESSON-043: A git worktree's untracked `.claude/` links can be stale before you start
+**Lesson:** Before trusting a failing `just harness`/`just qc` in a fresh
+worktree, check the local `.claude/` symlinks with `readlink`. Absolute
+targets pointing into another worktree are stale machine-local wiring, not a
+defect in the branch under test; repoint them at this worktree's `.agents/`
+or run `pinst harness install --scope project --force`.
+**Why:** `.claude/` is untracked and never validated at worktree creation, so
+an install performed in an older worktree leaves absolute links behind that
+keep naming a path which may no longer exist. The failure surfaces as a
+`wire.broken.*` finding before any code is exercised, and the tempting
+response — skip or loosen the check — hides real wiring drift instead.
+**Status:** prose
+**Seen in:** 260925-qhodsw-harness-tui-scope-preview (ISSUE-001)

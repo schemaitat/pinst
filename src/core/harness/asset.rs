@@ -77,6 +77,16 @@ impl Asset {
     }
 }
 
+/// The `.agents/`-relative path of an asset's *entry file*, derived from the
+/// kind and name a `status` row records. `state::source_relative` returns the
+/// skill directory a symlink points at; this returns the file a preview reads.
+pub fn entry_relative(kind: AssetKind, name: &str) -> PathBuf {
+    match kind {
+        AssetKind::Skill => Path::new("skills").join(name).join("SKILL.md"),
+        AssetKind::Command => Path::new("commands").join(format!("{name}.md")),
+    }
+}
+
 /// Every skill under `skills/*/` and every command under `commands/*.md`, in
 /// name order within each kind.
 pub fn enumerate(source: &Source) -> Result<Vec<Asset>> {
@@ -330,6 +340,18 @@ mod tests {
         let asset = assets.iter().find(|a| a.name == "multi-file").unwrap();
         assert_eq!(asset.files.len(), 2, "{:?}", asset.files);
         assert_eq!(asset.entry().file_name().unwrap(), "SKILL.md");
+    }
+
+    #[test]
+    fn entry_relative_matches_the_entry_each_enumerated_asset_reports() {
+        for asset in enumerate(&tree()).unwrap() {
+            assert_eq!(
+                entry_relative(asset.kind, &asset.name),
+                asset.entry(),
+                "{} entry mismatch",
+                asset.name
+            );
+        }
     }
 
     #[test]

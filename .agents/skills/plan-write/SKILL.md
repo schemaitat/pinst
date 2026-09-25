@@ -1,8 +1,6 @@
 ---
 name: plan-write
 description: Create and persist an implementation plan as ADR-style docs under .ash/plans/. Use when the user wants to create, formalise, save, write, or record a plan for a feature, refactor, upgrade, migration, data change, architecture, design, or infrastructure change.
-produces: 'every plan carries the full ADR: Context, Decision, Alternatives Considered, Consequences'
-evidence: 'echo $(for f in .ash/plans/*/README.md; do grep -q ''^## Context'' $f && grep -q ''^## Decision'' $f && grep -q ''^## Alternatives Considered'' $f && grep -q ''^## Consequences'' $f && echo x; done | grep -c x) $(ls -d .ash/plans/*/ | grep -c .)'
 ---
 
 # Plan Write Skill

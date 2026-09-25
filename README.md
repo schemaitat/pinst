@@ -102,6 +102,22 @@ pinst update pinst
 Global flags: `--json`, `--dry-run`, `--yes`/`-y`, `--quiet`/`-q`,
 `--manifest <path>`.
 
+Harness management is deliberately explicit about drift:
+
+```sh
+pinst harness install --scope project --all --dry-run
+pinst harness install --scope project --all --drift overwrite -y
+pinst harness install --scope project --skill plan-write --drift merge
+pinst harness uninstall --scope project --skill plan-write
+```
+
+`--drift command` (the default) makes no change and reports the overwrite
+remediation. `--drift merge` makes no change and prints a `diff -u` command so
+the existing file can be merged by hand. `--drift overwrite` backs up the
+drifted target before replacing it. The TUI uses the same plan and shows
+whether it is acting on the selected asset (`i`/`u`) or all assets (`I`/`U`);
+every mutation has a preview and confirmation.
+
 ## How it works
 
 The manifest and the config tree say what *should* be true; probing the machine

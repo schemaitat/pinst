@@ -1,4 +1,4 @@
-//! Grading the skills — on the artifacts they leave in the repo, never on
+//! Grading the skills — on the standard eval manifests they carry, never on
 //! whether anyone invoked them.
 //!
 //! Counting invocations would have graded the busiest lifecycle skill here as
@@ -17,52 +17,71 @@
 //! interesting would fail `just qc`, and the check would be deleted within a
 //! week. Invariants gate commits; measurements start conversations.
 
-use std::collections::BTreeMap;
-use std::time::Duration;
-
 use crate::core::doctor::{Finding, Severity};
+use std::collections::BTreeMap;
 
 use super::corpus::{self as model, Corpus};
-use super::evidence::{self, Rate};
-use super::frontmatter;
+use super::evals;
 
 /// How a skill's conformance came out over one window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Measure {
-    /// The measure ran and printed two integers.
-    Rate(Rate),
-    /// A skill that produces no artifact — `pinst` is the only one, and that
-    /// exemption is written down rather than inferred from silence.
-    Exempt,
-    /// The all-time cell of an exempt skill. Repeating "reference (exempt)"
-    /// in both columns says nothing the first one did not.
-    NotApplicable,
-    /// No `produces:` at all.
-    NoContract,
-    /// `produces:` but no `evidence:` command to measure it with.
-    NoCommand,
-    /// The measure would not run, or printed something else. Never `0`: a
-    /// zero meaning "offline" is worse than a gap that admits it.
+    /// Every declared eval has a valid standard shape and its input files exist.
+    Evals(evals::Summary),
+    /// The eval manifest was invalid or unavailable.
     Unmeasured,
 }
 
 impl Measure {
     pub fn label(&self) -> String {
         match self {
-            Measure::Rate(rate) => rate.label(),
-            Measure::Exempt => "reference (exempt)".to_string(),
-            Measure::NotApplicable => "-".to_string(),
-            Measure::NoContract => "no contract".to_string(),
-            Measure::NoCommand => "no measure".to_string(),
+            Measure::Evals(summary) => summary.label(),
             Measure::Unmeasured => "unmeasured".to_string(),
         }
     }
 
-    fn rate(&self) -> Option<Rate> {
+    fn summary(&self) -> Option<evals::Summary> {
         match self {
-            Measure::Rate(rate) => Some(*rate),
+            Measure::Evals(summary) => Some(*summary),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod eval_integration_tests {
+    use super::*;
+    use crate::core::harness::corpus::Corpus;
+    use crate::core::harness::root::CorpusRoot;
+
+    #[test]
+    fn a_valid_standard_manifest_is_reported_as_passing() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".ash/plans")).unwrap();
+        let skill = dir.path().join(".agents/skills/example");
+        std::fs::create_dir_all(skill.join("evals")).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: example\ndescription: Example.\n---\n",
+        )
+        .unwrap();
+        std::fs::write(
+            skill.join("evals/evals.json"),
+            r#"{"skill_name":"example","evals":[{"id":1,"prompt":"p","expected_output":"o"}]}"#,
+        )
+        .unwrap();
+
+        let corpus = Corpus::load(CorpusRoot::new(dir.path())).unwrap();
+        let report = run(&corpus, &Options::default());
+        assert_eq!(report.skills.len(), 1);
+        assert_eq!(
+            report.skills[0].windowed,
+            Measure::Evals(evals::Summary {
+                passed: 1,
+                total: 1
+            })
+        );
+        assert!(report.findings.is_empty());
     }
 }
 
@@ -73,7 +92,7 @@ pub struct SkillRow {
     /// Whether it is projected into `.claude/skills`. An unwired skill fails
     /// silently — it simply never appears (LESSON-007).
     pub wired: bool,
-    pub produces: Option<String>,
+    pub evals: Option<String>,
     pub windowed: Measure,
     pub all_time: Measure,
     /// How many recorded issues name this skill. Read against the rate: a
@@ -90,13 +109,10 @@ impl SkillRow {
     /// True when the recent rate is below the all-time one — the signal that
     /// something changed lately, which an all-time rate would bury.
     fn regressed(&self) -> bool {
-        match (self.windowed.rate(), self.all_time.rate()) {
-            (Some(window), Some(all)) => match (window.percent(), all.percent()) {
-                (Some(w), Some(a)) => w < a,
-                _ => false,
-            },
-            _ => false,
-        }
+        self.windowed
+            .summary()
+            .map(|summary| summary.passed < summary.total)
+            .unwrap_or(false)
     }
 }
 
@@ -121,21 +137,19 @@ pub struct Report {
 
 /// What the caller wants measured.
 pub struct Options<'a> {
-    /// Off skips every `evidence:` subprocess. See `evidence`'s header for
-    /// why this exists and why it is not the default.
-    pub run_evidence: bool,
+    /// Validate eval manifests. The manifests are declarative and validation
+    /// never executes prompt, assertion, or fixture contents.
+    pub run_evals: bool,
     /// A directory of session transcripts, if invocation counts were asked
     /// for. Opt-in, and nothing in `qc` may ever depend on it.
     pub transcripts: Option<&'a std::path::Path>,
-    pub timeout: Duration,
 }
 
 impl Default for Options<'_> {
     fn default() -> Self {
         Self {
-            run_evidence: true,
+            run_evals: true,
             transcripts: None,
-            timeout: evidence::TIMEOUT,
         }
     }
 }
@@ -259,87 +273,41 @@ fn grade(
     findings: &mut Vec<Finding>,
     wired: bool,
 ) -> SkillRow {
-    let text = std::fs::read_to_string(file).unwrap_or_default();
-    let fm = frontmatter::parse(&text).ok().flatten();
-    let field = |key: &str| {
-        fm.as_ref()
-            .and_then(|f| f.text(key))
-            .filter(|v| !v.is_empty())
-    };
-
-    let produces = field("produces");
-    let evidence_command = field("evidence");
-    let kind = field("kind");
     let shown = corpus.relative(file);
+    let skill_dir = file.parent().unwrap_or_else(|| std::path::Path::new(""));
+    let evals_path = skill_dir.join(evals::FILE_NAME);
+    let evals = Some(evals_path.display().to_string());
 
-    let (windowed, all_time) = match (&produces, &kind) {
-        (None, _) => {
-            findings.push(Finding {
-                id: format!("skill.no-contract.{name}"),
-                severity: Severity::Warning,
-                message: format!(
-                    "{shown} declares no 'produces:' — nothing says what this skill is \
-                     supposed to leave behind"
-                ),
-                remediation: "add 'produces:' and 'evidence:' to its frontmatter, or \
-                              'kind: reference' if it produces nothing"
-                    .to_string(),
-                fixable: false,
-            });
-            (Measure::NoContract, Measure::NoContract)
-        }
-        (Some(p), _) if p == "none" => (Measure::Exempt, Measure::NotApplicable),
-        (_, Some(k)) if k == "reference" => (Measure::Exempt, Measure::NotApplicable),
-        (Some(_), _) => match &evidence_command {
-            None => {
+    let (windowed, all_time) = if !options.run_evals {
+        (Measure::Unmeasured, Measure::Unmeasured)
+    } else {
+        match evals::run(skill_dir) {
+            Ok(summary) => (Measure::Evals(summary), Measure::Evals(summary)),
+            Err(failures) => {
                 findings.push(Finding {
-                    id: format!("skill.no-contract.{name}"),
+                    id: format!("skill.evals-failed.{name}"),
                     severity: Severity::Warning,
                     message: format!(
-                        "{shown} says what it produces but gives no 'evidence:' command to \
-                         measure it"
+                        "{} has an invalid standard eval manifest: {}",
+                        shown,
+                        failures
+                            .iter()
+                            .map(|failure| failure.message.as_str())
+                            .collect::<Vec<_>>()
+                            .join("; ")
                     ),
-                    remediation: "add an 'evidence:' one-liner printing '<conforming> <total>'"
-                        .to_string(),
+                    remediation: format!("fix {} to match the evals/evals.json contract", shown),
                     fixable: false,
                 });
-                (Measure::NoCommand, Measure::NoCommand)
-            }
-            Some(command) if !options.run_evidence => {
-                let _ = command;
                 (Measure::Unmeasured, Measure::Unmeasured)
             }
-            Some(command) => {
-                let dir = corpus.root.path();
-                let windowed = evidence::run(command, dir, Some(evidence::WINDOW), options.timeout);
-                let all = evidence::run(command, dir, None, options.timeout);
-                if windowed.is_none() || all.is_none() {
-                    findings.push(Finding {
-                        id: format!("skill.evidence-failed.{name}"),
-                        severity: Severity::Warning,
-                        message: format!(
-                            "the 'evidence:' command for {name} did not run, or printed \
-                             something other than two integers"
-                        ),
-                        remediation: format!(
-                            "run the 'evidence:' one-liner in {shown} by hand and see what it \
-                             prints"
-                        ),
-                        fixable: false,
-                    });
-                }
-                (
-                    windowed.map(Measure::Rate).unwrap_or(Measure::Unmeasured),
-                    all.map(Measure::Rate).unwrap_or(Measure::Unmeasured),
-                )
-            }
-        },
+        }
     };
 
     SkillRow {
         wired,
         name: name.to_string(),
-        produces,
+        evals,
         windowed,
         all_time,
         issues: tally.get(name).copied().unwrap_or(0),
@@ -519,33 +487,27 @@ mod tests {
 
     /// Every skill in this repo is wired and declares a usable contract.
     ///
-    /// Deliberately `run_evidence: false`. What is asserted here is that each
-    /// skill *declares* a measure, which is a property of the repo; whether
-    /// the measure can run is a property of the machine. `create-pr` measures
-    /// itself with `gh pr list`, so on any unauthenticated or offline box —
-    /// CI, for one — it correctly degrades to `unmeasured` and reports
-    /// `skill.evidence-failed`. Asserting no findings while running the
-    /// measures made this test claim the network was part of the contract.
+    /// Eval validation is local and deterministic, so this exercises the real
+    /// manifests rather than skipping them.
     #[test]
     fn every_skill_in_this_repo_declares_a_contract_and_is_wired() {
         let report = run(
             &real(),
             &Options {
-                run_evidence: false,
                 ..Options::default()
             },
         );
-        assert_eq!(report.skills.len(), 7, "expected seven skills");
+        assert_eq!(report.skills.len(), 8, "expected eight skills");
 
         for row in &report.skills {
             assert!(row.wired, "{} is not wired into .claude/skills", row.name);
             assert!(
-                row.produces.is_some(),
-                "{} declares no 'produces:'",
+                row.evals.is_some(),
+                "{} declares no eval manifest",
                 row.name
             );
             assert!(
-                !matches!(row.windowed, Measure::NoContract | Measure::NoCommand),
+                !matches!(row.windowed, Measure::Unmeasured),
                 "{} has no usable measure: {}",
                 row.name,
                 row.windowed.label()
@@ -561,24 +523,19 @@ mod tests {
         assert!(structural.is_empty(), "unexpected findings: {structural:?}");
     }
 
-    /// `pinst` is the one skill that produces no artifact, and the exemption
-    /// is written down in its frontmatter rather than inferred from silence.
+    /// `pinst` carries the same standard eval contract as every other skill.
     #[test]
-    fn the_reference_skill_is_exempt_rather_than_zero() {
-        // Exemption is decided from frontmatter alone, so this needs no
-        // subprocess — and running them would drag `gh` and the network into
-        // a test about a YAML field.
-        let report = run(
-            &real(),
-            &Options {
-                run_evidence: false,
-                ..Options::default()
-            },
-        );
+    fn the_pinst_skill_has_a_passing_eval() {
+        let report = run(&real(), &Options::default());
         let pinst = row(&report, "pinst");
-        assert_eq!(pinst.windowed, Measure::Exempt);
-        assert_eq!(pinst.all_time, Measure::NotApplicable);
-        assert_eq!(pinst.all_time.label(), "-");
+        assert_eq!(
+            pinst.windowed,
+            Measure::Evals(evals::Summary {
+                passed: 1,
+                total: 1
+            })
+        );
+        assert_eq!(pinst.all_time, pinst.windowed);
     }
 
     /// Read the issues column against the rate: a skill at 100% conformance
@@ -589,7 +546,6 @@ mod tests {
         let report = run(
             &real(),
             &Options {
-                run_evidence: false,
                 ..Options::default()
             },
         );
@@ -637,7 +593,6 @@ mod tests {
 
     fn quick() -> Options<'static> {
         Options {
-            timeout: Duration::from_secs(5),
             ..Options::default()
         }
     }
@@ -650,15 +605,15 @@ mod tests {
     fn a_skill_with_no_contract_and_one_with_no_measure_are_both_reported() {
         let fixture = Fixture::new();
         fixture.skill("silent", "");
-        fixture.skill("unmeasured", "produces: 'a thing'\n");
+        fixture.skill("unmeasured", "");
 
         let report = fixture.report(quick());
         let ids: Vec<&str> = report.findings.iter().map(|f| f.id.as_str()).collect();
 
-        assert!(ids.contains(&"skill.no-contract.silent"), "{ids:?}");
-        assert!(ids.contains(&"skill.no-contract.unmeasured"), "{ids:?}");
-        assert_eq!(row(&report, "silent").windowed, Measure::NoContract);
-        assert_eq!(row(&report, "unmeasured").windowed, Measure::NoCommand);
+        assert!(ids.contains(&"skill.evals-failed.silent"), "{ids:?}");
+        assert!(ids.contains(&"skill.evals-failed.unmeasured"), "{ids:?}");
+        assert_eq!(row(&report, "silent").windowed, Measure::Unmeasured);
+        assert_eq!(row(&report, "unmeasured").windowed, Measure::Unmeasured);
     }
 
     /// A measure that cannot run reports `unmeasured` and never `0`, because
@@ -666,8 +621,8 @@ mod tests {
     #[test]
     fn a_broken_measure_is_unmeasured_never_zero() {
         let fixture = Fixture::new();
-        fixture.skill("one-number", "produces: 'a thing'\nevidence: 'echo 3'\n");
-        fixture.skill("exits-nonzero", "produces: 'a thing'\nevidence: 'exit 1'\n");
+        fixture.skill("one-number", "");
+        fixture.skill("exits-nonzero", "");
 
         let report = fixture.report(quick());
         for name in ["one-number", "exits-nonzero"] {
@@ -677,73 +632,50 @@ mod tests {
                 report
                     .findings
                     .iter()
-                    .any(|f| f.id == format!("skill.evidence-failed.{name}")),
+                    .any(|f| f.id == format!("skill.evals-failed.{name}")),
                 "{name} should report a failed measure"
             );
         }
     }
 
-    /// `--no-evidence` must actually not run anything. Asserted by pointing a
-    /// measure at a command that would leave a file behind, and checking the
-    /// file never appears — SEC-001 is about a subprocess, so the test has to
-    /// be about a subprocess.
+    /// Skipping eval validation must not report missing manifests; enabling it
+    /// must report the same manifest as invalid.
     #[test]
-    fn no_evidence_runs_no_subprocess_at_all() {
+    fn skipping_evals_is_explicit_and_does_not_execute_anything() {
         let fixture = Fixture::new();
-        let marker = fixture.path().join("the-measure-ran");
-        fixture.skill(
-            "writes-a-file",
-            &format!(
-                "produces: 'a thing'\nevidence: 'touch {} && echo 1 1'\n",
-                marker.display()
-            ),
-        );
+        fixture.skill("missing-evals", "");
 
         let report = fixture.report(Options {
-            run_evidence: false,
+            run_evals: false,
             ..quick()
         });
-        assert!(!marker.exists(), "the evidence command was executed");
-        assert_eq!(row(&report, "writes-a-file").windowed, Measure::Unmeasured);
-        assert!(
-            report.findings.is_empty(),
-            "skipping a measure is not a failure: {:?}",
-            report.findings
-        );
+        assert!(report.findings.is_empty());
+        assert_eq!(row(&report, "missing-evals").windowed, Measure::Unmeasured);
 
-        // ...and with it on, the same measure does run, so the test above is
-        // proving something.
         let report = fixture.report(quick());
-        assert!(marker.exists());
-        assert_eq!(
-            row(&report, "writes-a-file").windowed,
-            Measure::Rate(Rate {
-                conforming: 1,
-                total: 1
-            })
+        assert_eq!(row(&report, "missing-evals").windowed, Measure::Unmeasured);
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|finding| finding.id == "skill.evals-failed.missing-evals")
         );
     }
 
-    /// A rate over all history is dominated by history. The windowed one is
-    /// what makes a regression visible while it is still one commit old.
+    /// A missing standard manifest is reported as invalid rather than inferred
+    /// from unrelated skill frontmatter.
     #[test]
-    fn a_windowed_rate_below_all_time_reaches_the_agenda() {
+    fn a_missing_eval_manifest_is_unmeasured() {
         let fixture = Fixture::new();
-        fixture.skill(
-            "slipping",
-            "produces: 'a thing'\nevidence: 'if [ -n \"$ASH_RANGE\" ]; then echo 1 2; else echo 9 10; fi'\n",
-        );
+        fixture.skill("slipping", "");
         let report = fixture.report(quick());
 
-        assert!(row(&report, "slipping").regressed());
+        assert_eq!(row(&report, "slipping").windowed, Measure::Unmeasured);
         assert!(
             report
-                .agenda
+                .findings
                 .iter()
-                .any(|item| item.contains("windowed rate below all-time")
-                    && item.contains("slipping")),
-            "{:?}",
-            report.agenda
+                .any(|finding| finding.id == "skill.evals-failed.slipping")
         );
     }
 
@@ -752,7 +684,7 @@ mod tests {
     #[test]
     fn gaps_group_unowned_issues_by_area_and_can_be_answered() {
         let fixture = Fixture::new();
-        fixture.skill("a-skill", "produces: none\nkind: reference\n");
+        fixture.skill("a-skill", "");
         let plan = fixture.path().join(".ash/plans/260919-qwerty-thing");
         std::fs::create_dir_all(&plan).unwrap();
         std::fs::write(
@@ -798,7 +730,7 @@ mod tests {
     #[test]
     fn a_recurring_prose_lesson_is_listed_until_mechanizing_is_declined() {
         let fixture = Fixture::new();
-        fixture.skill("a-skill", "produces: none\nkind: reference\n");
+        fixture.skill("a-skill", "");
         let lesson = |extra: &str| {
             format!(
                 "# Distilled learnings\n\n### LESSON-001: A thing\n**Status:** prose\n{extra}\
