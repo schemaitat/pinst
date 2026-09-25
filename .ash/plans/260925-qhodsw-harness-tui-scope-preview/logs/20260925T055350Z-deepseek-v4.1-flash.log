@@ -1,0 +1,1 @@
+{"ts": "2026-09-25T05:53:50Z", "event": "run_start", "plan": "260925-qhodsw-harness-tui-scope-preview", "phase": null, "task": null, "message": "start harness tab scope grouping and content preview", "detail": {"resume": "phase-01 TASK-001", "head": "98a5077eab553127a24d05c378b76e20588b992d"}}
