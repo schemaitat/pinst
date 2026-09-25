@@ -184,6 +184,9 @@ pub struct App {
     pub harness_project_root: PathBuf,
     pub harness_project: Vec<AssetStatus>,
     pub harness_global: Vec<AssetStatus>,
+    /// Where `.agents/` is read from for this run, resolved once so the
+    /// content preview does not re-run checkout discovery every frame.
+    pub harness_source: crate::core::source::Source,
     pub harness_ready: bool,
     pub harness_selected: usize,
     /// Vertical scroll of the selected-asset preview pane, reset whenever the
@@ -248,6 +251,7 @@ impl App {
             harness_project_root,
             harness_project: Vec::new(),
             harness_global: Vec::new(),
+            harness_source: harness_asset::resolve_source(),
             harness_ready: false,
             harness_selected: 0,
             harness_scroll: 0,
@@ -547,6 +551,15 @@ impl App {
                 .filter(|(_, r)| r.name.to_lowercase().contains(&q))
                 .collect(),
         }
+    }
+
+    /// The selected asset and its scope, or `None` when the filtered list is
+    /// empty. The flat index is the one `filtered_harness` returns, which is
+    /// also what the install/uninstall modal reads.
+    pub fn selected_harness(&self) -> Option<(ReceiptScope, &AssetStatus)> {
+        let rows = self.filtered_harness();
+        rows.get(self.harness_selected.min(rows.len().saturating_sub(1)))
+            .copied()
     }
 
     /// Both scopes' digests, project first, for the scope summary and the
@@ -1621,6 +1634,96 @@ does = "Search a path."
         assert!(
             rendered.contains("1/1 installed") && rendered.contains("0/1 installed"),
             "per-scope counts must show: {rendered}"
+        );
+    }
+
+    #[test]
+    fn the_harness_preview_shows_source_and_target_content() {
+        let source = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(source.path().join("skills/demo")).unwrap();
+        std::fs::write(source.path().join("skills/demo/SKILL.md"), "SOURCE-BODY\n").unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        std::fs::write(installed.path().join("SKILL.md"), "TARGET-BODY\n").unwrap();
+
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_source = Source::Tree(source.path().to_path_buf());
+        app.harness_project_root = PathBuf::from("/repo-root");
+        app.harness_project = vec![scoped_row(
+            "demo",
+            harness_state::AssetKindLabel::Skill,
+            &installed.path().to_string_lossy(),
+            HarnessState::Linked,
+        )];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(rendered.contains("SOURCE-BODY"), "{rendered}");
+        assert!(rendered.contains("TARGET-BODY"), "{rendered}");
+        assert!(rendered.contains("source:"), "the source label must show");
+        assert!(rendered.contains("target:"), "the target label must show");
+    }
+
+    #[test]
+    fn a_missing_harness_target_reads_as_a_notice_not_a_panic() {
+        let source = tempfile::tempdir().unwrap();
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_source = Source::Tree(source.path().to_path_buf());
+        app.harness_project = vec![scoped_row(
+            "ghost",
+            harness_state::AssetKindLabel::Command,
+            "/nonexistent/target/ghost.md",
+            HarnessState::Missing,
+        )];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(
+            rendered.contains("not installed"),
+            "a missing target must be a notice: {rendered}"
+        );
+    }
+
+    #[test]
+    fn paging_scrolls_the_harness_preview_and_selection_resets_it() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![
+            seeded_row("alpha", HarnessState::Missing),
+            seeded_row("beta", HarnessState::Missing),
+        ];
+        app.tab = Tab::Harness;
+
+        press(&mut app, KeyCode::PageDown);
+        assert_eq!(app.harness_scroll, 5);
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.harness_selected, 1);
+        assert_eq!(app.harness_scroll, 0, "a new selection starts at the top");
+    }
+
+    #[test]
+    fn an_empty_harness_tab_says_so_and_the_hint_mentions_preview() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = Vec::new();
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 100, 30);
+        assert!(
+            rendered.contains("no harness assets found"),
+            "an empty tab must say so: {rendered}"
+        );
+        assert!(
+            rendered.contains("select an asset to preview"),
+            "the empty preview must say so: {rendered}"
+        );
+        assert!(
+            rendered.contains("PgUp/PgDn"),
+            "the hint must advertise preview paging: {rendered}"
         );
     }
 

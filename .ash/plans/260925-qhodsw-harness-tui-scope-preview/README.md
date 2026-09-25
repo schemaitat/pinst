@@ -1,7 +1,7 @@
 ---
 id: 260925-qhodsw
 slug: harness-tui-scope-preview
-status: Proposed
+status: Done
 created: 2026-09-25
 updated: 2026-09-25
 areas: [tui, harness, app]
@@ -103,7 +103,7 @@ loading states get real sentences. No new dependencies are introduced
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | Group installs per scope with roots, counts, and paths | [phase-01.md](phase-01.md) | Done |
-| 2 | Safe content preview, scrolling, and states | [phase-02.md](phase-02.md) | Proposed |
+| 2 | Safe content preview, scrolling, and states | [phase-02.md](phase-02.md) | Done |
 
 ## Affected Files
 - **FILE-001** `src/app.rs` — add `HarnessScopeStat` and `harness_scopes()`/

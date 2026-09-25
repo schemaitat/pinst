@@ -749,3 +749,17 @@ hands unsupported arguments to libtest. The failure is fast but easy to repeat
 when a validation checklist names several modules.
 **Status:** prose
 **Seen in:** 260922-cotdnp-optimise-tui-responsiveness (ISSUE-001)
+
+### LESSON-043: A git worktree's untracked `.claude/` links can be stale before you start
+**Lesson:** Before trusting a failing `just harness`/`just qc` in a fresh
+worktree, check the local `.claude/` symlinks with `readlink`. Absolute
+targets pointing into another worktree are stale machine-local wiring, not a
+defect in the branch under test; repoint them at this worktree's `.agents/`
+or run `pinst harness install --scope project --force`.
+**Why:** `.claude/` is untracked and never validated at worktree creation, so
+an install performed in an older worktree leaves absolute links behind that
+keep naming a path which may no longer exist. The failure surfaces as a
+`wire.broken.*` finding before any code is exercised, and the tempting
+response — skip or loosen the check — hides real wiring drift instead.
+**Status:** prose
+**Seen in:** 260925-qhodsw-harness-tui-scope-preview (ISSUE-001)

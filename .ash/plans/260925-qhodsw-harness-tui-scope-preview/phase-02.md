@@ -2,7 +2,7 @@
 id: 260925-qhodsw
 slug: harness-tui-scope-preview
 phase: 2
-status: Proposed
+status: Done
 ---
 
 # Phase 2 — Safe content preview, scrolling, and states
@@ -21,7 +21,7 @@ formalises. It is the payoff slice, and it can be built entirely on the
 existing `asset::content` and Docs-pane rendering helpers (GUD-001).
 
 ## Steps
-- [ ] **TASK-001**: `src/core/harness/asset.rs`, `src/core/harness/preview.rs`,
+- [x] **TASK-001**: `src/core/harness/asset.rs`, `src/core/harness/preview.rs`,
   `src/core/harness/mod.rs` — after phase 1, add
   `entry_relative(kind, name)` returning `skills/<name>/SKILL.md` or
   `commands/<name>.md`, and a new pure `preview` module with a byte cap,
@@ -29,14 +29,14 @@ existing `asset::content` and Docs-pane rendering helpers (GUD-001).
   binary, error), and UTF-8-boundary-safe truncation.
   Why: a pure classifier is unit-testable without a terminal and keeps the
   UI a thin renderer (ASSUMPTION-002, ASSUMPTION-003, RISK-003).
-- [ ] **TASK-002**: `src/app.rs` — after TASK-001, add `harness_scroll`, a
+- [x] **TASK-002**: `src/app.rs` — after TASK-001, add `harness_scroll`, a
   method returning the selected `(scope, &AssetStatus)` plus its source
   relative path, and `PgUp`/`PgDn` handling that scrolls the preview;
   reset `harness_scroll` whenever the selection changes and initialise it in
   `App::new`.
   Why: scroll state is navigation state and belongs in the one state machine
   (PAT-001), mirroring `docs_scroll`.
-- [ ] **TASK-003**: `src/ui/harness.rs`, `src/ui/statusbar.rs` — after
+- [x] **TASK-003**: `src/ui/harness.rs`, `src/ui/statusbar.rs` — after
   TASK-002, add the preview pane: a header with the selected asset's source
   and target paths, a wrapped scrolled `Paragraph` for text, and explicit
   notices for empty, missing, binary, and truncated content; show a clear
@@ -44,7 +44,7 @@ existing `asset::content` and Docs-pane rendering helpers (GUD-001).
   status-bar hint with `PgUp/PgDn preview`.
   Why: reusing the Docs pane structure keeps rendering consistent and bounded
   (GUD-001, RISK-001).
-- [ ] **TASK-004**: `src/app.rs`, `src/ui/harness.rs` tests — after TASK-003,
+- [x] **TASK-004**: `src/app.rs`, `src/ui/harness.rs` tests — after TASK-003,
   add classifier unit tests (text, empty, NUL binary, oversized truncation)
   and `TestBackend` tests: the selected asset's content renders, moving the
   selection changes the preview, a missing target shows a notice, `PgDn`
