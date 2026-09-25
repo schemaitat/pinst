@@ -89,6 +89,42 @@ pub struct HarnessModal {
     generation: u64,
 }
 
+/// One scope's harness digest: where it installs and how each state adds up.
+/// Derived from the already-classified rows so the scope summary and the
+/// per-scope section headers cannot disagree about the same scope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HarnessScopeStat {
+    pub scope: ReceiptScope,
+    pub root: PathBuf,
+    pub total: usize,
+    pub installed: usize,
+    pub missing: usize,
+    pub drifted: usize,
+    pub unmanaged: usize,
+}
+
+impl HarnessScopeStat {
+    fn of(scope: ReceiptScope, root: PathBuf, rows: &[AssetStatus]) -> Self {
+        let count = |pred: fn(harness_state::AssetState) -> bool| {
+            rows.iter().filter(|row| pred(row.state)).count()
+        };
+        Self {
+            scope,
+            root,
+            total: rows.len(),
+            installed: count(|state| state.satisfied()),
+            missing: count(|state| state == harness_state::AssetState::Missing),
+            drifted: count(|state| {
+                matches!(
+                    state,
+                    harness_state::AssetState::Drifted | harness_state::AssetState::Foreign
+                )
+            }),
+            unmanaged: count(|state| state == harness_state::AssetState::Unmanaged),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EditorTarget {
     pub label: String,
@@ -149,10 +185,14 @@ pub struct App {
     pub harness_project_root: PathBuf,
     pub harness_project: Vec<AssetStatus>,
     pub harness_global: Vec<AssetStatus>,
-    pub harness_project_summary: String,
-    pub harness_global_summary: String,
+    /// Where `.agents/` is read from for this run, resolved once so the
+    /// content preview does not re-run checkout discovery every frame.
+    pub harness_source: crate::core::source::Source,
     pub harness_ready: bool,
     pub harness_selected: usize,
+    /// Vertical scroll of the selected-asset preview pane, reset whenever the
+    /// selection moves so a new asset always starts at the top.
+    pub harness_scroll: u16,
     /// True while a spawned install/uninstall run is in flight — blocks a
     /// second `i`/`u` from opening a modal on top of one still running.
     pub harness_busy: bool,
@@ -179,8 +219,6 @@ impl App {
         let harness_project_root = InstallRoot::resolve(None)
             .map(|root| root.path().to_path_buf())
             .unwrap_or_else(|_| PathBuf::from("."));
-        let harness_project_summary = harness_scope_summary("project", &harness_project_root, &[]);
-        let harness_global_summary = harness_scope_summary("global", &home_dir, &[]);
         Self {
             tab: Tab::Overview,
             should_quit: false,
@@ -214,10 +252,10 @@ impl App {
             harness_project_root,
             harness_project: Vec::new(),
             harness_global: Vec::new(),
-            harness_project_summary,
-            harness_global_summary,
+            harness_source: harness_asset::resolve_source(),
             harness_ready: false,
             harness_selected: 0,
+            harness_scroll: 0,
             harness_busy: false,
             harness_modal: None,
             harness_plan_generation: 0,
@@ -285,13 +323,6 @@ impl App {
             AppEvent::Harness { project, global } => {
                 self.harness_project = project;
                 self.harness_global = global;
-                self.harness_project_summary = harness_scope_summary(
-                    "project",
-                    &self.harness_project_root,
-                    &self.harness_project,
-                );
-                self.harness_global_summary =
-                    harness_scope_summary("global", &self.home_dir, &self.harness_global);
                 self.harness_ready = true;
                 self.harness_busy = false;
                 self.status = "harness state refreshed".to_string();
@@ -329,19 +360,8 @@ impl App {
             }
             AppEvent::HarnessScope { scope, rows } => {
                 match scope {
-                    ReceiptScope::Project => {
-                        self.harness_project = rows;
-                        self.harness_project_summary = harness_scope_summary(
-                            "project",
-                            &self.harness_project_root,
-                            &self.harness_project,
-                        );
-                    }
-                    ReceiptScope::Global => {
-                        self.harness_global = rows;
-                        self.harness_global_summary =
-                            harness_scope_summary("global", &self.home_dir, &self.harness_global);
-                    }
+                    ReceiptScope::Project => self.harness_project = rows,
+                    ReceiptScope::Global => self.harness_global = rows,
                 }
                 self.harness_ready = true;
                 self.harness_busy = false;
@@ -534,6 +554,38 @@ impl App {
         }
     }
 
+    /// The selected asset and its scope, or `None` when the filtered list is
+    /// empty. The flat index is the one `filtered_harness` returns, which is
+    /// also what the install/uninstall modal reads.
+    pub fn selected_harness(&self) -> Option<(ReceiptScope, &AssetStatus)> {
+        let rows = self.filtered_harness();
+        rows.get(self.harness_selected.min(rows.len().saturating_sub(1)))
+            .copied()
+    }
+
+    /// Both scopes' digests, project first, for the scope summary and the
+    /// section headers.
+    pub fn harness_scopes(&self) -> [HarnessScopeStat; 2] {
+        [
+            self.harness_scope_stat(ReceiptScope::Project),
+            self.harness_scope_stat(ReceiptScope::Global),
+        ]
+    }
+
+    /// One scope's digest: its install root and per-state counts.
+    pub fn harness_scope_stat(&self, scope: ReceiptScope) -> HarnessScopeStat {
+        match scope {
+            ReceiptScope::Project => HarnessScopeStat::of(
+                scope,
+                self.harness_project_root.clone(),
+                &self.harness_project,
+            ),
+            ReceiptScope::Global => {
+                HarnessScopeStat::of(scope, self.home_dir.clone(), &self.harness_global)
+            }
+        }
+    }
+
     /// Files pinst can jump straight into an editor for: `~/.zshrc` first
     /// (the most-edited file day to day), then every other config pinst
     /// manages.
@@ -612,15 +664,8 @@ impl App {
                 };
                 true
             }
-            KeyCode::PageDown if self.tab == Tab::Docs => {
-                self.docs_scroll = self.docs_scroll.saturating_add(5);
-                true
-            }
-            KeyCode::PageUp if self.tab == Tab::Docs => {
-                let previous = self.docs_scroll;
-                self.docs_scroll = self.docs_scroll.saturating_sub(5);
-                self.docs_scroll != previous
-            }
+            KeyCode::PageDown => self.scroll_pane(5),
+            KeyCode::PageUp => self.scroll_pane(-5),
             KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('e') => {
@@ -691,6 +736,7 @@ impl App {
         self.docs_selected = 0;
         self.docs_scroll = 0;
         self.harness_selected = 0;
+        self.harness_scroll = 0;
     }
 
     fn next_tab(&mut self) {
@@ -766,11 +812,31 @@ impl App {
                     let previous = self.harness_selected;
                     self.harness_selected =
                         (self.harness_selected as i32 + delta).rem_euclid(len) as usize;
+                    if self.harness_selected != previous {
+                        self.harness_scroll = 0;
+                    }
                     return self.harness_selected != previous;
                 }
             }
         }
         false
+    }
+
+    /// Scrolls the reading pane owned by the active tab. Docs and Harness both
+    /// have one; every other tab ignores paging.
+    fn scroll_pane(&mut self, delta: i32) -> bool {
+        let field = match self.tab {
+            Tab::Docs => &mut self.docs_scroll,
+            Tab::Harness => &mut self.harness_scroll,
+            _ => return false,
+        };
+        let previous = *field;
+        *field = if delta >= 0 {
+            field.saturating_add(delta as u16)
+        } else {
+            field.saturating_sub(delta.unsigned_abs() as u16)
+        };
+        *field != previous
     }
 
     fn handle_picker_key(&mut self, code: KeyCode) -> bool {
@@ -1021,6 +1087,11 @@ fn compute_harness_step_count(
     (steps > 0).then_some(steps)
 }
 
+/// The install plan selection a modal asks for: `None` means the whole scope
+/// (install-all/uninstall-all), `Some` names exactly the one row under the
+/// cursor. The scope's section header already carries the grouped counts, so
+/// there is deliberately no `harness_scope_summary` string helper here — the
+/// single source of truth is `HarnessScopeStat`.
 fn selection_for(selected: Option<&(AssetKindLabel, String)>) -> harness_plan::Selection {
     match selected {
         None => harness_plan::Selection::All,
@@ -1036,25 +1107,6 @@ fn selection_for(selected: Option<&(AssetKindLabel, String)>) -> harness_plan::S
         },
     }
 }
-
-fn harness_scope_summary(label: &str, root: &std::path::Path, rows: &[AssetStatus]) -> String {
-    if !rows.iter().any(|row| row.state.satisfied()) {
-        return format!("{label:<8} {}   not installed", root.display());
-    }
-    let skills = rows
-        .iter()
-        .filter(|row| row.kind == AssetKindLabel::Skill)
-        .count();
-    let commands = rows
-        .iter()
-        .filter(|row| row.kind == AssetKindLabel::Command)
-        .count();
-    format!(
-        "{label:<8} {}   {skills} skills, {commands} commands",
-        root.display()
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1546,6 +1598,253 @@ does = "Search a path."
         assert!(rendered.contains("project"), "{rendered}");
         assert!(rendered.contains("global"), "{rendered}");
         assert!(rendered.contains("demo"), "{rendered}");
+    }
+
+    #[test]
+    fn harness_scope_stat_counts_each_state_and_reports_the_root() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_project_root = PathBuf::from("/repo/project");
+        app.harness_project = vec![
+            seeded_row("linked", HarnessState::Linked),
+            seeded_row("copied", HarnessState::Copied),
+            seeded_row("missing", HarnessState::Missing),
+            seeded_row("drifted", HarnessState::Drifted),
+            seeded_row("foreign", HarnessState::Foreign),
+            seeded_row("unmanaged", HarnessState::Unmanaged),
+        ];
+
+        let stat = app.harness_scope_stat(ReceiptScope::Project);
+        assert_eq!(stat.root, PathBuf::from("/repo/project"));
+        assert_eq!(stat.total, 6);
+        assert_eq!(stat.installed, 2);
+        assert_eq!(stat.missing, 1);
+        assert_eq!(stat.drifted, 2);
+        assert_eq!(stat.unmanaged, 1);
+    }
+
+    fn scoped_row(
+        name: &str,
+        kind: harness_state::AssetKindLabel,
+        target: &str,
+        state: HarnessState,
+    ) -> AssetStatus {
+        AssetStatus {
+            vendor: Vendor::Claude,
+            kind,
+            name: name.to_string(),
+            target: PathBuf::from(target),
+            state,
+        }
+    }
+
+    #[test]
+    fn the_harness_tab_groups_scopes_with_roots_counts_and_target_paths() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project_root = PathBuf::from("/repo-root");
+        app.home_dir = PathBuf::from("/home/tester");
+        app.harness_project = vec![scoped_row(
+            "demo",
+            harness_state::AssetKindLabel::Skill,
+            "/repo-root/.claude/skills/demo",
+            HarnessState::Linked,
+        )];
+        app.harness_global = vec![scoped_row(
+            "global-cmd",
+            harness_state::AssetKindLabel::Command,
+            "/home/tester/.claude/commands/global-cmd.md",
+            HarnessState::Missing,
+        )];
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(rendered.contains("project"), "{rendered}");
+        assert!(rendered.contains("global"), "{rendered}");
+        assert!(
+            rendered.contains("/repo-root"),
+            "project install root must show: {rendered}"
+        );
+        assert!(
+            rendered.contains("/home/tester"),
+            "global install root must show: {rendered}"
+        );
+        assert!(
+            rendered.contains("/repo-root/.claude/skills/demo"),
+            "the install path must show: {rendered}"
+        );
+        assert!(
+            rendered.contains("1/1 installed") && rendered.contains("0/1 installed"),
+            "per-scope counts must show: {rendered}"
+        );
+    }
+
+    #[test]
+    fn the_grouped_harness_list_names_each_assets_vendor() {
+        // The vendor came from main's flat table; it must survive the move to
+        // the grouped list rather than being dropped in the merge.
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![seeded_row("demo", HarnessState::Linked)];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(
+            rendered.contains("claude"),
+            "each asset line must name its vendor: {rendered}"
+        );
+    }
+
+    #[tokio::test]
+    async fn s_and_x_scope_the_modal_to_the_selected_row_while_i_and_u_cover_all() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![
+            seeded_row("alpha", HarnessState::Missing),
+            seeded_row("beta", HarnessState::Missing),
+        ];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.harness_selected, 1);
+
+        press(&mut app, KeyCode::Char('s'));
+        let modal = app.harness_modal.expect("s must open a modal");
+        assert_eq!(modal.action, HarnessModalAction::Install);
+        assert_eq!(
+            modal.selected,
+            Some(1),
+            "s targets the row under the cursor"
+        );
+        press(&mut app, KeyCode::Esc);
+
+        press(&mut app, KeyCode::Char('i'));
+        let modal = app.harness_modal.expect("i must open a modal");
+        assert_eq!(modal.action, HarnessModalAction::Install);
+        assert_eq!(modal.selected, None, "i installs the whole scope");
+        press(&mut app, KeyCode::Esc);
+
+        press(&mut app, KeyCode::Char('x'));
+        let modal = app.harness_modal.expect("x must open a modal");
+        assert_eq!(modal.action, HarnessModalAction::Uninstall);
+        assert_eq!(modal.selected, Some(1), "x uninstalls the selected asset");
+        press(&mut app, KeyCode::Esc);
+
+        press(&mut app, KeyCode::Char('u'));
+        let modal = app.harness_modal.expect("u must open a modal");
+        assert_eq!(modal.action, HarnessModalAction::Uninstall);
+        assert_eq!(modal.selected, None, "u uninstalls the whole scope");
+    }
+
+    #[test]
+    fn selection_for_narrows_to_the_named_row_and_is_all_otherwise() {
+        assert!(matches!(selection_for(None), harness_plan::Selection::All));
+        let skill = (harness_state::AssetKindLabel::Skill, "demo".to_string());
+        match selection_for(Some(&skill)) {
+            harness_plan::Selection::Named { skills, commands } => {
+                assert_eq!(skills, vec!["demo".to_string()]);
+                assert!(commands.is_empty());
+            }
+            harness_plan::Selection::All => panic!("a named skill must not select everything"),
+        }
+        let command = (harness_state::AssetKindLabel::Command, "ship".to_string());
+        match selection_for(Some(&command)) {
+            harness_plan::Selection::Named { skills, commands } => {
+                assert!(skills.is_empty());
+                assert_eq!(commands, vec!["ship".to_string()]);
+            }
+            harness_plan::Selection::All => panic!("a named command must not select everything"),
+        }
+    }
+
+    #[test]
+    fn the_harness_preview_shows_source_and_target_content() {
+        let source = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(source.path().join("skills/demo")).unwrap();
+        std::fs::write(source.path().join("skills/demo/SKILL.md"), "SOURCE-BODY\n").unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        std::fs::write(installed.path().join("SKILL.md"), "TARGET-BODY\n").unwrap();
+
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_source = Source::Tree(source.path().to_path_buf());
+        app.harness_project_root = PathBuf::from("/repo-root");
+        app.harness_project = vec![scoped_row(
+            "demo",
+            harness_state::AssetKindLabel::Skill,
+            &installed.path().to_string_lossy(),
+            HarnessState::Linked,
+        )];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(rendered.contains("SOURCE-BODY"), "{rendered}");
+        assert!(rendered.contains("TARGET-BODY"), "{rendered}");
+        assert!(rendered.contains("source:"), "the source label must show");
+        assert!(rendered.contains("target:"), "the target label must show");
+    }
+
+    #[test]
+    fn a_missing_harness_target_reads_as_a_notice_not_a_panic() {
+        let source = tempfile::tempdir().unwrap();
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_source = Source::Tree(source.path().to_path_buf());
+        app.harness_project = vec![scoped_row(
+            "ghost",
+            harness_state::AssetKindLabel::Command,
+            "/nonexistent/target/ghost.md",
+            HarnessState::Missing,
+        )];
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 140, 40);
+        assert!(
+            rendered.contains("not installed"),
+            "a missing target must be a notice: {rendered}"
+        );
+    }
+
+    #[test]
+    fn paging_scrolls_the_harness_preview_and_selection_resets_it() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = vec![
+            seeded_row("alpha", HarnessState::Missing),
+            seeded_row("beta", HarnessState::Missing),
+        ];
+        app.tab = Tab::Harness;
+
+        press(&mut app, KeyCode::PageDown);
+        assert_eq!(app.harness_scroll, 5);
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.harness_selected, 1);
+        assert_eq!(app.harness_scroll, 0, "a new selection starts at the top");
+    }
+
+    #[test]
+    fn an_empty_harness_tab_says_so_and_the_hint_mentions_preview() {
+        let (_dir, mut app) = app(&[]);
+        app.harness_ready = true;
+        app.harness_project = Vec::new();
+        app.harness_global = Vec::new();
+        app.tab = Tab::Harness;
+
+        let rendered = rendered(&app, 100, 30);
+        assert!(
+            rendered.contains("no harness assets found"),
+            "an empty tab must say so: {rendered}"
+        );
+        assert!(
+            rendered.contains("select an asset to preview"),
+            "the empty preview must say so: {rendered}"
+        );
+        assert!(
+            rendered.contains("PgUp/PgDn"),
+            "the hint must advertise preview paging: {rendered}"
+        );
     }
 
     #[test]

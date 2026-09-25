@@ -8,7 +8,7 @@ use crate::app::{App, Tab};
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     let hints = if app.tab == Tab::Harness {
-        "[Tab/1-5] view  [j/k] move  [/] search  [i] install all  [s/x] selected  [u] uninstall all  [q] quit"
+        "[Tab/1-5] view  [j/k] move  [PgUp/PgDn] preview  [/] search  [i] install all  [s/x] selected  [u] uninstall all  [q] quit"
     } else if app.tab == Tab::Health {
         "[Tab/1-5] view  [←/→] pane  [j/k] move  [/] search  [e] edit config  [q] quit"
     } else if app.tab == Tab::Docs {
