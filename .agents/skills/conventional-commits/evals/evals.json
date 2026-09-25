@@ -1,0 +1,13 @@
+{
+  "skill_name": "conventional-commits",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Commit the staged change with the repository's required commit convention.",
+      "expected_output": "A commit whose subject uses a valid Conventional Commits type and optional scope.",
+      "assertions": [
+        "The commit subject matches the documented Conventional Commits pattern"
+      ]
+    }
+  ]
+}

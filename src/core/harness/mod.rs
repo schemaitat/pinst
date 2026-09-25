@@ -19,7 +19,7 @@
 pub mod asset;
 pub mod check;
 pub mod corpus;
-pub mod evidence;
+pub mod evals;
 pub mod frontmatter;
 pub mod id;
 pub mod index;

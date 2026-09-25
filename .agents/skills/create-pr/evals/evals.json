@@ -1,0 +1,14 @@
+{
+  "skill_name": "create-pr",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Open a pull request for the completed plan on this branch.",
+      "expected_output": "A pull request with a plan reference, summary, verification commands, and reviewable scope.",
+      "assertions": [
+        "The pull request body names the implemented plan",
+        "The body lists verification results"
+      ]
+    }
+  ]
+}

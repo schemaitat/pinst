@@ -21,9 +21,9 @@ use serde::Serialize;
 use crate::cli::commands::install;
 use crate::cli::output::{Ctx, Envelope, ExitCode, Status};
 use crate::cli::{
-    HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs, HarnessNewIdArgs,
-    HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs, HarnessUninstallArgs,
-    ScopeArg,
+    DriftResolutionArg, HarnessAction, HarnessArgs, HarnessIndexArgs, HarnessInstallArgs,
+    HarnessNewIdArgs, HarnessRenumberLessonArgs, HarnessSkillsArgs, HarnessStatusArgs,
+    HarnessUninstallArgs, ScopeArg,
 };
 use crate::core::doctor::{Finding, Severity};
 use crate::core::harness::check;
@@ -33,7 +33,7 @@ use crate::core::harness::install::state::{self, AssetKindLabel, AssetState, Ass
 use crate::core::harness::project::InstallRoot;
 use crate::core::harness::root::CorpusRoot;
 use crate::core::harness::vendor::Vendor;
-use crate::core::harness::{asset, evidence, id, renumber, skills};
+use crate::core::harness::{asset, id, renumber, skills};
 use crate::core::home_dir;
 use crate::core::usage;
 
@@ -115,6 +115,7 @@ fn mint(ctx: &Ctx, args: &HarnessNewIdArgs) -> Result<ExitCode> {
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct StatusItem {
     pub scope: String,
+    pub vendor: Vendor,
     pub kind: AssetKindLabel,
     pub name: String,
     pub target: PathBuf,
@@ -125,6 +126,7 @@ impl StatusItem {
     fn from(scope: &str, row: AssetStatus) -> Self {
         Self {
             scope: scope.to_string(),
+            vendor: row.vendor,
             kind: row.kind,
             name: row.name,
             target: row.target,
@@ -359,6 +361,11 @@ async fn install(
         root: root.clone(),
         style,
         force: install_args.force,
+        drift: match install_args.drift {
+            DriftResolutionArg::Overwrite => install_plan::DriftResolution::Overwrite,
+            DriftResolutionArg::Merge => install_plan::DriftResolution::Merge,
+            DriftResolutionArg::Command => install_plan::DriftResolution::Command,
+        },
         selection: selection.clone(),
     };
     let asset_plan = install_plan::build_install_plan(&source, &options)?;
@@ -669,8 +676,8 @@ pub struct SkillReportItem {
     /// Whether it is projected into `.claude/skills`. An unwired skill never
     /// loads, and does so silently.
     pub wired: bool,
-    /// What the skill says it leaves behind, from its own frontmatter.
-    pub produces: Option<String>,
+    /// The skill's standard eval manifest path.
+    pub evals: Option<String>,
     pub windowed: MeasureItem,
     pub all_time: MeasureItem,
     /// How many recorded issues name this skill. Read it against the rate.
@@ -698,13 +705,13 @@ pub struct MeasureItem {
 impl From<&skills::Measure> for MeasureItem {
     fn from(measure: &skills::Measure) -> Self {
         let rate = match measure {
-            skills::Measure::Rate(rate) => Some(*rate),
+            skills::Measure::Evals(summary) => Some((summary.passed as u64, summary.total as u64)),
             _ => None,
         };
         Self {
-            conforming: rate.map(|r| r.conforming),
-            total: rate.map(|r| r.total),
-            percent: rate.and_then(|r| r.percent()),
+            conforming: rate.map(|r| r.0),
+            total: rate.map(|r| r.1),
+            percent: rate.map(|(passed, total)| (passed * 100).checked_div(total).unwrap_or(0)),
             label: measure.label(),
         }
     }
@@ -726,9 +733,8 @@ struct GapItem {
 /// measurements start conversations.
 fn skills(ctx: &Ctx, corpus: &Corpus, args: &HarnessSkillsArgs) -> Result<ExitCode> {
     let options = skills::Options {
-        run_evidence: !args.no_evidence,
+        run_evals: !args.no_evals,
         transcripts: args.transcripts.as_deref(),
-        timeout: evidence::TIMEOUT,
     };
     let report = skills::run(corpus, &options);
 
@@ -743,7 +749,7 @@ fn skills(ctx: &Ctx, corpus: &Corpus, args: &HarnessSkillsArgs) -> Result<ExitCo
         .map(|row| SkillReportItem {
             name: row.name.clone(),
             wired: row.wired,
-            produces: row.produces.clone(),
+            evals: row.evals.clone(),
             windowed: (&row.windowed).into(),
             all_time: (&row.all_time).into(),
             issues: row.issues,
@@ -831,20 +837,12 @@ fn render_table(report: &skills::Report) {
     if report.counted {
         println!(
             "{:<width$} {:<6} {:<22} {:<22} {:<7} {:<6} last seen",
-            "skill",
-            "wired",
-            format!("conforming (last {})", evidence::WINDOW),
-            "all-time",
-            "issues",
-            "fired",
+            "skill", "wired", "evals", "all-time", "issues", "fired",
         );
     } else {
         println!(
             "{:<width$} {:<6} {:<22} {:<22} issues",
-            "skill",
-            "wired",
-            format!("conforming (last {})", evidence::WINDOW),
-            "all-time",
+            "skill", "wired", "evals", "all-time",
         );
     }
     for row in &report.skills {
@@ -917,7 +915,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join(".ash/plans")).unwrap();
         let skill = dir.path().join(".agents/skills/silent");
         std::fs::create_dir_all(&skill).unwrap();
-        // No `produces:`, so this skill has no contract and is a finding.
+        // No eval manifest, so this skill has an invalid standard contract.
         std::fs::write(
             skill.join("SKILL.md"),
             "---\nname: silent\ndescription: x\n---\n",
@@ -928,7 +926,7 @@ mod tests {
         let report = skills::run(
             &corpus,
             &skills::Options {
-                run_evidence: false,
+                run_evals: true,
                 ..skills::Options::default()
             },
         );
@@ -938,7 +936,7 @@ mod tests {
             .map(|row| SkillReportItem {
                 name: row.name.clone(),
                 wired: row.wired,
-                produces: row.produces.clone(),
+                evals: row.evals.clone(),
                 windowed: (&row.windowed).into(),
                 all_time: (&row.all_time).into(),
                 issues: row.issues,
@@ -954,7 +952,7 @@ mod tests {
 
         // The reason for the exit code is in the payload.
         assert_eq!(value["status"], "issues");
-        assert_eq!(value["items"][0]["id"], "skill.no-contract.silent");
+        assert_eq!(value["items"][0]["id"], "skill.evals-failed.silent");
         assert!(value["items"][0]["remediation"].as_str().is_some());
 
         // ...and the report and its counts are where a caller looks for them.

@@ -26,6 +26,12 @@ the task in this orchestrator session, and do not co-edit the child's
 worktree. Put all deliverable work in prompts to the child; inspect and verify
 the result, then nudge, escalate, or abort when acceptance is not met.
 
+If the bounded task is a feature implementation request, tell the child to
+load and follow `implement-feature` in the isolated worktree. Supervise the
+entire chain through its persisted plan, phase-by-phase implementation,
+learnings, `just qc`, and authorized `create-pr` result. A child becoming
+idle, delegating to another skill, or creating a branch is not completion.
+
 If the Herdr gate failed, stop before any Herdr inspection or control. Do not
 substitute a background shell or another delegation mechanism: this command is
 specifically for an explicitly requested Herdr orchestration.

@@ -279,6 +279,17 @@ pub enum LinkStyleArg {
     Copy,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum DriftResolutionArg {
+    /// Back up the drifted target, then replace it from `.agents/`.
+    Overwrite,
+    /// Do not write; print a diff command and leave the merge to the user.
+    Merge,
+    /// Do not write; print the exact overwrite remediation command.
+    Command,
+}
+
 #[derive(Debug, Args, Clone)]
 pub struct HarnessInstallArgs {
     /// Which scope to install into. `both` is not valid here — install one
@@ -306,6 +317,9 @@ pub struct HarnessInstallArgs {
     /// for a plain drifted file — that is backed up and replaced either way.
     #[arg(long)]
     pub force: bool,
+    /// Resolve drift explicitly. Defaults to `command`, which changes nothing.
+    #[arg(long, value_enum, default_value_t = DriftResolutionArg::Command)]
+    pub drift: DriftResolutionArg,
     /// Skip scaffolding `.ash/` when a project install finds none.
     #[arg(long)]
     pub no_corpus: bool,
@@ -370,10 +384,9 @@ pub struct HarnessIndexArgs {
 /// and a rate that got interesting would fail the build.
 #[derive(Debug, Args, Clone)]
 pub struct HarnessSkillsArgs {
-    /// Skip the `evidence:` commands instead of running them. They are shell
-    /// taken from the repo being checked; see `pinst harness skills --help`.
+    /// Skip validation of standard eval manifests.
     #[arg(long)]
-    pub no_evidence: bool,
+    pub no_evals: bool,
     /// Also count invocations from a runtime's session transcripts. Opt-in,
     /// and never depended on: it corroborates, it does not decide.
     #[arg(long, value_name = "DIR")]

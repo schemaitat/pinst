@@ -106,8 +106,9 @@ fn scope_line(stat: &HarnessScopeStat) -> Line<'static> {
 }
 
 /// The grouped asset list. Section headers are display-only lines; the
-/// selection still indexes `filtered_harness()` so `i`/`u` keep working, and
-/// is mapped to a display row here by counting the headers it skips.
+/// selection still indexes `filtered_harness()` so install-all/uninstall-all
+/// (`i`/`u`) and the per-row `s`/`x` keys keep working, and is mapped to a
+/// display row here by counting the headers it skips.
 fn draw_assets(frame: &mut Frame, area: Rect, app: &App) {
     let filtered = app.filtered_harness();
     let title = if app.search_query.is_empty() {
@@ -175,11 +176,12 @@ fn section_line(stat: &HarnessScopeStat) -> Line<'static> {
     ))
 }
 
-/// One asset, its state, and the path it is installed at.
+/// One asset, its vendor, its state, and the path it is installed at.
 fn asset_line(row: &AssetStatus) -> Line<'static> {
     let (label, style) = state_label(row.state);
     Line::from(vec![
         Span::styled(format!("{:<7} ", row.kind.label()), theme::muted_style()),
+        Span::styled(format!("{:<8} ", row.vendor.label()), theme::muted_style()),
         Span::styled(format!("{:<20} ", row.name), theme::title_style()),
         Span::styled(format!("{label:<10} "), style),
         Span::styled(row.target.display().to_string(), theme::muted_style()),
@@ -236,6 +238,7 @@ fn preview_lines(app: &App, scope: ReceiptScope, row: &AssetStatus) -> Vec<Line<
     let (label, style) = state_label(row.state);
     let mut lines = vec![Line::from(vec![
         Span::styled(format!("{} · ", scope.label()), theme::muted_style()),
+        Span::styled(format!("{} ", row.vendor.label()), theme::muted_style()),
         Span::styled(format!("{} ", row.kind.label()), theme::muted_style()),
         Span::styled(row.name.clone(), theme::title_style()),
         Span::raw("  "),
@@ -334,11 +337,17 @@ fn draw_modal(frame: &mut Frame, modal: &HarnessModal) {
         HarnessModalAction::Install => "install",
         HarnessModalAction::Uninstall => "uninstall",
     };
+    let target = if modal.selected.is_some() {
+        " selected asset"
+    } else {
+        " all assets"
+    };
     let text = match modal.steps {
         Some(steps) => format!(
-            "{verb} {steps} step(s) at {scope_label} scope?\n\n[Enter] confirm   [Esc] cancel"
+            "{verb}{target} at {scope_label} scope: {steps} step(s)\n\
+             drift: overwrite with backup\n\n[Enter] confirm   [Esc] cancel"
         ),
-        None => format!("calculating {verb} plan for {scope_label} scope...\n\n[Esc] cancel"),
+        None => format!("calculating {verb}{target} for {scope_label} scope...\n\n[Esc] cancel"),
     };
     let block = Block::default()
         .borders(Borders::ALL)

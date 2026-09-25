@@ -15,7 +15,7 @@ run *ARGS="tui":
     cargo run --quiet -- {{ ARGS }}
 
 # Every quality check, in the order that fails fastest.
-qc: fmt-check lint test harness
+qc: fmt-check lint test harness feature-skill
 
 # Fail if the tree is not formatted.
 fmt-check:
@@ -148,6 +148,10 @@ index:
 [doc("Validate the harness: skills/commands wired, plan corpus consistent")]
 harness:
     cargo run --quiet -- harness check
+
+[doc("Smoke-check the end-to-end feature skill handoffs")]
+feature-skill:
+    scripts/feature-skill-smoke.sh
 
 # The review pass. Deliberately NOT in `qc`: `skills` reports rates and
 # tallies, and report() exits 3 on a finding of any severity, so a number

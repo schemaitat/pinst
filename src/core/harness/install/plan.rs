@@ -25,6 +25,14 @@ pub enum Selection {
     },
 }
 
+/// How an install handles a target whose contents differ from `.agents/`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriftResolution {
+    Overwrite,
+    Merge,
+    Command,
+}
+
 impl Selection {
     fn includes(&self, asset: &Asset) -> bool {
         match self {
@@ -46,6 +54,7 @@ pub struct InstallOptions {
     /// An explicit `--copy`/`--link`, overriding the scope-based default.
     pub style: Option<LinkStyle>,
     pub force: bool,
+    pub drift: DriftResolution,
     pub selection: Selection,
 }
 
@@ -132,6 +141,32 @@ pub fn build_install_plan(source: &Source, options: &InstallOptions) -> Result<P
                         "{} is a symlink to something else; rerun with --force to replace it",
                         target.display()
                     )),
+            );
+            continue;
+        }
+
+        if current == AssetState::Drifted && options.drift != DriftResolution::Overwrite {
+            let source_path = asset::source_path(source, &state::source_relative(asset))
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|_| ".agents".to_string());
+            let reason = match options.drift {
+                DriftResolution::Merge => format!(
+                    "{} is drifted; merge manually with `diff -u {} {}` then rerun with \
+                     `--drift overwrite`",
+                    target.display(),
+                    target.display(),
+                    source_path
+                ),
+                DriftResolution::Command => format!(
+                    "{} is drifted; rerun with `--drift overwrite` to back it up and replace it",
+                    target.display()
+                ),
+                DriftResolution::Overwrite => unreachable!(),
+            };
+            plan.push(
+                Step::new(id, StepKind::Config, description)
+                    .tool(&asset.name)
+                    .blocked(reason),
             );
             continue;
         }
@@ -320,6 +355,7 @@ mod tests {
             root: root.to_path_buf(),
             style: None,
             force: false,
+            drift: DriftResolution::Command,
             selection: Selection::All,
         }
     }
@@ -417,6 +453,46 @@ mod tests {
         opts.force = true;
         let forced = build_install_plan(&tree_source(), &opts).unwrap();
         assert_eq!(forced.pending_count(), 1);
+    }
+
+    #[test]
+    fn drift_requires_an_explicit_resolution_and_overwrite_backs_up() {
+        let root = tempfile::tempdir().unwrap();
+        let mut opts = options(root.path());
+        opts.selection = Selection::Named {
+            skills: vec!["pinst".to_string()],
+            commands: vec![],
+        };
+        opts.style = Some(LinkStyle::Copy);
+        let first = build_install_plan(&tree_source(), &opts).unwrap();
+        let _ = run(first);
+        let target = Vendor::Claude.skills_dir(root.path()).join("pinst");
+        std::fs::write(target.join("SKILL.md"), "edited").unwrap();
+
+        opts.drift = DriftResolution::Command;
+        let command = build_install_plan(&tree_source(), &opts).unwrap();
+        assert!(matches!(
+            command.steps[0].state,
+            crate::core::plan::StepState::Blocked(_)
+        ));
+        assert_eq!(command.pending_count(), 0);
+
+        opts.drift = DriftResolution::Merge;
+        let merge = build_install_plan(&tree_source(), &opts).unwrap();
+        assert!(matches!(
+            merge.steps[0].state,
+            crate::core::plan::StepState::Blocked(_)
+        ));
+        assert!(format!("{:?}", merge.steps[0].state).contains("diff -u"));
+
+        opts.drift = DriftResolution::Overwrite;
+        let overwrite = build_install_plan(&tree_source(), &opts).unwrap();
+        assert!(
+            overwrite.steps[0]
+                .actions
+                .iter()
+                .any(|action| matches!(action, Action::Backup { .. }))
+        );
     }
 
     #[test]
