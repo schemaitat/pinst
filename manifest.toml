@@ -344,11 +344,11 @@ install = { method = "curl_script", url = "https://raw.githubusercontent.com/rai
 name = "opencode"
 summary = "AI coding agent"
 tags = ["agents"]
-requires = ["curl", "node"]
+requires = ["curl"]
 detect = { command = "command -v opencode", bin = "opencode", version_cmd = "opencode --version" }
-# Portable as written (TASK-017 audit): the installer's own `case` maps
-# `Darwin*` to `darwin-x64`/`darwin-arm64` release assets.
-install = { method = "curl_script", url = "https://opencode.ai/install", shell = "bash", github_repo = "sst/opencode" }
+# The V2 installer selects a platform-specific CLI package and publishes
+# versions through npm, not GitHub releases (whose latest tag is still V1).
+install = { method = "curl_script", url = "https://opencode.ai/v2/install", shell = "bash" }
 
 [[tool]]
 name = "claude"
