@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0](https://github.com/schemaitat/pinst/compare/v1.0.0...v1.1.0) (2026-09-23)
+
+
+### Features
+
+* **agents:** add end-to-end feature implementation skill ([72a5ba3](https://github.com/schemaitat/pinst/commit/72a5ba3e848d22bea23ba2a87f054d5994f5871a))
+* **agents:** add harness-agnostic Herdr orchestrate skill ([#22](https://github.com/schemaitat/pinst/issues/22)) ([98a5077](https://github.com/schemaitat/pinst/commit/98a5077eab553127a24d05c378b76e20588b992d))
+* **harness:** adopt standard skill eval manifests ([c72d086](https://github.com/schemaitat/pinst/commit/c72d086ec14f52b38725f7341bd94366102349b5))
+* **harness:** manage drift and skill assets ([5494b25](https://github.com/schemaitat/pinst/commit/5494b25f2a9a52221e1efe051380bfe6f6b29301))
+
 ## [1.0.0](https://github.com/schemaitat/pinst/compare/v0.4.0...v1.0.0) (2026-09-21)
 
 
