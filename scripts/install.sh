@@ -21,6 +21,9 @@
 #                           local server when testing this script)
 #   PINST_REPO              git URL for the source fallback
 #   PINST_SRC_DIR           where the source fallback clones to
+#   CARGO_TARGET_DIR        where the release binary is read from after the
+#                           build (default: <checkout>/target) — lets a build
+#                           run with cargo pointed somewhere container-local
 set -eu
 
 SLUG="${PINST_REPO_SLUG:-schemaitat/pinst}"
@@ -134,7 +137,8 @@ build_from_source() {
 
   log "building release binary"
   ( cd "$SRC_DIR" && cargo build --release --locked )
-  place "$SRC_DIR/target/release/pinst"
+  build_dir="${CARGO_TARGET_DIR:-$SRC_DIR/target}"
+  place "$build_dir/release/pinst"
 }
 
 if in_checkout; then

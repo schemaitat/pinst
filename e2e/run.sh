@@ -28,20 +28,33 @@ src=/src
 home=/home/dev
 export HOME="$home"
 
+# The checkout is mounted read-write at /src, but its target/ must NOT be
+# shared: this host's target/ holds binaries linked against a newer glibc
+# than the container's, and cargo inside the container treats them as fresh
+# and tries to run them. Point cargo at a container-local target so the
+# container always compiles its own artifacts. The ~/.cargo cache volume
+# persists only the crate *registry* (downloads, which is what makes repeat
+# runs cheap); the target dir and any cargo-installed binaries live in the
+# ephemeral container, so every run is still a genuinely fresh machine, not
+# the previous run's leftovers.
+export CARGO_TARGET_DIR="$home/.cargo/target"
+
 selection=("$@")
 
 step() { printf '\n\033[1;36m== [%s] %s\033[0m\n' "$(date +%H:%M:%S)" "$*"; }
 fail() { printf '\033[1;31mxx %s\033[0m\n' "$*" >&2; exit 1; }
 
 # pinst's probes run `sh -c` with the inherited PATH, so it must look like a
-# configured machine's: nvm's node dir included, and the cargo and
-# user-local bins where pinst's own installers place things.
+# configured machine's: nvm's node dir, cargo and user-local bins where the
+# installers place things — including ~/.opencode/bin, where the opencode
+# installer lands (it does not go to ~/.local/bin).
 refresh_path() {
   local path="" dir
   for dir in "$home"/.nvm/versions/node/*/bin \
              /usr/local/cargo/bin \
              "$home/.cargo/bin" \
              "$home/.local/bin" \
+             "$home/.opencode/bin" \
              /usr/local/bin /usr/bin /bin /usr/sbin /sbin; do
     if [ -d "$dir" ]; then
       path="${path:+$path:}$dir"
@@ -104,6 +117,11 @@ set -e
 tolerate_ok_or_issues "bootstrap --dry-run" "$rc"
 
 step "phase 5: pinst bootstrap -y (install tools, apply configs, chsh to zsh)"
+# Exit 3 is expected even after a perfect run: bootstrap's closing re-probe
+# shares its process' PATH, which was captured before tools like node and
+# opencode created their PATH dirs mid-run. A fresh `pinst` process (phase 6
+# and phase 7, after refresh_path) is where "is everything really installed"
+# gets an honest answer.
 refresh_path
 set +e
 pinst bootstrap -y "${selection[@]}"

@@ -640,8 +640,9 @@ builds `e2e/Dockerfile`, mounts this checkout into the container, and runs
 scratch directory, so the *embedded* manifest and configs drive it like a
 downloaded binary would) and `pinst doctor`. Nothing on the host is touched;
 every pinst mutation lands in ephemeral container state, and a docker volume
-keeps the cargo cache warm between runs. Docker-in-Docker does not work, so
-no Docker tool is installed or managed inside — the container provisions
+persists only the crate registry, so repeat runs skip the downloads while
+every run still provisions a fresh machine. Docker-in-Docker does not work,
+so no Docker tool is installed or managed inside — the container provisions
 exactly what the manifest declares. Narrow the scope instead of the default
 full bootstrap:
 

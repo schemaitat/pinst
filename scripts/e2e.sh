@@ -12,12 +12,12 @@ set -euo pipefail
 #
 # Environment:
 #   PINST_E2E_IMAGE    image tag (default pinst-e2e)
-#   PINST_E2E_CACHE    named volume for ~/.cargo registry+bin cache across
-#                      runs (default pinst-e2e-cargo-<uid>)
+#   PINST_E2E_CACHE    named volume holding the crate *registry* across runs
+#                      (default pinst-e2e-registry-<uid>)
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 image="${PINST_E2E_IMAGE:-pinst-e2e}"
-cache="${PINST_E2E_CACHE:-pinst-e2e-cargo-$(id -u)}"
+cache="${PINST_E2E_CACHE:-pinst-e2e-registry-$(id -u)}"
 
 # The image maps the caller's uid/gid into the dev account so the mounted
 # checkout is owned by the same user the suite runs as. Root cannot map onto
@@ -35,13 +35,17 @@ docker build \
   -f "$root/e2e/Dockerfile" \
   "$root"
 
-# target/ persists through the mount, keeping rebuilds incremental; the
-# named volume keeps the crate registry and cargo-installed binaries between
-# runs. The container is throwaway, so every pinst mutation lands in
-# ephemeral state and vanishes when the run ends.
+# target/ stays on the host and is never mounted into the build — the
+# container compiles into its own $CARGO_TARGET_DIR (see e2e/run.sh), so
+# host-built artifacts (different glibc) can never contaminate a run. The
+# named volume persists only the crate registry, so repeat runs skip the
+# downloads while every run still provisions a genuinely fresh machine —
+# nothing else survives from the previous run. The container itself is
+# throwaway, so every pinst mutation lands in ephemeral state and vanishes
+# when the run ends.
 exec docker run --rm \
   --name "pinst-e2e-$$" \
   -v "$root":/src \
-  -v "$cache":/home/dev/.cargo \
+  -v "$cache":/home/dev/.cargo/registry \
   "$image" \
   /src/e2e/run.sh "$@"
