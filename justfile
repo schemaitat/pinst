@@ -153,6 +153,20 @@ harness:
 feature-skill:
     scripts/feature-skill-smoke.sh
 
+# The end-to-end suite: unit/integration tests, install, bootstrap and doctor
+# all run inside a throwaway docker container (e2e/Dockerfile), so a change is
+# verified against a genuinely fresh machine without touching this one. Args
+# forward as a pinst selection: `just e2e --profile minimal` for a quick
+# shell-only pass, `just e2e zsh oh-my-zsh` for a couple of tools; nothing
+# given drives the full default-profile bootstrap.
+#
+# Deliberately NOT in `qc`: it builds a container image, provisions it, and
+# is the slowest gate in the repo on purpose — it is what you reach for
+# before a release or after touching the manifest, not on every commit.
+[doc("Run the end-to-end suite in a throwaway docker container (args forward as pinst selection)")]
+e2e *ARGS:
+    scripts/e2e.sh {{ ARGS }}
+
 # The review pass. Deliberately NOT in `qc`: `skills` reports rates and
 # tallies, and report() exits 3 on a finding of any severity, so a number
 # that got interesting would fail the build and the check would get deleted.

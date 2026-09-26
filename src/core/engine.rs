@@ -601,34 +601,66 @@ mod tests {
         }
     }
 
-    // TEST-019: zsh's chsh step is skipped when the resolved zsh is absent
-    // from /etc/shells — exercised against a temporary stand-in file rather
-    // than the real /etc/shells (LESSON-018).
+    // TEST-019: zsh's chsh step consults the account's configured login shell,
+    // not the current process's inherited SHELL, and skips when zsh is not
+    // listed in /etc/shells (LESSON-018).
     #[test]
-    fn chsh_is_skipped_when_zsh_is_not_listed_in_etc_shells() {
+    fn chsh_uses_the_configured_login_shell_and_respects_etc_shells() {
         let manifest = manifest::embedded().unwrap();
         let zsh = manifest.tool("zsh").unwrap();
         let post = &zsh.post_install[0];
         let skip_if = post.skip_if.as_deref().unwrap();
 
         let dir = tempfile::tempdir().unwrap();
-        let fake_shells = dir.path().join("shells");
-        std::fs::write(&fake_shells, "/bin/bash\n").unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let fake_id = bin.join("id");
+        std::fs::write(&fake_id, "#!/bin/sh\nprintf 'tester\\n'\n").unwrap();
+        let fake_getent = bin.join("getent");
+        std::fs::write(
+            &fake_getent,
+            "#!/bin/sh\nprintf 'tester:x:1000:1000::/home/tester:%s\\n' \"$PINST_TEST_LOGIN_SHELL\"\n",
+        )
+        .unwrap();
+        let fake_zsh = bin.join("zsh");
+        std::fs::write(&fake_zsh, "#!/bin/sh\nexit 0\n").unwrap();
+        for path in [&fake_id, &fake_getent, &fake_zsh] {
+            let mut permissions = std::fs::metadata(path).unwrap().permissions();
+            use std::os::unix::fs::PermissionsExt;
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(path, permissions).unwrap();
+        }
 
-        // Substitute the real /etc/shells for the fake one, and a fake zsh
-        // path that is not listed in it, and a $SHELL that is not zsh.
-        let check = skip_if
-            .replace("/etc/shells", fake_shells.to_str().unwrap())
-            .replace("\"$(command -v zsh)\"", "/usr/local/bin/zsh");
-        let status = std::process::Command::new("sh")
-            .env("SHELL", "/bin/bash")
-            .arg("-c")
-            .arg(&check)
-            .status()
-            .unwrap();
+        let fake_shells = dir.path().join("shells");
+        std::fs::write(&fake_shells, format!("{}\n", fake_zsh.display())).unwrap();
+
+        // An inherited SHELL=zsh must not hide the account's bash setting.
+        let check = skip_if.replace("/etc/shells", fake_shells.to_str().unwrap());
+        let path = format!("{}:/usr/bin:/bin", bin.display());
+        let run_check = |login_shell: &str, inherited_shell: &str| {
+            std::process::Command::new("sh")
+                .env("PATH", &path)
+                .env("PINST_TEST_LOGIN_SHELL", login_shell)
+                .env("SHELL", inherited_shell)
+                .arg("-c")
+                .arg(&check)
+                .status()
+                .unwrap()
+                .success()
+        };
         assert!(
-            status.success(),
-            "skip_if should succeed (skip the chsh step) when zsh is absent from /etc/shells: {check}"
+            !run_check("/bin/bash", fake_zsh.to_str().unwrap()),
+            "an account configured for bash must not skip chsh just because SHELL says zsh"
+        );
+        assert!(
+            run_check(fake_zsh.to_str().unwrap(), "/bin/bash"),
+            "an account configured for zsh should skip chsh even when SHELL says bash"
+        );
+
+        std::fs::write(&fake_shells, "").unwrap();
+        assert!(
+            run_check("/bin/bash", "/bin/bash"),
+            "skip_if should avoid chsh when zsh is absent from /etc/shells"
         );
     }
 

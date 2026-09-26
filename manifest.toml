@@ -121,7 +121,9 @@ command = "chsh -s \"$(command -v zsh)\""
 # and editing that file is a root, system-wide action a post-install step
 # should not take unasked (ASSUMPTION-002, TASK-022) — so an unlisted zsh
 # is treated the same as "already done" rather than attempted and failed.
-skip_if = "[ \"${SHELL##*/}\" = zsh ] || ! grep -qx \"$(command -v zsh)\" /etc/shells 2>/dev/null"
+skip_if = """login_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)
+[ -n "$login_shell" ] || login_shell=$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')
+[ "$login_shell" = "$(command -v zsh)" ] || ! grep -qx "$(command -v zsh)" /etc/shells 2>/dev/null"""
 confirm = true
 
 [[tool]]
@@ -163,7 +165,7 @@ name = "oh-my-posh"
 summary = "Prompt engine; .zshrc initializes it with the catppuccin theme"
 tags = ["shell"]
 requires = ["curl", "unzip"]
-detect = { command = "command -v oh-my-posh", bin = "oh-my-posh", version_cmd = "oh-my-posh --version" }
+detect = { command = "command -v oh-my-posh || [ -x \"$HOME/.local/bin/oh-my-posh\" ]", bin = "oh-my-posh", version_cmd = "oh-my-posh --version || \"$HOME/.local/bin/oh-my-posh\" --version" }
 # Portable as written (TASK-017 audit): the installer detects `uname -s`
 # and fetches the darwin binary on a Mac.
 install = { method = "curl_script", url = "https://ohmyposh.dev/install.sh", shell = "bash", github_repo = "JanDeDobbeleer/oh-my-posh" }
