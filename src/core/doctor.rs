@@ -6,6 +6,8 @@
 //! merely readable and one that is actionable.
 
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::process::Command;
 
 use color_eyre::eyre::Result;
 use schemars::JsonSchema;
@@ -214,8 +216,11 @@ fn check_configs(configs: &ConfigSet, out: &mut Vec<Finding>) -> Result<()> {
 
 fn check_shell(out: &mut Vec<Finding>) {
     // The configs assume zsh is the login shell; if it is not, none of them
-    // are actually in effect.
-    if exec::check("command -v zsh") && !exec::check("[ \"${SHELL##*/}\" = zsh ]") {
+    // are actually in effect. `$SHELL` describes the current process and can
+    // remain bash after `chsh`; inspect the account database instead.
+    if exec::check("command -v zsh")
+        && configured_login_shell().is_some_and(|shell| !is_zsh_shell(&shell))
+    {
         out.push(Finding {
             id: "shell.not-zsh".to_string(),
             severity: Severity::Warning,
@@ -225,6 +230,42 @@ fn check_shell(out: &mut Vec<Finding>) {
             fixable: false,
         });
     }
+}
+
+fn configured_login_shell() -> Option<String> {
+    let user = Command::new("id")
+        .arg("-un")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())?;
+
+    #[cfg(target_os = "macos")]
+    let output = Command::new("dscl")
+        .args([".", "-read", &format!("/Users/{user}"), "UserShell"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+
+    #[cfg(not(target_os = "macos"))]
+    let output = Command::new("getent")
+        .args(["passwd", &user])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+
+    let record = String::from_utf8_lossy(&output.stdout);
+    #[cfg(target_os = "macos")]
+    let shell = record.split_once(':')?.1.trim();
+    #[cfg(not(target_os = "macos"))]
+    let shell = record.lines().next()?.split(':').nth(6)?;
+    Some(shell.to_string())
+}
+
+fn is_zsh_shell(shell: &str) -> bool {
+    Path::new(shell)
+        .file_name()
+        .is_some_and(|name| name == "zsh")
 }
 
 #[cfg(test)]
@@ -338,5 +379,13 @@ mod tests {
         assert_eq!(summary.warnings, 1);
         assert_eq!(summary.infos, 1);
         assert_eq!(summary.fixable, 1);
+    }
+
+    #[test]
+    fn configured_shell_is_identified_by_its_executable_name() {
+        assert!(is_zsh_shell("/usr/bin/zsh"));
+        assert!(is_zsh_shell("/opt/homebrew/bin/zsh"));
+        assert!(!is_zsh_shell("/bin/bash"));
+        assert!(!is_zsh_shell("/bin/zsh-wrapper"));
     }
 }
