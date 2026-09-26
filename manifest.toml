@@ -379,6 +379,23 @@ install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst
   [tool.platform.macos]
   install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-aarch64-apple-darwin.tar.gz", dest = "$HOME/.local/bin" }
 
+[[tool]]
+name = "docker"
+summary = "Docker Engine and CLI for running containers"
+tags = ["containers"]
+detect = { command = "command -v docker", bin = "docker", version_cmd = "docker --version" }
+install = { method = "apt", packages = ["docker.io"] }
+upgrade = { method = "apt", package = "docker.io" }
+
+[[tool.post_install]]
+description = "Add the current user to the docker group (requires sudo; run pinst apply docker --yes)"
+command = "sudo usermod -aG docker \"$(id -un)\""
+skip_if = "id -nG \"$(id -un)\" | tr ' ' '\\n' | grep -qx docker"
+confirm = true
+
+  [tool.platform.macos]
+  unsupported = "Install Docker Desktop from https://www.docker.com/products/docker-desktop/"
+
 # --- configs ---------------------------------------------------------------
 # source is a subdirectory of configs/ whose tree mirrors $HOME.
 
