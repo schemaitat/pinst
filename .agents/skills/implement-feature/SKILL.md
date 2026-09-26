@@ -52,6 +52,15 @@ If the user explicitly supplied an existing feature worktree and branch, verify
 that its repository, branch, base, and current changes match the handoff before
 using it. A mismatch is a blocker, not permission to repair topology.
 
+A fresh worktree does not inherit the parent's harness wiring: `.claude/` is
+untracked and its symlinks are absolute, so a link written by an older
+worktree keeps naming a path that may no longer exist. When the quality gate
+fails with `wire.broken.*` before any source has been edited, `readlink` the
+named links first — a target inside a sibling worktree is stale local wiring,
+not a defect in the branch. Repoint them at this worktree's own `.agents/`
+assets, or run `pinst harness install --scope project --force`; never weaken
+or skip the check to get past it (LESSON-043).
+
 ## Step 2 — Write and persist the plan
 
 Invoke the existing `plan-write` skill in the selected worktree. Its ADR

@@ -774,4 +774,12 @@ keep naming a path which may no longer exist. The failure surfaces as a
 `wire.broken.*` finding before any code is exercised, and the tempting
 response — skip or loosen the check — hides real wiring drift instead.
 **Status:** prose
+**Mechanize:** declined — the detection half is already mechanized and is
+what fires: `wire.missing`/`wire.broken.*` report the bad link at the next
+`qc`. What is left is the diagnosis — whether a broken link is stale local
+wiring or a real defect in the branch — and that is read off `readlink`
+output on a machine the corpus cannot see. Enforced as prose in the skill
+that creates worktrees instead: `implement-feature` Step 1 now carries the
+`readlink`-first rule and the `pinst harness install --scope project --force`
+remedy.
 **Seen in:** 260925-qhodsw-harness-tui-scope-preview (ISSUE-001)

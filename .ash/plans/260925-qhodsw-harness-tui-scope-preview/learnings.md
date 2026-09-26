@@ -44,6 +44,13 @@ Absolute paths into another worktree mean stale local wiring; fix the links
 (or run the repo's own `pinst harness install --scope project --force`) rather
 than weakening or skipping the check.
 **Skill:** none
+**Distilled:** promoted — LESSON-043.
+**Gap:** answered — no skill is missing for `tui`, `harness` or `app`. This is
+machine-local wiring drift in an untracked `.claude/`, not work any of those
+areas lacks instructions for; the detection is already mechanized
+(`wire.broken.*`) and what was missing was the *response*, which is one line in
+the skill that creates worktrees rather than a new skill. Added to
+`implement-feature` Step 1.
 
 ### ISSUE-002: Phase-2-only fields fail phase 1's clippy gate
 **What happened:** Phase 1 added `App::harness_source` and
