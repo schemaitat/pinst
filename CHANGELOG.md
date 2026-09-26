@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/schemaitat/pinst/compare/v1.1.0...v1.2.0) (2026-09-26)
+
+
+### Features
+
+* add Docker Engine support ([#30](https://github.com/schemaitat/pinst/issues/30)) ([17628a8](https://github.com/schemaitat/pinst/commit/17628a803758b9847d3ad495a277419db97488da))
+* **tui:** group harness installs by scope and preview asset content ([#27](https://github.com/schemaitat/pinst/issues/27)) ([0cee8f6](https://github.com/schemaitat/pinst/commit/0cee8f6c05f96aedf0d05318d573c5bb8a45bf52))
+
 ## [1.1.0](https://github.com/schemaitat/pinst/compare/v1.0.0...v1.1.0) (2026-09-23)
 
 
