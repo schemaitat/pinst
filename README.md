@@ -624,6 +624,7 @@ just            # list the recipes
 just run        # run from source (opens the dashboard)
 just run doctor --json   # ...or any other command; args forward
 just qc         # formatting, lints, and tests — what CI would run
+just e2e        # the end-to-end suite, inside a throwaway docker container
 just build      # the self-contained release binary
 just install    # ...and put it on PATH (~/.local/bin)
 just dist       # the release tarball + checksum, exactly as CI builds it
@@ -632,6 +633,22 @@ just dist       # the release tarball + checksum, exactly as CI builds it
 `just install <dir>` overrides the destination. It delegates to
 `scripts/install.sh`, so installing from a checkout takes the same path a
 fresh machine does.
+
+`just e2e` proves the whole lifecycle against a genuinely fresh machine: it
+builds `e2e/Dockerfile`, mounts this checkout into the container, and runs
+`cargo test --locked`, `scripts/install.sh`, `pinst bootstrap -y` (from a
+scratch directory, so the *embedded* manifest and configs drive it like a
+downloaded binary would) and `pinst doctor`. Nothing on the host is touched;
+every pinst mutation lands in ephemeral container state, and a docker volume
+keeps the cargo cache warm between runs. Docker-in-Docker does not work, so
+no Docker tool is installed or managed inside — the container provisions
+exactly what the manifest declares. Narrow the scope instead of the default
+full bootstrap:
+
+```sh
+just e2e --profile minimal     # the base + shell tags, a quick pass
+just e2e zsh oh-my-zsh         # just these tools (dependencies included)
+```
 
 `just run` propagates pinst's exit codes, so `just run doctor` ending in
 "recipe failed with exit code 3" is pinst reporting findings, not a broken
@@ -644,6 +661,7 @@ recipe.
 | `src/core/` | The engine: manifest, graph, probing, planning, execution, configs, doctor |
 | `src/cli/` | The command surface — thin, no logic |
 | `src/ui/` | The TUI — also thin, over the same core |
+| `e2e/` | The end-to-end suite: container image + the in-container lifecycle script |
 | `.agents/` | The agent harness: skills and commands, embedded at build time and installable elsewhere with `pinst harness install`, and the contract for working on pinst |
 | `.ash/` | Every plan, run log, and lesson this repo has produced |
 

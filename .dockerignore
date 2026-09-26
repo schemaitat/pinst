@@ -1,0 +1,10 @@
+# The e2e Dockerfile builds the image from base layers only — the checkout is
+# *mounted* at run time, never COPYed — so all the context is used for is the
+# build handshake. Keeping the heavyweight, gitignored local state out of it
+# is what stops a `docker build` from shipping gigabytes to the daemon.
+target/
+.git/
+
+# Scratch / bookkeeping files that live at the repo root outside git.
+dist/
+.ash/harness.json
