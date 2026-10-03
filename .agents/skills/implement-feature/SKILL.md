@@ -52,6 +52,17 @@ If the user explicitly supplied an existing feature worktree and branch, verify
 that its repository, branch, base, and current changes match the handoff before
 using it. A mismatch is a blocker, not permission to repair topology.
 
+A new worktree does not inherit the machine-local agent wiring, because that
+wiring is untracked: a fresh `.claude/` may be missing, or may hold absolute
+symlinks left by an install in a worktree that no longer exists. Verify it in
+the new worktree before planning — in this repository, `readlink` the
+`.claude/skills/*` and `.claude/commands/*` links, or run `pinst harness status
+--scope project`. Repoint stale links at this worktree's own `.agents/` assets
+(`pinst harness install --scope project --force`). This is local environment
+repair, not topology repair, and it is allowed: fix it before the first `just
+qc`, so a `wire.broken.*` finding is never mistaken for a defect in the branch
+under test (LESSON-043).
+
 ## Step 2 — Write and persist the plan
 
 Invoke the existing `plan-write` skill in the selected worktree. Its ADR

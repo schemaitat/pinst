@@ -44,6 +44,15 @@ Absolute paths into another worktree mean stale local wiring; fix the links
 (or run the repo's own `pinst harness install --scope project --force`) rather
 than weakening or skipping the check.
 **Skill:** none
+**Gap:** answered — no skill is missing. This issue is the sole member of all
+three gap groups (`tui`, `harness`, `app`) only because it is this plan's
+ISSUE-001 and the plan carries those areas; the areas are the Rust/TUI surface
+the plan touched, and nothing about stale machine-local `.claude/` symlinks is
+specific to any of them. It is an environment defect — untracked wiring left
+behind by an `install` in a worktree that no longer exists — and the remedy is
+one step in the skill that already creates worktrees, not a new skill:
+`implement-feature` Step 1 now verifies the worktree's harness wiring before
+planning starts, which is where LESSON-043 belongs.
 
 ### ISSUE-002: Phase-2-only fields fail phase 1's clippy gate
 **What happened:** Phase 1 added `App::harness_source` and
