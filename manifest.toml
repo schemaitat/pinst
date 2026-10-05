@@ -224,7 +224,9 @@ install = { method = "github_release", repo = "neovim/neovim", asset = "nvim-lin
 [[tool]]
 name = "rust"
 summary = "Rust toolchain via rustup; .zshenv sources ~/.cargo/env"
-tags = ["dev"]
+# Opt-in for building pinst itself; the default profile installs prebuilt
+# tree-sitter and just binaries and no longer needs a Rust toolchain.
+tags = ["rust"]
 requires = ["curl"]
 detect = { command = "command -v cargo", bin = "cargo", version_cmd = "rustc --version" }
 # Portable as written (TASK-017 audit): rustup's installer is the
@@ -235,11 +237,15 @@ upgrade = { method = "none" }
 
 [[tool]]
 name = "tree-sitter-cli"
-summary = "nvim-treesitter shells out to this to compile parsers"
+summary = "Prebuilt Tree-sitter CLI used by nvim-treesitter to compile parsers"
 tags = ["editor", "dev"]
-requires = ["rust", "build-essential"]
+requires = ["curl", "build-essential"]
 detect = { command = "command -v tree-sitter", bin = "tree-sitter", version_cmd = "tree-sitter --version" }
-install = { method = "cargo", crate_name = "tree-sitter-cli" }
+# Upstream publishes the CLI as a single gzipped binary, not a tarball.
+# Select the matching Linux/macOS release asset and stage it before replacing
+# the executable, so a failed download cannot leave a partial installation.
+install = { method = "shell", command = "set -eu; case $(uname -s) in Linux) os=linux;; Darwin) os=macos;; *) echo 'Unsupported OS for tree-sitter' >&2; exit 1;; esac; case $(uname -m) in x86_64) arch=x64;; aarch64|arm64) arch=arm64;; *) echo 'Unsupported architecture for tree-sitter' >&2; exit 1;; esac; dir=\"$HOME/.local/bin\"; mkdir -p \"$dir\"; tmp=$(mktemp \"$dir/.tree-sitter.XXXXXX\"); trap 'rm -f \"$tmp\" \"$tmp.gz\"' EXIT; curl -fsSL \"https://github.com/tree-sitter/tree-sitter/releases/latest/download/tree-sitter-$os-$arch.gz\" -o \"$tmp.gz\"; gzip -dc \"$tmp.gz\" > \"$tmp\"; install -m 755 \"$tmp\" \"$dir/tree-sitter\"" }
+upgrade = { method = "github_release", repo = "tree-sitter/tree-sitter" }
 
 [[tool]]
 name = "uv"
@@ -250,6 +256,17 @@ detect = { command = "command -v uv", bin = "uv", version_cmd = "uv --version" }
 # Portable as written (TASK-017 audit): astral's installer detects
 # darwin/linux and arm64/x86_64 and fetches the matching release asset.
 install = { method = "curl_script", url = "https://astral.sh/uv/install.sh", shell = "sh", github_repo = "astral-sh/uv" }
+
+[[tool]]
+name = "python"
+summary = "CPython managed by uv, with python and python3 commands"
+tags = ["dev"]
+requires = ["uv"]
+# Probe uv's own bin directory so a system /usr/bin/python3 does not satisfy
+# this tool before uv has installed its managed interpreter.
+detect = { command = "[ -x \"$(uv python dir --bin)/python\" ]", bin = "python", version_cmd = "\"$(uv python dir --bin)/python\" --version" }
+install = { method = "shell", command = "uv python install --default 3.14" }
+upgrade = { method = "none" }
 
 [[tool]]
 name = "nvm"
@@ -277,9 +294,11 @@ install = { method = "nvm", version = "--lts" }
 name = "just"
 summary = "Command runner"
 tags = ["dev"]
-requires = ["rust"]
+requires = ["uv"]
 detect = { command = "command -v just", bin = "just", version_cmd = "just --version" }
-install = { method = "cargo", crate_name = "just" }
+# PyPI names the prebuilt just wheel `rust-just` (not `just-rust`).
+install = { method = "shell", command = "uv tool install --no-build rust-just" }
+upgrade = { method = "none" }
 
 # --- git tooling -----------------------------------------------------------
 

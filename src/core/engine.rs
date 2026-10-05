@@ -400,7 +400,10 @@ mod tests {
 
         assert!(pos("install:zsh") < pos("install:oh-my-zsh"));
         assert!(pos("install:oh-my-zsh") < pos("install:zsh-autosuggestions"));
-        assert!(pos("install:rust") < pos("install:tree-sitter-cli"));
+        assert!(pos("install:curl") < pos("install:tree-sitter-cli"));
+        assert!(pos("install:build-essential") < pos("install:tree-sitter-cli"));
+        assert!(pos("install:uv") < pos("install:just"));
+        assert!(pos("install:uv") < pos("install:python"));
         assert!(pos("install:nvm") < pos("install:node"));
     }
 
