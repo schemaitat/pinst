@@ -239,9 +239,10 @@ mod tests {
 
         assert!(position(&order, "zsh") < position(&order, "oh-my-zsh"));
         assert!(position(&order, "oh-my-zsh") < position(&order, "zsh-autosuggestions"));
-        assert!(position(&order, "rust") < position(&order, "tree-sitter-cli"));
+        assert!(position(&order, "curl") < position(&order, "tree-sitter-cli"));
+        assert!(position(&order, "build-essential") < position(&order, "tree-sitter-cli"));
         assert!(position(&order, "nvm") < position(&order, "node"));
-        assert!(position(&order, "rust") < position(&order, "just"));
+        assert!(position(&order, "uv") < position(&order, "just"));
         assert!(position(&order, "curl") < position(&order, "uv"));
     }
 
@@ -286,6 +287,58 @@ mod tests {
         assert!(
             selected.iter().position(|n| *n == "nvm") < selected.iter().position(|n| *n == "node")
         );
+    }
+
+    #[test]
+    fn tree_sitter_cli_does_not_pull_in_rust() {
+        let manifest = manifest::embedded().unwrap();
+        let selected: Vec<&str> = select(
+            &manifest,
+            &Selection {
+                names: vec!["tree-sitter-cli".to_string()],
+                ..Default::default()
+            },
+            Platform::Linux,
+        )
+        .unwrap()
+        .tools
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+
+        assert!(selected.contains(&"curl"));
+        assert!(selected.contains(&"build-essential"));
+        assert!(selected.contains(&"tree-sitter-cli"));
+        assert!(!selected.contains(&"rust"));
+    }
+
+    #[test]
+    fn default_profile_uses_uv_for_just_and_python_without_rust() {
+        let manifest = manifest::embedded().unwrap();
+        let selected: Vec<&str> = select(
+            &manifest,
+            &Selection {
+                profile: Some("default".to_string()),
+                ..Default::default()
+            },
+            Platform::Linux,
+        )
+        .unwrap()
+        .tools
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+
+        assert!(selected.contains(&"just"));
+        assert!(selected.contains(&"python"));
+        assert!(selected.contains(&"uv"));
+        assert!(
+            selected.iter().position(|n| *n == "uv") < selected.iter().position(|n| *n == "just")
+        );
+        assert!(
+            selected.iter().position(|n| *n == "uv") < selected.iter().position(|n| *n == "python")
+        );
+        assert!(!selected.contains(&"rust"));
     }
 
     #[test]
