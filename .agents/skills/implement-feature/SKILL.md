@@ -52,6 +52,14 @@ If the user explicitly supplied an existing feature worktree and branch, verify
 that its repository, branch, base, and current changes match the handoff before
 using it. A mismatch is a blocker, not permission to repair topology.
 
+A new worktree does not inherit the parent checkout's untracked machine-local
+wiring, and whatever wiring it does have may be stale — links written by an
+earlier install can still name a sibling worktree that no longer exists. So a
+quality gate that fails in a fresh worktree *before any file is edited* is
+environmental, not a defect in the branch: resolve the wiring (in this
+repository, `pinst harness install --scope project --force`) and re-run the
+gate. Never weaken, skip, or work around a check to get past it.
+
 ## Step 2 — Write and persist the plan
 
 Invoke the existing `plan-write` skill in the selected worktree. Its ADR

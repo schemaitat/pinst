@@ -44,6 +44,13 @@ Absolute paths into another worktree mean stale local wiring; fix the links
 (or run the repo's own `pinst harness install --scope project --force`) rather
 than weakening or skipping the check.
 **Skill:** none
+**Distilled:** promoted — LESSON-043.
+**Gap:** answered — a skill does own the prevention, and it is not a new one:
+`implement-feature` Step 1 establishes the worktree, and that is the only moment
+at which machine-local untracked wiring can be re-pointed before the gate runs.
+Step 1 now says so. The residual root cause — `pinst harness install` writing
+absolute symlink targets that outlive their worktree — is a defect in `src/`,
+not a missing instruction, and is recorded in `.distil-report.md` instead.
 
 ### ISSUE-002: Phase-2-only fields fail phase 1's clippy gate
 **What happened:** Phase 1 added `App::harness_source` and
