@@ -12,6 +12,11 @@ binary, so provisioning a new machine needs no clone, no `just`, and no `stow`.
 `pinst` replaces what used to be a `~/dotfiles` repo plus `bootstrap.sh`, a
 `justfile`, and GNU Stow.
 
+For a **version-locked, rollback-capable environment**, use the
+[Nix + Home Manager bootstrap](docs/bootstrap.md). It shares this repository's
+configs, builds packages before activation, and preserves existing dotfiles
+during an explicit migration.
+
 ```sh
 pinst bootstrap --dry-run   # exactly what would happen, nothing touched
 pinst bootstrap -y          # provision a fresh machine
@@ -83,6 +88,33 @@ pinst update pinst
 
 ## Commands
 
+### Locked Nix environments
+
+From a checkout at the revision you want to deploy:
+
+```sh
+sh scripts/bootstrap-nix.sh --dry-run
+sh scripts/bootstrap-nix.sh --yes
+# Use the newly built CLI; load Nix in this shell if it was just installed.
+if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+export PATH="$HOME/.local/state/pinst/environment/pinst/bin:$PATH"
+pinst environment build --configuration andre-linux --dry-run --json
+pinst environment build --configuration andre-linux --json
+pinst environment apply --migrate --dry-run --yes --json
+pinst environment apply --migrate --yes --json
+pinst environment status --json
+```
+
+Choose a host in `nix/hosts.nix`, or add your own. Build without
+`--configuration` to try packages without activating dotfiles. See
+[the bootstrap guide](docs/bootstrap.md) for the external-tool inventory,
+identity/secrets, lock updates and migration recovery. A successful later
+generation can be reverted with `pinst environment rollback --yes --json`.
+
+### Command reference
+
 | Command | |
 |---------|--|
 | `pinst list` | What the manifest declares, and what is actually installed |
@@ -94,6 +126,7 @@ pinst update pinst
 | `pinst doctor [--fix]` | Diagnose tools and configs; `--fix` repairs the safe subset |
 | `pinst apply` | Converge everything, then diagnose |
 | `pinst bootstrap` | `apply` for a fresh machine (the `default` profile) |
+| `pinst environment build\|apply\|status\|rollback` | Build locked Nix packages/generations, explicitly activate, diagnose, or roll back |
 | `pinst harness check\|index\|skills\|new-id` | Validate the `.ash/` plan corpus of whatever repo you are in |
 | `pinst harness install\|uninstall\|status` | Install/remove the agent harness (skills + commands), project or global scope |
 | `pinst schema manifest\|output\|docs\|harness\|harness-receipt` | JSON Schemas, derived from the code |
@@ -197,9 +230,9 @@ optional `bin` (the PATH binary name), `version_cmd`, and `version_regex`
 |--------|----------|----------|----------|
 | `apt` | `packages` | | `sudo apt-get install -y <packages>` |
 | `cargo` | `crate_name` | | `cargo install --locked <crate>` |
-| `curl_script` | `url` | `shell`, `args`, `github_repo` | `curl -fsSL <url> \| <shell> -s -- <args>` |
+| `curl_script` | `url` | `shell`, `args`, `github_repo`, `sha256` | Download to a temporary file, verify when a hash is declared, then execute |
 | `shell` | `command` | | The command verbatim — the escape hatch |
-| `github_release` | `repo`, `asset`, `dest` | `confirm` | Downloads the asset, extracts with `tar` |
+| `github_release` | `repo`, `asset`, `dest` | `confirm`, `version`, `sha256`, `checksum_asset` | Stage and optionally verify the archive before extraction; a version pin disables implicit latest-upgrade checks |
 | `nvm` | | `version` | Sources `nvm.sh` and installs that version |
 | `git_clone` | `url`, `dest` | `depth` | `git clone` (upgrades with `git pull --ff-only`) |
 | `brew` | `formulae` | `cask` | `brew install [--cask] <formulae>` — never `sudo`; Homebrew refuses to run as root |
@@ -275,6 +308,9 @@ pinst install node     # also plans nvm and curl, in that order
 ```
 
 A dependency cycle is rejected at load time, not discovered mid-install.
+Failed, blocked, or unauthorized prerequisites block their pending dependents;
+independent steps continue. Newly created user install directories are included
+in subsequent subprocess searches without requiring a shell restart mid-run.
 
 ### Post-install steps
 
@@ -386,13 +422,15 @@ Each package is declared in the manifest:
 name = "git"
 source = "git"              # the directory under configs/
 summary = "gitconfig (git identity is templated)"
-requires_tool = "git"       # documentation only — see below
+requires_tool = "git"       # primary tool for apply/bootstrap selection and gating
 templates = [".gitconfig"]  # files needing ${VAR} substitution
 ```
 
-`requires_tool` is validated (it must name a real tool) but is **not enforced
-yet** — configs are applied whether or not the tool is present. Treat it as
-documentation of intent, not a gate.
+`requires_tool` must name a real tool. `apply` and `bootstrap` include a
+package only when its primary tool is selected, and block its activation if
+that tool's install did not succeed. Explicit `config apply` manages the
+whole config set without installing tools. On Home Manager-owned homes,
+use `environment apply` instead of either legacy path.
 
 ## Linked or materialized
 
@@ -574,8 +612,8 @@ Because it runs installers, this is worth being explicit about.
   run would do — it is the same plan, not a description of one.
 - An existing file is backed up to `<file>.pre-pinst.<timestamp>`, never
   overwritten in place.
-- A failed step never aborts the run; the rest continues and the failure is
-  summarized.
+- A failed step blocks its dependent work; independent steps continue and
+  failures are summarized.
 - Re-running converges: everything already correct is skipped.
 
 **Needs your say-so** — steps the manifest marks `confirm` (making zsh the
@@ -625,6 +663,7 @@ just run        # run from source (opens the dashboard)
 just run doctor --json   # ...or any other command; args forward
 just qc         # formatting, lints, and tests — what CI would run
 just e2e        # the end-to-end suite, inside a throwaway docker container
+just nix-e2e    # locked Nix build, then offline migration/rollback/shell/editor checks
 just build      # the self-contained release binary
 just install    # ...and put it on PATH (~/.local/bin)
 just dist       # the release tarball + checksum, exactly as CI builds it
@@ -689,5 +728,7 @@ The release stays a draft until all three are in place, so
 `/releases/latest/download/pinst-<target>.tar.gz` — the URL `install.sh` and
 `pinst update pinst` both resolve, `<target>` picked from the machine's own
 `uname` — never points at an empty release. A platform with no prebuilt
-binary here (or a download that fails to verify) falls back to building from
-source; `PINST_BUILD_FROM_SOURCE=1` forces that path outright.
+binary here falls back to building from source; `PINST_BUILD_FROM_SOURCE=1`
+forces that path outright. A verification or extraction failure stops the
+installer. Source fallback honors `PINST_VERSION` and refuses to update a
+dirty fallback checkout.

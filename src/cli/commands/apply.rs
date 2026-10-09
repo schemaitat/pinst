@@ -23,7 +23,7 @@ pub async fn converge(ctx: &Ctx, args: &SelectArgs, command: &str) -> Result<Exi
     let selected = super::resolve(&loaded, ctx, &args.selection())?;
     let tools = selected.tools;
     let home = home_dir()?;
-    let configs = ConfigSet::load(&loaded.manifest, &home)?;
+    let configs = ConfigSet::load_selected(&loaded.manifest, &home, &tools)?;
 
     ctx.note(format!(
         "converging {} tools and {} config files ({}); {} unsupported on {}",
@@ -96,7 +96,11 @@ pub async fn converge(ctx: &Ctx, args: &SelectArgs, command: &str) -> Result<Exi
 
     let status = if summary.failed > 0 {
         Status::Error
-    } else if doctor_summary.errors > 0 || doctor_summary.warnings > 0 {
+    } else if doctor_summary.errors > 0
+        || doctor_summary.warnings > 0
+        || summary.blocked > 0
+        || summary.needs_confirmation > 0
+    {
         Status::Issues
     } else {
         Status::Ok

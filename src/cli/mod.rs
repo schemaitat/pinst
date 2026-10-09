@@ -95,6 +95,8 @@ pub enum Commands {
     Apply(SelectArgs),
     /// One-shot provisioning for a fresh machine.
     Bootstrap(SelectArgs),
+    /// Build and manage locked Nix environments.
+    Environment(EnvironmentArgs),
     /// Emit machine-readable schemas.
     Schema(SchemaArgs),
     /// Launch the interactive dashboard.
@@ -114,6 +116,7 @@ impl Commands {
             Commands::Harness(_) => "harness",
             Commands::Apply(_) => "apply",
             Commands::Bootstrap(_) => "bootstrap",
+            Commands::Environment(_) => "environment",
             Commands::Schema(_) => "schema",
             Commands::Tui => "tui",
         }
@@ -132,6 +135,38 @@ pub struct SelectArgs {
     /// Select every tool carrying this tag (repeatable).
     #[arg(long = "tag")]
     pub tags: Vec<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct EnvironmentArgs {
+    #[command(subcommand)]
+    pub action: EnvironmentAction,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum EnvironmentAction {
+    /// Activate an already-built generation; existing files require --migrate.
+    Apply {
+        #[arg(long)]
+        generation: Option<PathBuf>,
+        /// Preserve conflicting live files and links before transferring ownership.
+        #[arg(long)]
+        migrate: bool,
+    },
+    /// Inspect managed links and explicitly external tools.
+    Status,
+    /// Reactivate the previous successful generation.
+    Rollback,
+    /// Build the locked toolchain or a named Home Manager generation.
+    Build {
+        #[arg(long, default_value = ".")]
+        flake: PathBuf,
+        #[arg(long)]
+        configuration: Option<String>,
+        /// GC-root symlink for the result (default: ~/.local/state/pinst/environment/build).
+        #[arg(long)]
+        out_link: Option<PathBuf>,
+    },
 }
 
 impl SelectArgs {
@@ -449,6 +484,20 @@ pub enum SchemaKind {
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
     let ctx = cli.global.ctx()?;
+    let legacy_mutation = matches!(
+        &cli.command,
+        Commands::Install(_)
+            | Commands::Update(_)
+            | Commands::Apply(_)
+            | Commands::Bootstrap(_)
+            | Commands::Config(ConfigArgs {
+                action: ConfigAction::Apply | ConfigAction::Adopt
+            })
+            | Commands::Doctor(DoctorArgs { fix: true })
+    );
+    if legacy_mutation {
+        crate::core::environment::ensure_legacy(&crate::core::home_dir()?)?;
+    }
     match &cli.command {
         Commands::List(args) => commands::list::run(&ctx, args).await,
         Commands::Plan(args) => commands::plan::run(&ctx, args).await,
@@ -460,6 +509,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
         Commands::Harness(args) => commands::harness::run(&ctx, args).await,
         Commands::Apply(args) => commands::apply::run(&ctx, args).await,
         Commands::Bootstrap(args) => commands::bootstrap::run(&ctx, args).await,
+        Commands::Environment(args) => commands::environment::run(&ctx, args),
         Commands::Schema(args) => commands::schema::run(&ctx, args),
         Commands::Tui => commands::tui::run(&ctx).await,
     }

@@ -210,7 +210,8 @@ summary = "Editor; the nvim config package targets it"
 tags = ["editor"]
 requires = ["curl"]
 detect = { command = "command -v nvim || [ -x /opt/nvim-linux-x86_64/bin/nvim ]", bin = "nvim", version_cmd = "nvim --version || /opt/nvim-linux-x86_64/bin/nvim --version" }
-install = { method = "github_release", repo = "neovim/neovim", asset = "nvim-linux-x86_64.tar.gz", dest = "/opt", confirm = true }
+install = { method = "github_release", repo = "neovim/neovim", version = "v0.12.5", sha256 = "bce0f56eda1f1b1db6eee8f4133d7a38813ea07933837dd1777411ca384c6875", asset = "nvim-linux-x86_64.tar.gz", dest = "/opt", confirm = true }
+upgrade = { method = "none" } # advance the tag and hash together after testing
 
   # `github_release` is a portable *method*, but this entry's asset
   # (nvim-linux-x86_64.tar.gz) is not — nothing mechanical catches that, only
@@ -388,8 +389,9 @@ install = { method = "curl_script", url = "https://claude.ai/install.sh", shell 
 name = "pinst"
 summary = "This tool, installed from its own releases so it can update itself"
 tags = ["dev"]
+requires = ["curl"]
 detect = { command = "command -v pinst", bin = "pinst", version_cmd = "pinst --version" }
-install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-x86_64-unknown-linux-musl.tar.gz", dest = "$HOME/.local/bin" }
+install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-x86_64-unknown-linux-musl.tar.gz", checksum_asset = "pinst-x86_64-unknown-linux-musl.tar.gz.sha256", dest = "$HOME/.local/bin" }
 
   # Names the aarch64 asset, not x86_64: the overwhelming majority of Macs
   # sold since 2020 are Apple Silicon (ASSUMPTION-004). This manifest entry
@@ -398,7 +400,7 @@ install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst
   # (TASK-032, Phase 5) rather than here — recorded so the asymmetry reads
   # as deliberate, not as an oversight (TASK-021, REQ-006).
   [tool.platform.macos]
-  install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-aarch64-apple-darwin.tar.gz", dest = "$HOME/.local/bin" }
+  install = { method = "github_release", repo = "schemaitat/pinst", asset = "pinst-aarch64-apple-darwin.tar.gz", checksum_asset = "pinst-aarch64-apple-darwin.tar.gz.sha256", dest = "$HOME/.local/bin" }
 
 [[tool]]
 name = "docker"

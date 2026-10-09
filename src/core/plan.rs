@@ -16,18 +16,9 @@ use serde::Serialize;
 pub enum Action {
     /// Run with `sh -c`. `sudo` appears inside the command text itself, the
     /// same way the upstream install docs write it.
-    Shell {
-        command: String,
-    },
-    Download {
-        url: String,
-        dest: PathBuf,
-    },
+    Shell { command: String },
     /// Symlink `target` -> `source`.
-    Link {
-        source: PathBuf,
-        target: PathBuf,
-    },
+    Link { source: PathBuf, target: PathBuf },
     /// Write literal content to `target`. The bytes stay out of the
     /// serialized plan (a config file's contents are not plan metadata);
     /// only their length is reported.
@@ -39,25 +30,19 @@ pub enum Action {
         content: Arc<Vec<u8>>,
     },
     /// Move an existing file aside before writing over its path.
-    Backup {
-        path: PathBuf,
-        to: PathBuf,
-    },
+    Backup { path: PathBuf, to: PathBuf },
     /// Delete a file, symlink, or directory outright — no backup. The one
     /// action in pinst that can destroy something without leaving a copy,
     /// and for that reason the only one a plan builder may emit for a path
     /// it did not itself record having written (see `harness::install`,
     /// which restricts this to paths read back out of its own receipt).
-    Remove {
-        path: PathBuf,
-    },
+    Remove { path: PathBuf },
 }
 
 impl Action {
     pub fn describe(&self) -> String {
         match self {
             Action::Shell { command } => command.clone(),
-            Action::Download { url, dest } => format!("download {url} -> {}", dest.display()),
             Action::Link { source, target } => {
                 format!("link {} -> {}", target.display(), source.display())
             }
@@ -76,13 +61,16 @@ impl Action {
             Action::Shell { command } => {
                 if command.contains("sudo ") {
                     Privilege::Sudo
-                } else if command.contains("curl ") && command.contains('|') {
+                } else if command.contains("curl ")
+                    && (command.contains('|') || command.contains("$tmp/install"))
+                {
                     Privilege::RemoteScript
+                } else if command.contains("curl ") {
+                    Privilege::Network
                 } else {
                     Privilege::User
                 }
             }
-            Action::Download { .. } => Privilege::Network,
             _ => Privilege::User,
         }
     }
@@ -109,6 +97,7 @@ pub enum StepKind {
     Upgrade,
     PostInstall,
     Config,
+    Environment,
     /// No automated path exists; the step carries instructions instead.
     Manual,
 }
@@ -131,6 +120,10 @@ pub struct Step {
     pub kind: StepKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// Prerequisite step ids. Failed, blocked or unauthorized prerequisites
+    /// block pending work, while independent branches may continue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
     pub description: String,
     pub actions: Vec<Action>,
     pub privilege: Privilege,
@@ -149,6 +142,7 @@ impl Step {
             id: id.into(),
             kind,
             tool: None,
+            requires: Vec::new(),
             description: description.into(),
             actions: Vec::new(),
             privilege: Privilege::User,
@@ -160,6 +154,11 @@ impl Step {
 
     pub fn tool(mut self, tool: impl Into<String>) -> Self {
         self.tool = Some(tool.into());
+        self
+    }
+
+    pub fn requires(mut self, requires: Vec<String>) -> Self {
+        self.requires = requires;
         self
     }
 

@@ -90,6 +90,16 @@ pub fn build_install_plan(
                 }
 
                 let confirm = requires_confirmation(effective.install);
+                let mut requires: Vec<String> = effective
+                    .requires
+                    .iter()
+                    .map(|name| format!("install:{name}"))
+                    .collect();
+                match effective.install {
+                    Install::Apt { .. } => requires.push("apt:update".into()),
+                    Install::Brew { .. } => requires.push("brew:update".into()),
+                    _ => {}
+                }
                 plan.push(
                     Step::new(
                         format!("install:{}", tool.name),
@@ -97,6 +107,7 @@ pub fn build_install_plan(
                         format!("install {}", tool.name),
                     )
                     .tool(&tool.name)
+                    .requires(requires)
                     .actions(executor.install(tool, effective.install)?)
                     .confirm(confirm),
                 );
@@ -259,23 +270,49 @@ pub fn execute(
     let mut reports = Vec::with_capacity(plan.steps.len());
     let mut summary = ExecSummary::default();
     let mut unavailable: BTreeSet<&str> = BTreeSet::new();
+    let mut failed_steps: BTreeSet<&str> = BTreeSet::new();
 
     for step in &plan.steps {
         // A tool whose install did not succeed must not have its post-install
         // steps run: `chsh -s "$(command -v zsh)"` with no zsh on the box
         // would set an empty login shell, and the fd symlink step would link
         // from an empty path.
-        let report = match (&step.tool, step.kind) {
-            (Some(tool), StepKind::PostInstall) if unavailable.contains(tool.as_str()) => {
-                summary.skipped += 1;
-                StepReport::from_step(
-                    step,
-                    Outcome::Skipped,
-                    Some(format!("{tool} was not installed")),
-                )
+        let blocked_by: Vec<&str> = step
+            .requires
+            .iter()
+            .map(String::as_str)
+            .filter(|id| failed_steps.contains(id))
+            .collect();
+        let report = if step.is_pending() && !blocked_by.is_empty() {
+            summary.blocked += 1;
+            StepReport::from_step(
+                step,
+                Outcome::Blocked,
+                Some(format!(
+                    "prerequisite unavailable: {}",
+                    blocked_by.join(", ")
+                )),
+            )
+        } else {
+            match (&step.tool, step.kind) {
+                (Some(tool), StepKind::PostInstall) if unavailable.contains(tool.as_str()) => {
+                    summary.skipped += 1;
+                    StepReport::from_step(
+                        step,
+                        Outcome::Skipped,
+                        Some(format!("{tool} was not installed")),
+                    )
+                }
+                _ => execute_step(step, runner, auth, &mut summary),
             }
-            _ => execute_step(step, runner, auth, &mut summary),
         };
+
+        if matches!(
+            report.outcome,
+            Outcome::Failed | Outcome::Blocked | Outcome::NeedsConfirmation
+        ) {
+            failed_steps.insert(&step.id);
+        }
 
         // `Manual` counts as an install step too — that is the kind a blocked
         // tool gets, and it is precisely the case where post-install steps
@@ -639,7 +676,11 @@ mod tests {
 
         // An inherited SHELL=zsh must not hide the account's bash setting.
         let check = skip_if.replace("/etc/shells", fake_shells.to_str().unwrap());
-        let path = format!("{}:/usr/bin:/bin", bin.display());
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
         let run_check = |login_shell: &str, inherited_shell: &str| {
             std::process::Command::new("sh")
                 .env("PATH", &path)
@@ -799,6 +840,63 @@ mod tests {
         assert_eq!(summary.ran, 1, "the step after a failure still ran");
         assert_eq!(reports[0].outcome, Outcome::Failed);
         assert_eq!(reports[1].outcome, Outcome::Ran);
+    }
+
+    #[test]
+    fn failed_prerequisites_block_transitively_but_not_independent_tools() {
+        let mut plan = Plan::default();
+        for (name, command, requires) in [
+            ("a", "false", vec![]),
+            ("b", "true", vec!["install:a".into()]),
+            ("c", "true", vec!["install:b".into()]),
+            ("independent", "true", vec![]),
+        ] {
+            plan.push(
+                Step::new(format!("install:{name}"), StepKind::Install, name)
+                    .tool(name)
+                    .requires(requires)
+                    .actions(vec![Action::Shell {
+                        command: command.into(),
+                    }]),
+            );
+        }
+        let (reports, summary) = execute(
+            &plan,
+            &Runner::new(false),
+            &Authorizer {
+                approve: &approve_all,
+            },
+            &mut |_| {},
+        );
+        assert_eq!(
+            reports.iter().map(|r| r.outcome).collect::<Vec<_>>(),
+            [
+                Outcome::Failed,
+                Outcome::Blocked,
+                Outcome::Blocked,
+                Outcome::Ran
+            ]
+        );
+        assert_eq!(summary.blocked, 2);
+    }
+
+    #[test]
+    fn denied_prerequisite_blocks_dependents_even_in_preview() {
+        let mut plan = Plan::default();
+        plan.push(Step::new("install:a", StepKind::Install, "a").confirm(true));
+        plan.push(
+            Step::new("install:b", StepKind::Install, "b").requires(vec!["install:a".into()]),
+        );
+        let (reports, _) = execute(
+            &plan,
+            &Runner::new(true),
+            &Authorizer {
+                approve: &|_| false,
+            },
+            &mut |_| {},
+        );
+        assert_eq!(reports[0].outcome, Outcome::NeedsConfirmation);
+        assert_eq!(reports[1].outcome, Outcome::Blocked);
     }
 
     #[test]

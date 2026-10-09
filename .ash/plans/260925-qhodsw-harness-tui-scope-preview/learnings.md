@@ -1,7 +1,7 @@
 ---
 id: 260925-qhodsw
 slug: harness-tui-scope-preview
-updated: 2026-09-25
+updated: 2026-10-09
 areas: [tui, harness, app]
 issue_count: 2
 ---
@@ -44,6 +44,7 @@ Absolute paths into another worktree mean stale local wiring; fix the links
 (or run the repo's own `pinst harness install --scope project --force`) rather
 than weakening or skipping the check.
 **Skill:** none
+**Gap:** answered — existing harness wiring checks already detect stale links; this is environment diagnosis, not a missing skill.
 
 ### ISSUE-002: Phase-2-only fields fail phase 1's clippy gate
 **What happened:** Phase 1 added `App::harness_source` and

@@ -164,6 +164,9 @@ pub enum Install {
     /// `curl -fsSL <url> | <shell> -s -- <args>`
     CurlScript {
         url: String,
+        /// Optional SHA-256 of the installer bytes, checked before execution.
+        #[serde(default)]
+        sha256: Option<String>,
         #[serde(default = "default_shell")]
         shell: String,
         #[serde(default)]
@@ -179,6 +182,15 @@ pub enum Install {
     },
     GithubRelease {
         repo: String,
+        /// Exact release tag. Omitted means latest (legacy behavior).
+        #[serde(default)]
+        version: Option<String>,
+        /// SHA-256 of the release archive.
+        #[serde(default)]
+        sha256: Option<String>,
+        /// Checksum sidecar asset, e.g. <asset>.sha256.
+        #[serde(default)]
+        checksum_asset: Option<String>,
         /// Asset file name in the release (a `.tar.gz` is extracted).
         asset: String,
         /// Extraction destination, e.g. `/opt`.
@@ -278,6 +290,9 @@ fn derive_upgrade_spec(name: &str, install: &Install) -> UpgradeSpec {
             Some(repo) => UpgradeSpec::GithubRelease { repo: repo.clone() },
             None => UpgradeSpec::None {},
         },
+        Install::GithubRelease {
+            version: Some(_), ..
+        } => UpgradeSpec::None {},
         Install::GithubRelease { repo, .. } => UpgradeSpec::GithubRelease { repo: repo.clone() },
         Install::Nvm { .. } => UpgradeSpec::Nvm {},
         Install::Brew { formulae, .. } => UpgradeSpec::Brew {
@@ -577,6 +592,23 @@ pub fn embedded() -> Result<Manifest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_release_pin_disables_implicit_latest_upgrade_checks() {
+        let install = Install::GithubRelease {
+            repo: "example/tool".into(),
+            asset: "tool.tar.gz".into(),
+            dest: "$HOME/bin".into(),
+            version: Some("v1.0.0".into()),
+            sha256: None,
+            checksum_asset: None,
+            confirm: false,
+        };
+        assert!(matches!(
+            derive_upgrade_spec("tool", &install),
+            UpgradeSpec::None {}
+        ));
+    }
 
     fn parse(src: &str) -> Result<Manifest> {
         let m: Manifest = toml::from_str(src)?;

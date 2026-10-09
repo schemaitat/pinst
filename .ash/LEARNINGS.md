@@ -36,6 +36,8 @@ without a query; and again in 260920-tensvp-tool-docs-explorer (ISSUE-002,
 ISSUE-006), where the plan asserted which of 26 local binaries answer
 `--help` without running any of them, and named a verification method no
 dependency in the tree can perform. Both were one loop away from being facts.
+Again in 261009-oclzij-locked-nix-bootstrap (ISSUE-002): a package present on
+unstable was absent on the stable branch needed to preserve Intel macOS support.
 
 ### LESSON-003: Split Done criteria that need a merge from those that do not
 **Lesson:** When verification depends on landing on `main`, an admin action or
@@ -539,6 +541,9 @@ depended on it, which is the more common failure and the harder one to
 notice.
 **Status:** prose
 **Seen in:** 260920-wtburh-harness-in-the-binary (ISSUE-009)
+Again in 261009-oclzij-locked-nix-bootstrap (ISSUE-004): fixture PATHs needed
+their declared utilities from Nix build inputs rather than hard-coded /usr/bin.
+**Mechanize:** declined — the concrete fixtures and Nix e2e suite exercise these cases, but selecting the hostile conditions relevant to an arbitrary future feature remains a test-design decision.
 
 ### LESSON-030: A write to an external system is verified by reading it back
 **Lesson:** Never pipe a command through `tail` or `head` when its exit code
@@ -775,3 +780,26 @@ keep naming a path which may no longer exist. The failure surfaces as a
 response — skip or loosen the check — hides real wiring drift instead.
 **Status:** prose
 **Seen in:** 260925-qhodsw-harness-tui-scope-preview (ISSUE-001)
+
+### LESSON-044: Preserve source identity when a pinned hash fails
+**Lesson:** Do not turn a checksum mismatch into success by copying the newly
+observed hash. First identify the intended immutable source revision and inspect
+the difference or choose an already-established revision; record that source
+decision alongside its hash.
+**Why:** A fixed hash is useful precisely because it refuses changed bytes behind
+a familiar URL. Treating failure as a request to regenerate the hash removes the
+property the pin was intended to provide.
+**Status:** prose
+**Mechanize:** declined — deciding whether changed upstream bytes represent the intended source requires source inspection; the hash check itself already fails closed.
+**Seen in:** 261009-oclzij-locked-nix-bootstrap (ISSUE-005)
+
+### LESSON-045: Verify configured workloads in a fresh offline home
+**Lesson:** A bootstrap acceptance check should activate the configuration in a
+fresh home and exercise representative workloads without network access, rather
+than stopping at a successful package build or executable detection.
+**Why:** Package closures can contain every dependency while application loaders
+discard their runtime paths or try to download replacements. First-start parser,
+plugin and language-server checks expose the gap that package inventory cannot.
+**Status:** prose
+**Mechanize:** declined — the Nix e2e suite enforces this environment's cases, but selecting representative workloads for an arbitrary future feature remains a design decision.
+**Seen in:** 261009-oclzij-locked-nix-bootstrap (ISSUE-006)

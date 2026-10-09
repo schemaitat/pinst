@@ -69,6 +69,7 @@ Every command emits this shape (`pinst schema output` for the formal schema):
 | `pinst doctor [--fix]` | Diagnoses tools + configs | findings |
 | `pinst apply` | Converges everything: install, configs, then diagnose | step reports |
 | `pinst bootstrap` | `apply` with the `default` profile, for a fresh machine | step reports |
+| `pinst environment build\|apply\|status\|rollback` | Locked Nix toolchains and Home Manager generations | step reports / environment states |
 | `pinst schema manifest\|output\|docs` | JSON Schemas | (raw schema on stdout) |
 | `pinst tui` | Interactive dashboard (refuses `--json`) | — |
 
@@ -163,7 +164,7 @@ draft, and needs a checkout to write into.
 | `blocked` | No automated path exists; `detail` holds the instructions |
 | `failed` | Ran and failed; `detail` holds the error |
 
-A failed step never aborts the rest of the run.
+A failed step blocks pending dependents; independent steps continue.
 
 ## Doctor findings
 
@@ -212,6 +213,40 @@ pinst list --json >/dev/null    # exits 2 with the specific problem if invalid
 ```
 
 ## Configs
+
+### Locked Nix ownership
+
+Use `pinst environment build --flake <checkout> --configuration <host> --json`
+to build a Home Manager generation, or omit `--configuration` for the
+package-only pilot. Builds require `flake.lock` and pass
+`--no-update-lock-file`. `--out-link` selects the build result; the default is
+`~/.local/state/pinst/environment/build`.
+
+Preview with `--dry-run` first. It reads local inputs and prints the plan,
+without fetching or writing. Then `pinst environment apply --json --yes`
+activates the built generation; `--generation <path>` selects another built
+result. Existing config collisions are `blocked` unless `--migrate` is passed.
+Migration retains original files/symlinks and snapshots of live content under
+`~/.local/state/pinst/environment/migrations/`; it never edits the old dotfile
+repository. Git identity is a runtime include, secrets stay outside the store.
+
+`pinst environment status --json` reports `environment.package.*` and
+`environment.file.*` states (`linked` or `drifted`) plus explicitly unmanaged
+`environment.external.*` entries. Exit 0 means the managed profile and files
+match; it does not claim external tools are pinned or installed. `pinst doctor`
+preserves its finding schema and reports these external entries at info severity.
+
+`pinst environment rollback --dry-run --yes --json`, followed by the same
+command without `--dry-run`, reactivates the previous successful generation.
+This is not a pre-migration file restore or an application-data rollback.
+
+On a home carrying `.config/pinst/environment.json`, legacy install/update,
+apply/bootstrap, config apply/adopt, and doctor --fix refuse competing writes.
+Declare package/config changes in `nix/` and update `flake.lock` deliberately.
+See `docs/bootstrap.md` for fresh-machine installation, platform/agent
+exceptions and migration recovery; `just nix-e2e` verifies the offline lifecycle.
+
+### Legacy config ownership
 
 Configs live in `configs/<package>/`, mirroring `$HOME`. They are compiled
 into the binary, so a downloaded pinst can provision a machine with no clone

@@ -12,8 +12,9 @@ mod git_clone;
 mod github_release;
 mod nvm;
 mod shell;
+#[cfg(test)]
+mod tests;
 
-use std::io::Write;
 use std::process::{Command, Stdio};
 
 use color_eyre::eyre::{Context, Result, bail};
@@ -92,7 +93,6 @@ impl Runner {
         }
         match action {
             Action::Shell { command } => run_shell(command),
-            Action::Download { url, dest } => download(url, dest),
             Action::Link { source, target } => link(source, target),
             Action::Write {
                 target, content, ..
@@ -121,6 +121,7 @@ impl Runner {
 /// `detect.command` and post-install `skip_if` conditions.
 pub fn check(command: &str) -> bool {
     Command::new("sh")
+        .env("PATH", search_path())
         .arg("-c")
         .arg(command)
         .stdin(Stdio::null())
@@ -133,9 +134,11 @@ pub fn check(command: &str) -> bool {
 
 fn run_shell(command: &str) -> Result<()> {
     let status = Command::new("sh")
+        .env("PATH", search_path())
         .arg("-c")
         .arg(command)
         .stdin(Stdio::null())
+        .stdout(Stdio::from(std::io::stderr()))
         .status()
         .with_context(|| format!("spawning: {command}"))?;
     if !status.success() {
@@ -150,26 +153,56 @@ fn run_shell(command: &str) -> Result<()> {
     Ok(())
 }
 
-fn download(url: &str, dest: &std::path::Path) -> Result<()> {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("pinst")
-        .timeout(std::time::Duration::from_secs(300))
-        .build()?;
-    let mut resp = client
-        .get(url)
-        .send()
-        .with_context(|| format!("downloading {url}"))?;
-    if !resp.status().is_success() {
-        bail!("downloading {url}: HTTP {}", resp.status());
+/// Recomputed for each subprocess: installers can create these directories
+/// mid-run. Preserve the caller's explicit PATH precedence.
+pub fn search_path() -> std::ffi::OsString {
+    let mut paths: Vec<std::path::PathBuf> =
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect();
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = std::path::PathBuf::from(home);
+        for dir in [
+            ".local/bin",
+            ".cargo/bin",
+            ".opencode/bin",
+            ".nix-profile/bin",
+        ] {
+            paths.push(home.join(dir));
+        }
+        // Prefer the version selected by nvm's default alias in interactive
+        // shells; here any installed version is enough to find newly installed
+        // node before the parent process has reloaded its shell environment.
+        if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
+            let mut nodes: Vec<_> = entries.flatten().map(|e| e.path().join("bin")).collect();
+            nodes.sort();
+            paths.extend(nodes.into_iter().rev());
+        }
     }
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
+    paths.extend(
+        [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/opt/nvim-linux-x86_64/bin",
+        ]
+        .map(std::path::PathBuf::from),
+    );
+    std::env::join_paths(paths).unwrap_or_default()
+}
+
+pub(crate) fn quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+pub(super) const CURL: &str =
+    "curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 300";
+
+pub(super) fn verify_hash(hash: &str, file: &str) -> Result<String> {
+    if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!("sha256 must contain exactly 64 hexadecimal digits");
     }
-    let mut file =
-        std::fs::File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
-    resp.copy_to(&mut file)?;
-    file.flush()?;
-    Ok(())
+    Ok(format!(
+        "if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum {file}); else actual=$(shasum -a 256 {file}); fi; [ \"${{actual%% *}}\" = {} ] || {{ echo 'SHA-256 mismatch' >&2; exit 1; }}",
+        quote(&hash.to_lowercase())
+    ))
 }
 
 fn link(source: &std::path::Path, target: &std::path::Path) -> Result<()> {

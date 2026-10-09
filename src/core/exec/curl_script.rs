@@ -9,19 +9,31 @@ pub struct CurlScript;
 impl Executor for CurlScript {
     fn install(&self, tool: &Tool, install: &Install) -> Result<Vec<Action>> {
         let Install::CurlScript {
-            url, shell, args, ..
+            url,
+            shell,
+            args,
+            sha256,
+            ..
         } = install
         else {
             bail!("curl_script executor called for tool '{}'", tool.name);
         };
-        let mut command = format!("curl -fsSL {url} | {shell} -s");
-        if !args.is_empty() {
-            command.push_str(" --");
-            for arg in args {
-                command.push(' ');
-                command.push_str(arg);
-            }
-        }
+        let verify = sha256
+            .as_deref()
+            .map(|hash| super::verify_hash(hash, "\"$tmp/install\""))
+            .transpose()?
+            .unwrap_or_else(|| ":".into());
+        let arguments = args
+            .iter()
+            .map(|arg| super::quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let command = format!(
+            "set -eu; tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; {} {} -o \"$tmp/install\"; {verify}; {} \"$tmp/install\" {arguments}",
+            super::CURL,
+            super::quote(url),
+            super::quote(shell)
+        );
         Ok(vec![Action::Shell { command }])
     }
 }

@@ -54,8 +54,10 @@ in_checkout() {
 }
 
 place() {
-  mkdir -p "$INSTALL_DIR"
-  install -m 0755 "$1" "$INSTALL_DIR/pinst"
+  mkdir -p "$INSTALL_DIR" || return 1
+  staged="$(mktemp "$INSTALL_DIR/.pinst.XXXXXX")" || return 1
+  install -m 0755 "$1" "$staged" || { rm -f "$staged"; return 1; }
+  mv -f "$staged" "$INSTALL_DIR/pinst" || { rm -f "$staged"; return 1; }
   log "installed $INSTALL_DIR/pinst"
 }
 
@@ -95,8 +97,8 @@ download_release() {
   fi
 
   tmp="$(mktemp -d)"
-  if ! curl -fsSL -o "$tmp/$asset" "$base/$asset" \
-     || ! curl -fsSL -o "$tmp/$asset.sha256" "$base/$asset.sha256"; then
+  if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 300 -o "$tmp/$asset" "$base/$asset" \
+     || ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 300 -o "$tmp/$asset.sha256" "$base/$asset.sha256"; then
     log "no release asset at $base/$asset"
     rm -rf "$tmp"
     return 1
@@ -110,8 +112,8 @@ download_release() {
   fi
   log "verified $asset"
 
-  tar -C "$tmp" -xzf "$tmp/$asset"
-  place "$tmp/pinst"
+  tar -C "$tmp" -xzf "$tmp/$asset" || { rm -rf "$tmp"; exit 1; }
+  place "$tmp/pinst" || { rm -rf "$tmp"; exit 1; }
   rm -rf "$tmp"
 }
 
@@ -120,17 +122,32 @@ build_from_source() {
     SRC_DIR="$(pwd)"
     log "building from the current checkout: $SRC_DIR"
   elif [ -d "$SRC_DIR/.git" ]; then
+    [ -z "$(git -C "$SRC_DIR" status --porcelain)" ] || {
+      err "source fallback checkout has local changes: $SRC_DIR"; exit 1;
+    }
     log "updating $SRC_DIR"
-    git -C "$SRC_DIR" pull --ff-only
+    if [ -n "$VERSION" ]; then
+      git -C "$SRC_DIR" fetch --depth=1 origin "refs/tags/$VERSION"
+      git -C "$SRC_DIR" checkout --detach FETCH_HEAD
+    else
+      git -C "$SRC_DIR" pull --ff-only
+    fi
   else
     log "cloning $REPO_URL into $SRC_DIR"
     mkdir -p "$(dirname "$SRC_DIR")"
-    git clone --depth=1 "$REPO_URL" "$SRC_DIR"
+    if [ -n "$VERSION" ]; then
+      git clone --depth=1 --branch "$VERSION" "$REPO_URL" "$SRC_DIR"
+    else
+      git clone --depth=1 "$REPO_URL" "$SRC_DIR"
+    fi
   fi
 
   if ! command -v cargo >/dev/null 2>&1; then
     log "installing rust (needed to build pinst itself)"
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    installer="$(mktemp)"
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --connect-timeout 15 --max-time 300 https://sh.rustup.rs -o "$installer"
+    sh "$installer" -y
+    rm -f "$installer"
     # shellcheck disable=SC1091
     . "$HOME/.cargo/env"
   fi

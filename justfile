@@ -15,7 +15,14 @@ run *ARGS="tui":
     cargo run --quiet -- {{ ARGS }}
 
 # Every quality check, in the order that fails fastest.
-qc: fmt-check lint test harness feature-skill
+qc: fmt-check lint test harness feature-skill installer-test
+
+installer-test:
+    python3 scripts/test-install.py
+
+# Build the locked environment, then verify migration and readiness offline.
+nix-e2e:
+    bash scripts/nix-e2e.sh
 
 # Fail if the tree is not formatted.
 fmt-check:

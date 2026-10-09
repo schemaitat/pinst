@@ -55,6 +55,10 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+      - name: Installer regressions
+        run: python3 scripts/test-install.py
+      - name: Feature workflow contract
+        run: bash scripts/feature-skill-smoke.sh
 
       # Reads the embedded manifest as the real binary would on this host —
       # the one thing `--platform macos` run from Linux can never check about

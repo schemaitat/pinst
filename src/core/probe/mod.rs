@@ -88,7 +88,7 @@ pub async fn probe_tool(tool: &Tool, platform: Platform) -> ProbeResult {
         .detect
         .bin
         .as_deref()
-        .and_then(|bin| which::which(bin).ok());
+        .and_then(|bin| which::which_in(bin, Some(crate::core::exec::search_path()), ".").ok());
 
     ProbeResult {
         tool: tool.name.clone(),
@@ -102,6 +102,7 @@ async fn run_check(cmd: &str) -> bool {
     let result = timeout(
         PROBE_TIMEOUT,
         Command::new("sh")
+            .env("PATH", crate::core::exec::search_path())
             .arg("-c")
             .arg(cmd)
             .stdin(Stdio::null())
@@ -117,6 +118,7 @@ async fn run_capture(cmd: &str) -> Option<String> {
     let result = timeout(
         PROBE_TIMEOUT,
         Command::new("sh")
+            .env("PATH", crate::core::exec::search_path())
             .arg("-c")
             .arg(cmd)
             .stdin(Stdio::null())

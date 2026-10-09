@@ -1,0 +1,6 @@
+[
+  {"name":"opencode","reason":"The selected Nixpkgs package is V1; this machine requires V2.","remediation":"Keep the existing V2 installation, or package an explicitly chosen V2 release before transferring ownership."},
+  {"name":"claude","reason":"Claude Code is not enabled in this package set; the proprietary-package allowance is scoped to the existing Copilot editor server.","remediation":"Keep the existing installation, or explicitly enable a reviewed pinned claude-code derivation."},
+  {"name":"aven","reason":"Aven is not packaged by the selected stable Nixpkgs revision.","remediation":"Keep the existing installation, or add a reviewed version-and-hash-pinned derivation."},
+  {"name":"herdr","reason":"Herdr is packaged on unstable but absent from the Intel-macOS-compatible stable package set.","remediation":"Keep the existing installation, or add a reviewed version-and-hash-pinned derivation."}
+]
