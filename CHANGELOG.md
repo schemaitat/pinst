@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/schemaitat/pinst/compare/v1.2.0...v1.3.0) (2026-10-09)
+
+
+### Features
+
+* **bootstrap:** add locked Nix and Home Manager environments ([#33](https://github.com/schemaitat/pinst/issues/33)) ([7854ed6](https://github.com/schemaitat/pinst/commit/7854ed6440b67ffe892985daf3adb08e84162afd))
+
 ## [1.2.0](https://github.com/schemaitat/pinst/compare/v1.1.0...v1.2.0) (2026-10-05)
 
 
