@@ -43,7 +43,7 @@ impl Executor for GithubRelease {
         };
         Ok(vec![Action::Shell {
             command: format!(
-            "set -eu; tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; {} {} -o \"$tmp/archive\"; {verify}; mkdir \"$tmp/unpacked\"; tar -C \"$tmp/unpacked\" -xzf \"$tmp/archive\"; dest={dest}; {sudo}mkdir -p \"$dest\"; {sudo}cp -Rf \"$tmp/unpacked/.\" \"$dest/\"",
+                "set -eu; tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; {} {} -o \"$tmp/archive\"; {verify}; mkdir \"$tmp/unpacked\"; tar -C \"$tmp/unpacked\" -xzf \"$tmp/archive\"; dest={dest}; {sudo}mkdir -p \"$dest\"; {sudo}cp -Rf \"$tmp/unpacked/.\" \"$dest/\"",
                 super::CURL,
                 super::quote(&url)
             ),

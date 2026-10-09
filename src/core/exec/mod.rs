@@ -188,7 +188,7 @@ pub fn search_path() -> std::ffi::OsString {
     std::env::join_paths(paths).unwrap_or_default()
 }
 
-pub(super) fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 

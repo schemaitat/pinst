@@ -97,6 +97,7 @@ pub enum StepKind {
     Upgrade,
     PostInstall,
     Config,
+    Environment,
     /// No automated path exists; the step carries instructions instead.
     Manual,
 }

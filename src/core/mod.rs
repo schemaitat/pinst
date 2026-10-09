@@ -6,6 +6,7 @@ pub mod configs;
 pub mod docs;
 pub mod doctor;
 pub mod engine;
+pub mod environment;
 pub mod exec;
 pub mod graph;
 pub mod harness;

@@ -95,6 +95,8 @@ pub enum Commands {
     Apply(SelectArgs),
     /// One-shot provisioning for a fresh machine.
     Bootstrap(SelectArgs),
+    /// Build and manage locked Nix environments.
+    Environment(EnvironmentArgs),
     /// Emit machine-readable schemas.
     Schema(SchemaArgs),
     /// Launch the interactive dashboard.
@@ -114,6 +116,7 @@ impl Commands {
             Commands::Harness(_) => "harness",
             Commands::Apply(_) => "apply",
             Commands::Bootstrap(_) => "bootstrap",
+            Commands::Environment(_) => "environment",
             Commands::Schema(_) => "schema",
             Commands::Tui => "tui",
         }
@@ -132,6 +135,26 @@ pub struct SelectArgs {
     /// Select every tool carrying this tag (repeatable).
     #[arg(long = "tag")]
     pub tags: Vec<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct EnvironmentArgs {
+    #[command(subcommand)]
+    pub action: EnvironmentAction,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum EnvironmentAction {
+    /// Build the locked toolchain or a named Home Manager generation.
+    Build {
+        #[arg(long, default_value = ".")]
+        flake: PathBuf,
+        #[arg(long)]
+        configuration: Option<String>,
+        /// GC-root symlink for the result (default: ~/.local/state/pinst/environment/build).
+        #[arg(long)]
+        out_link: Option<PathBuf>,
+    },
 }
 
 impl SelectArgs {
@@ -460,6 +483,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
         Commands::Harness(args) => commands::harness::run(&ctx, args).await,
         Commands::Apply(args) => commands::apply::run(&ctx, args).await,
         Commands::Bootstrap(args) => commands::bootstrap::run(&ctx, args).await,
+        Commands::Environment(args) => commands::environment::run(&ctx, args),
         Commands::Schema(args) => commands::schema::run(&ctx, args),
         Commands::Tui => commands::tui::run(&ctx).await,
     }
