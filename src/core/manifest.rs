@@ -164,6 +164,9 @@ pub enum Install {
     /// `curl -fsSL <url> | <shell> -s -- <args>`
     CurlScript {
         url: String,
+        /// Optional SHA-256 of the installer bytes, checked before execution.
+        #[serde(default)]
+        sha256: Option<String>,
         #[serde(default = "default_shell")]
         shell: String,
         #[serde(default)]
@@ -179,6 +182,15 @@ pub enum Install {
     },
     GithubRelease {
         repo: String,
+        /// Exact release tag. Omitted means latest (legacy behavior).
+        #[serde(default)]
+        version: Option<String>,
+        /// SHA-256 of the release archive.
+        #[serde(default)]
+        sha256: Option<String>,
+        /// Checksum sidecar asset, e.g. <asset>.sha256.
+        #[serde(default)]
+        checksum_asset: Option<String>,
         /// Asset file name in the release (a `.tar.gz` is extracted).
         asset: String,
         /// Extraction destination, e.g. `/opt`.

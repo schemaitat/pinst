@@ -15,7 +15,7 @@ use include_dir::{Dir, include_dir};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use super::manifest::{ConfigPackage, Manifest};
+use super::manifest::{ConfigPackage, Manifest, Tool};
 use super::plan::{Action, Plan, Step, StepKind};
 use super::template::{self, Values};
 
@@ -43,6 +43,7 @@ pub struct ConfigFile {
     /// Source path on disk, when the source is a tree.
     pub source_path: Option<PathBuf>,
     pub templated: bool,
+    pub requires_tool: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
@@ -82,6 +83,17 @@ pub struct ConfigSet {
 }
 
 impl ConfigSet {
+    pub fn load_selected(manifest: &Manifest, home: &Path, tools: &[&Tool]) -> Result<Self> {
+        let mut selected = manifest.clone();
+        selected.configs.retain(|package| {
+            package
+                .requires_tool
+                .as_ref()
+                .is_none_or(|name| tools.iter().any(|tool| &tool.name == name))
+        });
+        Self::load(&selected, home)
+    }
+
     pub fn load(manifest: &Manifest, home: &Path) -> Result<Self> {
         let source = resolve_source();
         let values = Values::load()?;
@@ -270,6 +282,12 @@ impl ConfigSet {
             plan.push(
                 Step::new(id, StepKind::Config, description)
                     .tool(&file.package)
+                    .requires(
+                        file.requires_tool
+                            .iter()
+                            .map(|name| format!("install:{name}"))
+                            .collect(),
+                    )
                     .actions(actions),
             );
         }
@@ -370,6 +388,7 @@ fn collect_package(
             },
             relative,
             templated,
+            requires_tool: package.requires_tool.clone(),
         });
     }
     Ok(())
@@ -431,6 +450,31 @@ mod tests {
     use super::*;
     use crate::core::exec::Runner;
     use crate::core::manifest;
+
+    #[test]
+    fn selected_configs_follow_tools_and_failed_installs_block_activation() {
+        let manifest = manifest::embedded().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let tools = vec![manifest.tool("zsh").unwrap()];
+        let configs = ConfigSet::load_selected(&manifest, home.path(), &tools).unwrap();
+        assert!(!configs.files.is_empty());
+        assert!(configs.files.iter().all(|f| f.package == "zsh"));
+        let mut plan = Plan::default();
+        plan.push(Step::new("install:zsh", StepKind::Install, "zsh").blocked("unavailable"));
+        plan.steps.extend(configs.build_plan().unwrap().steps);
+        let (reports, _) = crate::core::engine::execute(
+            &plan,
+            &Runner::new(false),
+            &crate::core::engine::Authorizer { approve: &|_| true },
+            &mut |_| {},
+        );
+        assert!(
+            reports
+                .iter()
+                .all(|r| r.outcome == crate::core::plan::Outcome::Blocked)
+        );
+        assert!(!home.path().join(".zshrc").exists());
+    }
 
     /// The embedded tree must never carry a secret. `.zshrc` sources
     /// `~/.zshrc.secrets` at runtime; that file itself stays untracked.
