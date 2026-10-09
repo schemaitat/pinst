@@ -2,7 +2,7 @@
 id: 261009-oclzij
 slug: locked-nix-bootstrap
 phase: 4
-status: In Progress
+status: Done
 ---
 
 # Phase 4 — Readiness and delivery verification

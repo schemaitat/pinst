@@ -1,7 +1,7 @@
 ---
 id: 261009-oclzij
 slug: locked-nix-bootstrap
-status: In Progress
+status: Done
 created: 2026-10-09
 updated: 2026-10-09
 areas: [bootstrap, exec, nix, configs]
@@ -35,7 +35,7 @@ CON-001: No host package installation, live activation, publication, or destruct
 | 1 | Reliable legacy execution | [phase-01.md](phase-01.md) | Done |
 | 2 | Locked package environment | [phase-02.md](phase-02.md) | Done |
 | 3 | Home Manager ownership and migration | [phase-03.md](phase-03.md) | Done |
-| 4 | Readiness and delivery verification | [phase-04.md](phase-04.md) | In Progress |
+| 4 | Readiness and delivery verification | [phase-04.md](phase-04.md) | Done |
 
 ## Affected Files
 - FILE-001: `src/core/engine.rs`, `src/core/plan.rs`, `src/core/exec/` — dependencies, failures, staged verified artifacts and execution environment.
