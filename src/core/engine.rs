@@ -676,7 +676,11 @@ mod tests {
 
         // An inherited SHELL=zsh must not hide the account's bash setting.
         let check = skip_if.replace("/etc/shells", fake_shells.to_str().unwrap());
-        let path = format!("{}:/usr/bin:/bin", bin.display());
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
         let run_check = |login_shell: &str, inherited_shell: &str| {
             std::process::Command::new("sh")
                 .env("PATH", &path)

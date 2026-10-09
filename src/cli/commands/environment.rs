@@ -6,15 +6,45 @@ use color_eyre::eyre::Result;
 
 pub fn run(ctx: &Ctx, args: &EnvironmentArgs) -> Result<ExitCode> {
     let home = home_dir()?;
-    let EnvironmentAction::Build {
-        flake,
-        configuration,
-        out_link,
-    } = &args.action;
-    let output = out_link
-        .clone()
-        .unwrap_or_else(|| environment::state_dir(&home).join("build"));
-    let plan = environment::build_plan(flake, configuration.as_deref(), &output)?;
+    let output = environment::state_dir(&home).join("build");
+    let (name, plan, output) = match &args.action {
+        EnvironmentAction::Build {
+            flake,
+            configuration,
+            out_link,
+        } => {
+            let output = out_link.clone().unwrap_or(output);
+            (
+                "environment build",
+                environment::build_plan(flake, configuration.as_deref(), &output)?,
+                output,
+            )
+        }
+        EnvironmentAction::Apply {
+            generation,
+            migrate,
+        } => {
+            let output = generation.clone().unwrap_or(output);
+            (
+                "environment apply",
+                environment::activation_plan(&home, &output, *migrate)?,
+                output,
+            )
+        }
+        EnvironmentAction::Rollback => (
+            "environment rollback",
+            environment::rollback_plan(&home)?,
+            output,
+        ),
+        EnvironmentAction::Status => {
+            let (items, healthy) = environment::status(&home)?;
+            for item in &items {
+                ctx.note(item);
+            }
+            return ctx.finish(Envelope::new("environment status", if healthy { Status::Ok } else { Status::Issues }, items)
+                .summary(serde_json::json!({ "managed_healthy": healthy, "external_tools_are_unmanaged": true })));
+        }
+    };
     let approve = |step: &Step| ctx.confirm(&step.description);
     let (reports, summary) = engine::execute(
         &plan,
@@ -40,7 +70,7 @@ pub fn run(ctx: &Ctx, args: &EnvironmentArgs) -> Result<ExitCode> {
         Status::Ok
     };
     ctx.finish(
-        Envelope::new("environment build", status, reports)
+        Envelope::new(name, status, reports)
             .dry_run(ctx.dry_run)
             .errors(errors)
             .summary(serde_json::json!({ "execution": summary, "output": output })),

@@ -145,6 +145,18 @@ pub struct EnvironmentArgs {
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum EnvironmentAction {
+    /// Activate an already-built generation; existing files require --migrate.
+    Apply {
+        #[arg(long)]
+        generation: Option<PathBuf>,
+        /// Preserve conflicting live files and links before transferring ownership.
+        #[arg(long)]
+        migrate: bool,
+    },
+    /// Inspect managed links and explicitly external tools.
+    Status,
+    /// Reactivate the previous successful generation.
+    Rollback,
     /// Build the locked toolchain or a named Home Manager generation.
     Build {
         #[arg(long, default_value = ".")]
@@ -472,6 +484,20 @@ pub enum SchemaKind {
 
 pub async fn dispatch(cli: Cli) -> Result<ExitCode> {
     let ctx = cli.global.ctx()?;
+    let legacy_mutation = matches!(
+        &cli.command,
+        Commands::Install(_)
+            | Commands::Update(_)
+            | Commands::Apply(_)
+            | Commands::Bootstrap(_)
+            | Commands::Config(ConfigArgs {
+                action: ConfigAction::Apply | ConfigAction::Adopt
+            })
+            | Commands::Doctor(DoctorArgs { fix: true })
+    );
+    if legacy_mutation {
+        crate::core::environment::ensure_legacy(&crate::core::home_dir()?)?;
+    }
     match &cli.command {
         Commands::List(args) => commands::list::run(&ctx, args).await,
         Commands::Plan(args) => commands::plan::run(&ctx, args).await,

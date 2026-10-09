@@ -26,7 +26,14 @@ fn run_installer(install: Install, payload: &[u8], fail: bool) -> (bool, bool) {
         };
         ok &= Command::new("sh")
             .args(["-c", &command])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
             .env("PAYLOAD", &payload_path)
             .env("HOME", dir.path())
             .env("FAIL", if fail { "1" } else { "0" })

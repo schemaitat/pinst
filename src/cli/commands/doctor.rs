@@ -12,6 +12,14 @@ use crate::core::plan::{Plan, Step};
 use crate::core::{home_dir, probe};
 
 pub async fn run(ctx: &Ctx, args: &DoctorArgs) -> Result<ExitCode> {
+    if crate::core::environment::is_managed(&home_dir()?) {
+        return super::environment::run(
+            ctx,
+            &crate::cli::EnvironmentArgs {
+                action: crate::cli::EnvironmentAction::Status,
+            },
+        );
+    }
     let loaded = super::load_manifest(ctx)?;
     let selected = super::resolve(&loaded, ctx, &Selection::default())?;
     let tools = selected.tools;

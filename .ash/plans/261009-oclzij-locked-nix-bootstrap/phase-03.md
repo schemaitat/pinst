@@ -2,7 +2,7 @@
 id: 261009-oclzij
 slug: locked-nix-bootstrap
 phase: 3
-status: Proposed
+status: Done
 ---
 
 # Phase 3 — Home Manager ownership and migration
@@ -15,9 +15,9 @@ Depends only on phase 2. The package closure is known before generated shell/edi
 
 ## Steps
 Tasks run in listed order, each depending only on its predecessor.
-- [ ] TASK-008: `nix/home.nix`, host definitions — immutable config deployment, managed shell integration, runtime identity/secrets, and explicit package/config ownership.
-- [ ] TASK-009: `src/core/environment.rs`, CLI — generation activation, status, rollback, recorded migration backups, and protection against competing legacy mutations.
-- [ ] TASK-010: migration tests and docs — prove real files and foreign symlinks with live edits are preserved; distinguish generation rollback from pre-migration restoration.
+- [x] TASK-008: `nix/home.nix`, host definitions — immutable config deployment, managed shell integration, runtime identity/secrets, and explicit package/config ownership.
+- [x] TASK-009: `src/core/environment.rs`, CLI — generation activation, status, rollback, recorded migration backups, and protection against competing legacy mutations.
+- [x] TASK-010: migration tests and docs — prove real files and foreign symlinks with live edits are preserved; distinguish generation rollback from pre-migration restoration.
 
 ## Trade-offs & risks
 Refer to RISK-002 and CON-001. Machine-specific identity stays in a runtime include; no implicit copying of the developer's live values into Git or the store.
