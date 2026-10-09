@@ -12,6 +12,10 @@ From a checkout at the revision you want to deploy:
 ```sh
 sh scripts/bootstrap-nix.sh --dry-run
 sh scripts/bootstrap-nix.sh --yes
+if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+export PATH="$HOME/.local/state/pinst/environment/pinst/bin:$PATH"
 pinst environment build --flake . --configuration andre-linux --dry-run --json
 pinst environment build --flake . --configuration andre-linux --json
 pinst environment apply --dry-run --yes --json
@@ -20,10 +24,16 @@ pinst environment status --json
 ```
 
 `bootstrap-nix.sh` downloads the pinned NixOS installer and verifies its
-committed SHA-256 before execution. It builds the package-only toolchain, with
-no home activation. Intel macOS needs an existing Nix installation: this
-installer release has no Intel asset. Linux/WSL installation expects systemd
-and available sudo credentials. Existing Nix installations are reused.
+committed SHA-256 before execution. Intel macOS uses the versioned upstream
+shell installer, also verified against a committed SHA-256; that installer
+verifies its platform tarball. Linux/WSL installation expects systemd and
+available sudo credentials. Existing Nix installations are reused.
+
+It builds the package-only toolchain and pinst itself, without activating home
+configuration. The CLI is retained at
+`~/.local/state/pinst/environment/pinst/bin/pinst`. After activation, open a
+new Zsh login shell (`exec "$HOME/.nix-profile/bin/zsh" -l`) to load the
+managed PATH. Changing the account's default login shell is a host-level task.
 
 Build without `--configuration` for the package-only pilot. Its binaries are
 under `~/.local/state/pinst/environment/build/bin`; add that directory to a
@@ -112,6 +122,43 @@ environment. Status reports their presence separately from managed-file
 health. Keep their existing installations until a reviewed pinned derivation
 is added; OpenCode V1 must not substitute for V2. System services, Docker's
 daemon, login-shell registration and macOS prerequisites remain host tasks.
+
+## Editor readiness
+
+The Home Manager editor reuses the Lua plugin settings from `configs/nvim/`.
+Nix owns plugin acquisition, native fzf, Tree-sitter parsers and query files,
+Lua LS, Pyright, and the Copilot language-server artifact. Lazy loads local
+store directories with installation disabled; Mason is disabled in this
+environment. Completion uses its Lua matcher, avoiding runtime native-library
+downloads. The native/legacy editor configuration retains its existing loader.
+
+The Copilot plugin uses the exact commit already recorded in this repo's
+`lazy-lock.json`, because the stable Nixpkgs tag archive failed its hash check.
+Only `copilot-language-server` is allowed through the unfree-package filter.
+Copilot's authenticated service still needs a network connection; editor
+startup, syntax parsing and local language-server readiness do not.
+
+## Verification
+
+```sh
+just qc
+just nix-e2e
+```
+
+`nix-e2e` exports tracked working-tree files (stage new files first), builds
+pinst and two generations in the digest-pinned Nix container, then tests with
+Docker networking disabled. It verifies migration snapshots, Git identity,
+no-work repeat activation, package/file ownership, generation rollback, the
+doctor JSON contract, shell PATH, plugin paths, native fzf, all configured
+parsers and actual Lua LS/Pyright initialization. Its named Docker store volume
+is a build cache, not the test home; every activation starts with a fresh home.
+Set `PINST_NIX_VOLUME` to choose a different cache volume.
+
+`.github/workflows/nix.yml` runs the container suite on Linux and native
+activation/readiness on Apple Silicon and Intel macOS runners. Local Linux
+verification also evaluates all four deployment derivations. Installing the
+Nix daemon itself is covered by installer fixtures and the macOS CI setup;
+the offline Linux lifecycle starts from an image that already contains Nix.
 
 ## Updates
 

@@ -35,7 +35,7 @@ CON-001: No host package installation, live activation, publication, or destruct
 | 1 | Reliable legacy execution | [phase-01.md](phase-01.md) | Done |
 | 2 | Locked package environment | [phase-02.md](phase-02.md) | Done |
 | 3 | Home Manager ownership and migration | [phase-03.md](phase-03.md) | Done |
-| 4 | Readiness and delivery verification | [phase-04.md](phase-04.md) | Proposed |
+| 4 | Readiness and delivery verification | [phase-04.md](phase-04.md) | In Progress |
 
 ## Affected Files
 - FILE-001: `src/core/engine.rs`, `src/core/plan.rs`, `src/core/exec/` — dependencies, failures, staged verified artifacts and execution environment.

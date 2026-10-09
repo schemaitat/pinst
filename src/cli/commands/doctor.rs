@@ -13,12 +13,29 @@ use crate::core::{home_dir, probe};
 
 pub async fn run(ctx: &Ctx, args: &DoctorArgs) -> Result<ExitCode> {
     if crate::core::environment::is_managed(&home_dir()?) {
-        return super::environment::run(
-            ctx,
-            &crate::cli::EnvironmentArgs {
-                action: crate::cli::EnvironmentAction::Status,
-            },
-        );
+        let (items, _) = crate::core::environment::status(&home_dir()?)?;
+        let findings = items
+            .into_iter()
+            .filter(|item| item["state"] != "linked")
+            .map(|item| Finding {
+                id: item["id"].as_str().unwrap_or("environment.error").into(),
+                severity: if item["state"] == "external" {
+                    Severity::Info
+                } else {
+                    Severity::Error
+                },
+                message: item["reason"]
+                    .as_str()
+                    .unwrap_or("managed environment differs from its active generation")
+                    .into(),
+                remediation: item["remediation"]
+                    .as_str()
+                    .unwrap_or("pinst environment apply --dry-run --yes")
+                    .into(),
+                fixable: false,
+            })
+            .collect();
+        return report(ctx, "doctor", findings, false);
     }
     let loaded = super::load_manifest(ctx)?;
     let selected = super::resolve(&loaded, ctx, &Selection::default())?;

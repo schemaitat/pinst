@@ -2,7 +2,7 @@
 id: 261009-oclzij
 slug: locked-nix-bootstrap
 phase: 4
-status: Proposed
+status: In Progress
 ---
 
 # Phase 4 — Readiness and delivery verification
@@ -15,9 +15,9 @@ Depends only on phase 3. Readiness must exercise the activated generation rather
 
 ## Steps
 Tasks run in listed order, each depending only on its predecessor.
-- [ ] TASK-011: `nix/` editor integration — package plugins, parsers and language servers together; eliminate required first-start network provisioning in the Nix editor.
-- [ ] TASK-012: `e2e/`, CI, `justfile` — automated fresh-home, repeat-run, rollback, shell and headless editor checks using the same pinned environment.
-- [ ] TASK-013: `docs/bootstrap.md`, `README.md`, pinst contract — document installation, exception ownership, upgrade/pin workflow and migration recovery; finish `just qc` and record all verification evidence.
+- [x] TASK-011: `nix/` editor integration — package plugins, parsers and language servers together; eliminate required first-start network provisioning in the Nix editor.
+- [x] TASK-012: `e2e/`, CI, `justfile` — automated fresh-home, repeat-run, rollback, shell and headless editor checks using the same pinned environment.
+- [x] TASK-013: `docs/bootstrap.md`, `README.md`, pinst contract — document installation, exception ownership, upgrade/pin workflow and migration recovery; finish `just qc` and record all verification evidence.
 
 ## Trade-offs & risks
 Linux activation is locally provable using DEP-001. The CI matrix defines macOS execution coverage; this Linux session cannot claim those jobs already passed.

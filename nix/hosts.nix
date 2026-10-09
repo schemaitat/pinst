@@ -8,4 +8,6 @@
   test-linux-next = { system = "x86_64-linux"; username = "root"; homeDirectory = "/tmp/pinst-home"; sessionVariables.PINST_TEST_GENERATION = "next"; };
   test-macos = { system = "aarch64-darwin"; username = "runner"; homeDirectory = "/tmp/pinst-home"; };
   test-macos-next = { system = "aarch64-darwin"; username = "runner"; homeDirectory = "/tmp/pinst-home"; sessionVariables.PINST_TEST_GENERATION = "next"; };
+  test-macos-intel = { system = "x86_64-darwin"; username = "runner"; homeDirectory = "/tmp/pinst-home"; };
+  test-macos-intel-next = { system = "x86_64-darwin"; username = "runner"; homeDirectory = "/tmp/pinst-home"; sessionVariables.PINST_TEST_GENERATION = "next"; };
 }

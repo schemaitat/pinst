@@ -12,7 +12,12 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
-      pkgsFor = system: import nixpkgs { inherit system; };
+      pkgsFor = system: import nixpkgs {
+        inherit system;
+        # The existing Copilot editor feature needs this server. Keep the
+        # allowance scoped to it rather than enabling every unfree package.
+        config.allowUnfreePredicate = pkg: nixpkgs.lib.getName pkg == "copilot-language-server";
+      };
     in {
       homeConfigurations = nixpkgs.lib.mapAttrs (_: host:
         home-manager.lib.homeManagerConfiguration {

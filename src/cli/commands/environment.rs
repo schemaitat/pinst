@@ -34,7 +34,7 @@ pub fn run(ctx: &Ctx, args: &EnvironmentArgs) -> Result<ExitCode> {
         EnvironmentAction::Rollback => (
             "environment rollback",
             environment::rollback_plan(&home)?,
-            output,
+            environment::state_dir(&home).join("previous"),
         ),
         EnvironmentAction::Status => {
             let (items, healthy) = environment::status(&home)?;
@@ -62,9 +62,17 @@ pub fn run(ctx: &Ctx, args: &EnvironmentArgs) -> Result<ExitCode> {
         .filter(|r| r.outcome == Outcome::Failed)
         .map(|r| r.detail.clone().unwrap_or_default())
         .collect();
+    let verified = if !ctx.dry_run
+        && summary.failed + summary.blocked + summary.needs_confirmation == 0
+        && name != "environment build"
+    {
+        Some(environment::status(&home)?.1)
+    } else {
+        None
+    };
     let status = if summary.failed > 0 {
         Status::Error
-    } else if summary.blocked + summary.needs_confirmation > 0 {
+    } else if summary.blocked + summary.needs_confirmation > 0 || verified == Some(false) {
         Status::Issues
     } else {
         Status::Ok
@@ -73,6 +81,6 @@ pub fn run(ctx: &Ctx, args: &EnvironmentArgs) -> Result<ExitCode> {
         Envelope::new(name, status, reports)
             .dry_run(ctx.dry_run)
             .errors(errors)
-            .summary(serde_json::json!({ "execution": summary, "output": output })),
+            .summary(serde_json::json!({ "execution": summary, "output": output, "managed_healthy": verified })),
     )
 }

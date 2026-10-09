@@ -70,6 +70,28 @@ exit 2''')
         self.assertEqual(destination.read_text(), "old binary")
         self.assertFalse((self.root / "calls").exists())
 
+    def test_nix_preview_does_not_download_or_create_state(self):
+        script = INSTALLER.with_name("bootstrap-nix.sh")
+        result = subprocess.run(["sh", str(script), "--dry-run"],
+                                cwd=self.root, env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Build pinst", result.stdout)
+        self.assertFalse((self.root / ".local/state").exists())
+
+    def test_intel_nix_installer_rejects_modified_script(self):
+        self.tool("uname", 'case "$1" in -s) echo Darwin;; -m) echo x86_64;; esac')
+        self.tool("sudo", 'exit 0')
+        self.tool("curl", '''while [ $# -gt 0 ]; do
+if [ "$1" = -o ]; then printf 'exit 0\\n' > "$2"; exit; fi
+shift
+done
+exit 2''')
+        result = subprocess.run(["sh", str(INSTALLER.with_name("bootstrap-nix.sh")), "--yes"],
+                                cwd=self.root, env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SHA-256 mismatch", result.stderr)
+        self.assertFalse((self.root / ".local/state").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

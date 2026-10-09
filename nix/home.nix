@@ -2,10 +2,10 @@
 let
   external = builtins.fromJSON (builtins.readFile ./external-tools.json);
 in {
+  imports = [ ./neovim.nix ];
   home.stateVersion = "26.05";
-  home.packages = import ./packages.nix { inherit pkgs; };
+  home.packages = builtins.filter (p: lib.getName p != "neovim") (import ./packages.nix { inherit pkgs; });
   xdg.enable = true;
-  targets.genericLinux.enable = pkgs.stdenv.hostPlatform.isLinux;
 
   programs.zsh = {
     enable = true;
@@ -26,7 +26,7 @@ in {
       [ ! -f "$HOME/.config/pinst/local.zsh" ] || source "$HOME/.config/pinst/local.zsh"
     '';
     envExtra = ''
-      export PATH="$HOME/.nix-profile/bin:$HOME/.local/state/nix/profiles/profile/bin:$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+      export PATH="$HOME/.nix-profile/bin:$HOME/.local/state/pinst/environment/pinst/bin:$HOME/.local/state/nix/profiles/profile/bin:$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
     '';
     shellAliases = { v = "nvim"; ll = "ls -alh"; oc = "opencode"; av = "aven tui"; };
   };
@@ -53,8 +53,6 @@ in {
   };
   home.file.".gitconfig".text = "# Managed Git settings are in ~/.config/git/config.\n";
   xdg.configFile."herdr/config.toml".source = ../configs/herdr/.config/herdr/config.toml;
-  # Replaced by the offline editor package in the readiness phase.
-  xdg.configFile."nvim" = { source = ../configs/nvim/.config/nvim; recursive = true; };
   xdg.configFile."pinst/environment.json".text = builtins.toJSON {
     schema_version = 1;
     owner = "home-manager";

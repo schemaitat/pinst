@@ -5,7 +5,8 @@ set -euo pipefail
 : "${GENERATION:?first Home Manager generation}"
 : "${NEXT_GENERATION:?second Home Manager generation}"
 export HOME=/tmp/pinst-home
-export USER="$(id -un)"
+USER="$(id -un)"
+export USER
 [[ ! -e "$HOME" ]] || { echo "$HOME must be absent for the fresh-home test" >&2; exit 1; }
 mkdir -p "$HOME/dotfiles"
 printf '# preserved live edit\n' > "$HOME/dotfiles/zshrc"
@@ -48,4 +49,14 @@ set -e
 "$PINST_BIN" environment rollback --yes --json > /tmp/nix-rollback.json
 [[ "$(readlink "$HOME/.local/state/pinst/environment/current")" == "$GENERATION" ]]
 "$PINST_BIN" doctor --json > /tmp/nix-doctor.json
+"$python" - <<'PY'
+import json
+doctor = json.load(open('/tmp/nix-doctor.json'))
+assert doctor['command'] == 'doctor', doctor
+assert all(item['severity'] == 'info' for item in doctor['items']), doctor
+PY
+# The child zsh must expand these expressions.
+# shellcheck disable=SC2016
+"$HOME/.nix-profile/bin/zsh" -lic 'set -e; for tool in rg fd nvim node python uv just gh delta; do command -v "$tool"; done; [[ "$(git config user.name)" == "Test User" ]]'
+"$HOME/.nix-profile/bin/nvim" --headless "+luafile $(dirname "$0")/nvim-smoke.lua"
 echo 'Nix lifecycle: migration, repeat activation, ownership and rollback passed'
