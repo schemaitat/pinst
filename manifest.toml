@@ -340,6 +340,36 @@ help_cmd = "git-credential-manager --help"
 install = { method = "manual", note = "No apt package on Ubuntu. Install from https://github.com/git-ecosystem/git-credential-manager/blob/release/docs/install.md#linux" }
 upgrade = { method = "github_release", repo = "git-ecosystem/git-credential-manager" }
 
+[[tool]]
+name = "ghtkn"
+summary = "Short-lived (8 h) GitHub App user access tokens for local development"
+tags = ["git"]
+requires = ["curl"]
+detect = { command = "command -v ghtkn", bin = "ghtkn", version_cmd = "ghtkn --version" }
+# Pinned because github_release can verify an exact `sha256`, and its release
+# also publishes a *shared* ghtkn_checksums.txt that `checksum_asset` cannot
+# consume (that field reads a per-asset sidecar's first line). The hash was
+# checked against the published v0.4.1 asset. The tarball is not a single
+# binary — unpacking it lists LICENSE, README.md and third_party_licenses/
+# beside the binary — so unpack it under share/ and symlink the binary onto
+# PATH rather than litter ~/.local/bin.
+install = { method = "github_release", repo = "suzuki-shunsuke/ghtkn", version = "v0.4.1", sha256 = "1bd1328d46ac32d55e1f2271b10ef123a6ff50d10087f46adeb7e1d2e386ca53", asset = "ghtkn_linux_amd64.tar.gz", dest = "$HOME/.local/share/ghtkn" }
+upgrade = { method = "none" } # advance the tag and hash together after testing
+
+[[tool.post_install]]
+description = "symlink ghtkn from its shared install directory onto PATH"
+command = "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$HOME/.local/share/ghtkn/ghtkn\" \"$HOME/.local/bin/ghtkn\""
+skip_if = "command -v ghtkn"
+
+  # Brew's documented cask install is the macOS path: it removes the
+  # arch-specific asset choice and the share-dir symlink, since the cask puts
+  # the binary on PATH itself. The cask picks its own architecture, so unlike
+  # pinst's own entry this one does not assume Apple Silicon.
+  [tool.platform.macos]
+  requires = ["homebrew"]
+  install = { method = "brew", formulae = ["suzuki-shunsuke/ghtkn/ghtkn"], cask = true }
+  post_install = []
+
 # --- agents ----------------------------------------------------------------
 
 [[tool]]
@@ -382,6 +412,18 @@ detect = { command = "command -v claude", bin = "claude", version_cmd = "claude 
 # -s)"` maps Darwin to a macOS build, and even detects Rosetta 2 to correct
 # the reported architecture.
 install = { method = "curl_script", url = "https://claude.ai/install.sh", shell = "bash" }
+
+[[tool]]
+name = "nono"
+summary = "Kernel-enforced capability sandbox for running agents and their tools"
+tags = ["agents"]
+requires = ["curl"]
+detect = { command = "command -v nono", bin = "nono", version_cmd = "nono --version" }
+# Portable as written: the fetched installer's own `case "$(uname -s)"` names
+# Darwin explicitly and fetches the matching release asset, so one installer
+# serves both platforms. Releases are tagged (and carry SHA256SUMS.txt, which
+# the installer verifies), so github_repo makes the upgrade check work.
+install = { method = "curl_script", url = "https://nono.sh/install.sh", shell = "sh", github_repo = "nolabs-ai/nono" }
 
 # --- pinst itself ----------------------------------------------------------
 
