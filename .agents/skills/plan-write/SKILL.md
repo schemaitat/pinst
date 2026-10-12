@@ -1,6 +1,6 @@
 ---
 name: plan-write
-description: Create and persist an implementation plan as ADR-style docs under .ash/plans/. Use when the user wants to create, formalise, save, write, or record a plan for a feature, refactor, upgrade, migration, data change, architecture, design, or infrastructure change.
+description: Create and persist an implementation plan as ADR-style docs under .ash/plans/, and record it as handoff context on the related aven task. Use when the user wants to create, formalise, save, write, or record a plan for a feature, refactor, upgrade, migration, data change, architecture, design, or infrastructure change.
 ---
 
 # Plan Write Skill
@@ -443,6 +443,54 @@ indices that match their directory, required frontmatter keys, legal
 numbered `01..N` with no gaps, and each phase's status agreeing with the
 README's `## Phases` table. Fix anything it reports before handing the plan
 back; findings carry the exact remediation.
+
+______________________________________________________________________
+
+## Step 8 — Record the plan in aven
+
+If the work tracks an aven task — most sessions here start from one — record
+the authorized plan on that task before handing the session back. Aven is
+where agents find and continue work; a plan that exists only under
+`.ash/plans/` is invisible to whoever picks the task up from a board instead
+of from this session.
+
+Find the task the plan serves, then attach exactly one note:
+
+```sh
+aven search "<plan topic>"       # or aven list when the ref is already known
+aven note <ref> --stdin <<'EOF'
+## Plan: <goal> (Plan ID: <id>-<slug>)
+
+**Confirmed decisions:** <each choice the user made, one line>
+
+### Phases
+- Phase 1 — <GOAL-001 title>: <one line>
+- Phase 2 — <GOAL-002 title>: <one line>
+
+**Scope boundaries:** <what is explicitly out of scope, and why>
+EOF
+```
+
+- **One note per plan, written once.** Later changes go into the ADR files;
+  the note records what was agreed when the plan was authorized, and a
+  second note buries that record.
+- **The note is a summary and a pointer, not a copy.** `.ash/plans/` stays
+  the execution substrate — checkboxes are ticked there, statuses flip
+  there; nothing in aven pretends to track progress.
+- **Carry the full plan id** (`<id>-<slug>`) in the note, so the task finds
+  the plan the same way commits and PRs do.
+- **Stay out of triage.** Do not create tasks, change statuses, or add
+  labels as part of this step — the aven skill reserves those decisions for
+  the user.
+- **No task, no ceremony.** If aven is unavailable or no task relates to
+  this work, skip the step silently; a plan without a task is still a
+  complete artifact.
+
+**Why:** the ADR files record the engineering reasoning, but not the
+authorization — which alternatives the user rejected, which scope they cut.
+That is exactly what a later session continuing the task needs first, and
+it is what a note can hold without going stale: decisions and phase titles
+rarely change after sign-off, while ticked checkboxes always do.
 
 ______________________________________________________________________
 

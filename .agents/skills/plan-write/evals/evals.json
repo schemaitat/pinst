@@ -9,6 +9,17 @@
         "The plan is stored under .ash/plans/<id>-<slug>/",
         "The README contains all four ADR sections"
       ]
+    },
+    {
+      "id": 2,
+      "prompt": "Write up the plan we agreed on for the config-drift fix; the work tracks as task CFG-1QW2 in aven.",
+      "expected_output": "The persisted ADR plan plus exactly one aven note on CFG-1QW2 recording the plan id, confirmed decisions, phase list, and scope boundaries.",
+      "assertions": [
+        "The plan is stored under .ash/plans/<id>-<slug>/",
+        "An aven note on the related task carries the full plan id",
+        "The note summarizes decisions and phases instead of copying the ADR files",
+        "No aven task is created and no task status is changed"
+      ]
     }
   ]
 }
