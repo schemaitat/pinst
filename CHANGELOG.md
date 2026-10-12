@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/schemaitat/pinst/compare/v1.3.0...v1.4.0) (2026-10-12)
+
+
+### Features
+
+* **agents:** record the authorized plan on its aven task ([4348287](https://github.com/schemaitat/pinst/commit/43482871f0333730de511b1c8e414d808bfd683e))
+* **manifest:** add ghtkn and nono ([#35](https://github.com/schemaitat/pinst/issues/35)) ([ec3a16f](https://github.com/schemaitat/pinst/commit/ec3a16f715b3254a2fdc3d629bbc035dfdf04512))
+
 ## [1.3.0](https://github.com/schemaitat/pinst/compare/v1.2.0...v1.3.0) (2026-10-09)
 
 
